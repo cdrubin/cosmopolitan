@@ -125,25 +125,6 @@ static int get_dir(lua_State * L)
 
 
 
-
-
-/*
-** Creates a link.
-** @param #1 Object to link to.
-** @param #2 Name of link.
-** @param #3 True if link is symbolic (optional).
-*/
-static int make_link(lua_State * L)
-{
-  const char *oldpath = luaL_checkstring(L, 1);
-  const char *newpath = luaL_checkstring(L, 2);
-  return pushresult(L,
-                    (lua_toboolean(L, 3) ? symlink : link) (oldpath,
-                                                            newpath),
-                    NULL);
-}
-
-
 /*
 ** Creates a directory.
 ** @param #1 Directory path.
@@ -488,88 +469,6 @@ static int file_info(lua_State * L)
 
 
 /*
-** Push the symlink target to the top of the stack.
-** Assumes the file name is at position 1 of the stack.
-** Returns 1 if successful (with the target on top of the stack),
-** 0 on failure (with stack unchanged, and errno set).
-*/
-static int push_link_target(lua_State * L)
-{
-  const char *file = luaL_checkstring(L, 1);
-#ifdef _WIN32
-  HANDLE h = CreateFile(file, GENERIC_READ,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-  if (h == INVALID_HANDLE_VALUE) {
-    return lfs_win32_pusherror(L);
-  }
-#endif
-  char *target = NULL;
-  int tsize, size = 256;        /* size = initial buffer capacity */
-  int ok = 0;
-  while (!ok) {
-    char *target2 = realloc(target, size);
-    if (!target2) {             /* failed to allocate */
-      break;
-    }
-    target = target2;
-#ifdef _WIN32
-    tsize = GetFinalPathNameByHandle(h, target, size, FILE_NAME_OPENED);
-#else
-    tsize = readlink(file, target, size);
-#endif
-    if (tsize < 0) {            /* a readlink() error occurred */
-      break;
-    }
-    if (tsize < size) {
-#ifdef _WIN32
-      if (tsize > 4 && strncmp(target, "\\\\?\\", 4) == 0) {
-        memmove_s(target, tsize - 3, target + 4, tsize - 3);
-        tsize -= 4;
-      }
-#endif
-      ok = 1;
-      break;
-    }
-    /* possibly truncated readlink() result, double size and retry */
-    size *= 2;
-  }
-  if (ok) {
-    target[tsize] = '\0';
-    lua_pushlstring(L, target, tsize);
-  }
-#ifdef _WIN32
-  CloseHandle(h);
-#endif
-  free(target);
-  return ok;
-}
-
-/*
-** Get symbolic link information using lstat.
-*/
-static int link_info(lua_State * L)
-{
-  int ret;
-  if (lua_isstring(L, 2) && (strcmp(lua_tostring(L, 2), "target") == 0)) {
-    int ok = push_link_target(L);
-    return ok ? 1 : pusherror(L, "could not obtain link target");
-  }
-  ret = _file_info_(L, LSTAT_FUNC);
-  if (ret == 1 && lua_type(L, -1) == LUA_TTABLE) {
-    int ok = push_link_target(L);
-    if (ok) {
-      lua_setfield(L, -2, "target");
-    }
-  }
-  return ret;
-}
-
-
-
-
-
-/*
 ** Creates directory metatable.
 */
 static int dir_create_meta(lua_State * L)
@@ -616,10 +515,8 @@ static const struct luaL_Reg fslib[] = {
   { "chdir", change_dir },
   { "currentdir", get_dir },
   { "dir", dir_iter_factory },
-  { "link", make_link },
   { "mkdir", make_dir },
   { "rmdir", remove_dir },
-  { "symlinkattributes", link_info },
   { "touch", file_utime },
   { NULL, NULL },
 };
