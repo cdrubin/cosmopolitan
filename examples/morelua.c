@@ -155,6 +155,8 @@ static int dir_iter(lua_State * L)
   struct dirent *entry;
   dir_data *d = (dir_data *) luaL_checkudata(L, 1, DIR_METATABLE);
   luaL_argcheck(L, d->closed == 0, 1, "closed directory");
+  
+  /* NOTE: directory iteration over the zip: virtual fs is not supported by Cosmo presently */
   if ((entry = readdir(d->dir)) != NULL) {
     lua_pushstring(L, entry->d_name);
     return 1;
