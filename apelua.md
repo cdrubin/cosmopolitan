@@ -5,7 +5,7 @@
 
 To make an APE Lua binary really useful across platforms the following are pre-requisites:
 
-1. Being able to extend the lua base with platform-specific functions (like [luafilesystem](https://github.com/keplerproject/luafilesystem))
+1. Being able to extend the lua base with some platform-specific functions (like parts of [luafilesystem](https://github.com/keplerproject/luafilesystem))
 2. Pass along command-line arguments to an initial Lua file
 3. Enable Lua sripts to _require_ other Lua files from within the zip archive
 
@@ -15,10 +15,10 @@ To make an APE Lua binary really useful across platforms the following are pre-r
 The [hellolua.c](https://github.com/jart/cosmopolitan/blob/master/examples/hellolua.lua) example gets us much of the way. It includes an example of 
 a C ```NativeAdd``` that is added to the global scope for Lua state. Adding desired functions from luafilesystem is a similar process of adding the C sources and
 standardizing the ```#include```s to use the Cosmo files. Only the POSIX implementations are required - the magic of [Cosmopolitan libc](https://justine.lol/cosmopolitan/documentation.html) 
-is that functions like [readdir](https://justine.lol/cosmopolitan/documentation.html#readdir) can just be used and assumed to work cross-platform. Crumbs.
+is that functions like [readdir](https://justine.lol/cosmopolitan/documentation.html#readdir) can just be used and assumed to work cross-platform. Crumbs. Just don't expect to create a directory iterator over the zip virtual filesystem quite yet.
 
-The [morelua.c](https://github.com/cdrubin/cosmopolitan/blob/master/examples/morelua.lua) example adds most of luafilesystem and registers the ```lfs```
-package for use by loaded scripts. It is also likely going to be helpful make errors visible on __stderr__:
+The [morelua.c](https://github.com/cdrubin/cosmopolitan/blob/master/examples/morelua.lua) example adds some of luafilesystem and registers the ```lfs```
+package for use by loaded scripts. It is also likely going to be helpful to make errors visible on __stderr__:
 
 ```C
 if ( luaL_dofile( L, "zip:main.lua" ) != LUA_OK ) {
@@ -26,8 +26,7 @@ if ( luaL_dofile( L, "zip:main.lua" ) != LUA_OK ) {
 }
 ```
 
-Packages registered using the [luaopen_](https://github.com/cdrubin/cosmopolitan/blob/5a2fead17beb36deeeb9b12afe7d0965fd0ee2be/examples/morelua.c#L627) pattern
-are added to global scope and do not need to be required. Using something like:
+Packages registered using the [luaopen_](https://github.com/cdrubin/cosmopolitan/blob/5a2fead17beb36deeeb9b12afe7d0965fd0ee2be/examples/morelua.c#L627) pattern - canonically used in ```linit.c``` - are added to global scope and do not need to be required. Using something like:
 
 ```lua
 lfs = lfs or require( 'lfs' )
