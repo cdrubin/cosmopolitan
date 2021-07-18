@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/macros.internal.h"
 #include "libc/str/str.h"
 #include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
@@ -34,27 +35,28 @@ char *FormatHttpDateTime(char p[hasatleast 30], struct tm *tm) {
   p = mempcpy(p, kWeekdayNameShort[tm->tm_wday], 3);
   *p++ = ',';
   *p++ = ' ';
-  i = tm->tm_mday;
+  i = MIN(MAX(tm->tm_mday, 1), 31);
   *p++ = '0' + i / 10;
   *p++ = '0' + i % 10;
   *p++ = ' ';
-  p = mempcpy(p, kMonthNameShort[tm->tm_mon], 3);
+  i = MIN(MAX(tm->tm_mon, 0), 11);
+  p = mempcpy(p, kMonthNameShort[i], 3);
   *p++ = ' ';
-  i = tm->tm_year + 1900;
+  i = MIN(MAX(tm->tm_year + 1900, 0), 9999);
   *p++ = '0' + i / 1000;
   *p++ = '0' + i / 100 % 10;
   *p++ = '0' + i / 10 % 10;
   *p++ = '0' + i % 10;
   *p++ = ' ';
-  i = tm->tm_hour;
+  i = MIN(MAX(tm->tm_hour, 0), 23);
   *p++ = '0' + i / 10;
   *p++ = '0' + i % 10;
   *p++ = ':';
-  i = tm->tm_min;
+  i = MIN(MAX(tm->tm_min, 0), 59);
   *p++ = '0' + i / 10;
   *p++ = '0' + i % 10;
   *p++ = ':';
-  i = tm->tm_sec;
+  i = MIN(MAX(tm->tm_sec, 0), 59);
   *p++ = '0' + i / 10;
   *p++ = '0' + i % 10;
   *p++ = ' ';

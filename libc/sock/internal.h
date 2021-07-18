@@ -46,6 +46,15 @@ struct msghdr_bsd {
   uint32_t msg_flags; /* « different type */
 };
 
+struct sockaddr_un_bsd {
+  uint8_t sun_len; /* sockaddr len including NUL on freebsd but excluding it on
+                      openbsd/xnu */
+  uint8_t sun_family;
+  char sun_path[108];
+};
+
+/* ------------------------------------------------------------------------------------*/
+
 struct SockFd {
   int family;
   int type;
@@ -70,6 +79,7 @@ int32_t __sys_connect(int32_t, const void *, uint32_t) hidden;
 int32_t __sys_socket(int32_t, int32_t, int32_t) hidden;
 int32_t __sys_getsockname(int32_t, void *, uint32_t *) hidden;
 int32_t __sys_getpeername(int32_t, void *, uint32_t *) hidden;
+int32_t __sys_socketpair(int32_t, int32_t, int32_t, int32_t[2]) hidden;
 
 int32_t sys_accept4(int32_t, void *, uint32_t *, int) nodiscard hidden;
 int32_t sys_accept(int32_t, void *, uint32_t *) hidden;
@@ -82,11 +92,14 @@ int32_t sys_getpeername(int32_t, void *, uint32_t *) hidden;
 int32_t sys_poll(struct pollfd *, uint64_t, signed) hidden;
 int32_t sys_shutdown(int32_t, int32_t) hidden;
 int32_t sys_socket(int32_t, int32_t, int32_t) hidden;
+int32_t sys_socketpair(int32_t, int32_t, int32_t, int32_t[2]) hidden;
 int64_t sys_readv(int32_t, const struct iovec *, int32_t) hidden;
 int64_t sys_writev(int32_t, const struct iovec *, int32_t) hidden;
 ssize_t sys_recvfrom(int, void *, size_t, int, void *, uint32_t *) hidden;
 ssize_t sys_sendto(int, const void *, size_t, int, const void *,
                    uint32_t) hidden;
+ssize_t sys_sendmsg(int, const struct msghdr *, int) hidden;
+ssize_t sys_recvmsg(int, struct msghdr *, int) hidden;
 int32_t sys_select(int32_t, fd_set *, fd_set *, fd_set *,
                    struct timeval *) hidden;
 int sys_setsockopt(int, int, int, const void *, uint32_t) hidden;
@@ -104,8 +117,14 @@ int sys_bind_nt(struct Fd *, const void *, uint32_t);
 int sys_accept_nt(struct Fd *, void *, uint32_t *, int) hidden;
 int sys_closesocket_nt(struct Fd *) hidden;
 int sys_socket_nt(int, int, int) hidden;
+/*
+int sys_socketpair_nt_stream(int, int, int, int[2]) hidden;
+int sys_socketpair_nt_dgram(int, int, int, int[2]) hidden;
+*/
+int sys_socketpair_nt(int, int, int, int[2]) hidden;
 int sys_select_nt(int, fd_set *, fd_set *, fd_set *, struct timeval *) hidden;
 int sys_shutdown_nt(struct Fd *, int) hidden;
+int sys_setsockopt_nt(struct Fd *, int, int, const void *, uint32_t) hidden;
 
 size_t __iovec2nt(struct NtIovec[hasatleast 16], const struct iovec *,
                   size_t) hidden;
@@ -125,7 +144,7 @@ int sys_close_epoll(int) hidden;
  * Converts sockaddr (Linux/Windows) → sockaddr_bsd (XNU/BSD).
  */
 forceinline void sockaddr2bsd(void *saddr) {
-  uint8_t *p;
+  char *p;
   uint16_t fam;
   if (saddr) {
     p = saddr;
@@ -139,7 +158,7 @@ forceinline void sockaddr2bsd(void *saddr) {
  * Converts sockaddr_in_bsd (XNU/BSD) → sockaddr (Linux/Windows).
  */
 forceinline void sockaddr2linux(void *saddr) {
-  uint8_t *p, fam;
+  char *p, fam;
   if (saddr) {
     p = saddr;
     fam = p[1];

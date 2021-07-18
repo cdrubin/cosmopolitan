@@ -29,6 +29,13 @@
  */
 char *strstr(const char *haystack, const char *needle) {
   size_t i;
+  const char *p;
+  if (!needle[0]) return haystack;
+  if (haystack == needle) return haystack;
+  p = strchr(haystack, needle[0]);
+  if (!needle[1]) return p;
+  if (p) haystack = p;
+  /* TODO: make not quadratic */
   for (;;) {
     for (i = 0;;) {
       if (!needle[i]) return (/*unconst*/ char *)haystack;

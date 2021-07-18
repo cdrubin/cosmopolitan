@@ -28,6 +28,35 @@
  * data from modifying memory without authorization; the memccpy()
  * function can be used for that purpose.
  *
+ * Here's an example of the only use case we know of for strncpy:
+ *
+ *     static const struct People {
+ *       char name[8];
+ *       int age;
+ *     } kPeople[] = {
+ *         {"alice", 29},  //
+ *         {"bob", 42},    //
+ *     };
+ *
+ *     int GetAge(const char *name) {
+ *       char k[8];
+ *       int m, l, r;
+ *       l = 0;
+ *       r = ARRAYLEN(kPeople) - 1;
+ *       strncpy(k, name, 8);
+ *       while (l <= r) {
+ *         m = (l + r) >> 1;
+ *         if (READ64BE(kPeople[m].name) < READ64BE(k)) {
+ *           l = m + 1;
+ *         } else if (READ64BE(kPeople[m].name) > READ64BE(k)) {
+ *           r = m - 1;
+ *         } else {
+ *           return kPeople[m].age;
+ *         }
+ *       }
+ *       return -1;
+ *     }
+ *
  * @return dest
  * @see stpncpy(), memccpy()
  * @asyncsignalsafe

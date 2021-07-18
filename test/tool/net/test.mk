@@ -29,17 +29,25 @@ TEST_TOOL_NET_CHECKS =					\
 
 TEST_TOOL_NET_DIRECTDEPS =				\
 	LIBC_CALLS					\
-	LIBC_STUBS					\
 	LIBC_FMT					\
-	LIBC_STDIO					\
 	LIBC_INTRIN					\
-	LIBC_NEXGEN32E					\
-	LIBC_SYSV					\
+	LIBC_LOG					\
 	LIBC_MEM					\
+	LIBC_NEXGEN32E					\
+	LIBC_RAND					\
 	LIBC_RUNTIME					\
-	LIBC_X						\
+	LIBC_SOCK					\
+	LIBC_STDIO					\
+	LIBC_STR					\
+	LIBC_STUBS					\
+	LIBC_SYSV					\
 	LIBC_TESTLIB					\
-	LIBC_ZIPOS
+	LIBC_UNICODE					\
+	LIBC_X						\
+	LIBC_ZIPOS					\
+	THIRD_PARTY_REGEX				\
+	THIRD_PARTY_MBEDTLS				\
+	THIRD_PARTY_SQLITE3
 
 TEST_TOOL_NET_DEPS :=					\
 	$(call uniq,$(foreach x,$(TEST_TOOL_NET_DIRECTDEPS),$($(x))))

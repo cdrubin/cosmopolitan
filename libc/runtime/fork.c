@@ -22,7 +22,7 @@
 #include "libc/dce.h"
 
 /**
- * Creates new process zygote style.
+ * Creates new process.
  *
  * @return 0 to child, child pid to parent, or -1 on error
  * @asyncsignalsafe

@@ -19,6 +19,7 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
 #include "libc/limits.h"
+#include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
 TEST(int64toarray_radix10, test) {
@@ -39,6 +40,8 @@ TEST(uint64toarray_radix10, test) {
   char buf[21];
   EXPECT_EQ(1, uint64toarray_radix10(0, buf));
   EXPECT_STREQ("0", buf);
+  EXPECT_EQ(4, uint64toarray_radix10(1024, buf));
+  EXPECT_STREQ("1024", buf);
   EXPECT_EQ(20, uint64toarray_radix10(UINT64_MAX, buf));
   EXPECT_STREQ("18446744073709551615", buf);
   EXPECT_EQ(19, uint64toarray_radix10(INT64_MIN, buf));
@@ -63,4 +66,9 @@ TEST(uint128toarray_radix10, test) {
   EXPECT_STREQ("340282366920938463463374607431768211455", buf);
   EXPECT_EQ(39, uint128toarray_radix10(INT128_MIN, buf));
   EXPECT_STREQ("170141183460469231731687303715884105728", buf);
+}
+
+BENCH(itoa64radix10, bench) {
+  char b[21];
+  EZBENCH2("itoa64radix10", donothing, uint64toarray_radix10(UINT64_MAX, b));
 }

@@ -129,21 +129,26 @@ include libc/libc.mk				#─┘
 include libc/sock/sock.mk			#─┐
 include dsp/tty/tty.mk				# ├──ONLINE RUNTIME
 include libc/dns/dns.mk				# │  You can communicate with the network
-include libc/crypto/crypto.mk			# │
-include net/http/http.mk			#─┘
-include third_party/regex/regex.mk
+include net/http/http.mk			# │
+include third_party/mbedtls/mbedtls.mk		# │
+include net/https/https.mk			# │
+include third_party/regex/regex.mk		#─┘
 include third_party/third_party.mk
 include libc/testlib/testlib.mk
 include tool/viz/lib/vizlib.mk
 include third_party/lua/lua.mk
-include examples/examples.mk
+include third_party/sqlite3/sqlite3.mk
+include third_party/mbedtls/test/test.mk
+include third_party/quickjs/quickjs.mk
 include third_party/lz4cli/lz4cli.mk
+include third_party/infozip/infozip.mk
 include tool/build/lib/buildlib.mk
 include third_party/chibicc/chibicc.mk
 include third_party/chibicc/test/test.mk
 include tool/build/emucrt/emucrt.mk
 include tool/build/emubin/emubin.mk
 include tool/build/build.mk
+include examples/examples.mk
 include tool/decode/lib/decodelib.mk
 include tool/decode/decode.mk
 include tool/hash/hash.mk
@@ -158,7 +163,6 @@ include test/libc/nexgen32e/test.mk
 include test/libc/runtime/test.mk
 include test/libc/sock/test.mk
 include test/libc/bits/test.mk
-include test/libc/crypto/test.mk
 include test/libc/str/test.mk
 include test/libc/unicode/test.mk
 include test/libc/calls/test.mk
@@ -188,13 +192,13 @@ include examples/package/build.mk
 #-φ-examples/package/new.sh
 include test/test.mk
 
-OBJS	= $(foreach x,$(PKGS),$($(x)_OBJS))
-SRCS	= $(foreach x,$(PKGS),$($(x)_SRCS))
-HDRS	= $(foreach x,$(PKGS),$($(x)_HDRS))
-INCS	= $(foreach x,$(PKGS),$($(x)_INCS))
-BINS	= $(foreach x,$(PKGS),$($(x)_BINS))
-TESTS	= $(foreach x,$(PKGS),$($(x)_TESTS))
-CHECKS	= $(foreach x,$(PKGS),$($(x)_CHECKS))
+OBJS	 = $(foreach x,$(PKGS),$($(x)_OBJS))
+SRCS	:= $(foreach x,$(PKGS),$($(x)_SRCS))
+HDRS	:= $(foreach x,$(PKGS),$($(x)_HDRS))
+INCS	 = $(foreach x,$(PKGS),$($(x)_INCS))
+BINS	 = $(foreach x,$(PKGS),$($(x)_BINS))
+TESTS	 = $(foreach x,$(PKGS),$($(x)_TESTS))
+CHECKS	 = $(foreach x,$(PKGS),$($(x)_CHECKS))
 
 bins:	$(BINS)
 check:	$(CHECKS)
@@ -205,11 +209,17 @@ tags:	TAGS HTAGS
 o/$(MODE)/.x:
 	@mkdir -p $(@D) && touch $@
 
+ifneq ($(findstring 4.,,$(MAKE_VERSION)),$(MAKE_VERSION))
 o/$(MODE)/srcs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x))))
 	$(file >$@) $(foreach x,$(SRCS),$(file >>$@,$(x)))
-
 o/$(MODE)/hdrs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x))))
 	$(file >$@) $(foreach x,$(HDRS) $(INCS),$(file >>$@,$(x)))
+else
+o/$(MODE)/srcs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x))))
+	$(MAKE) MODE=rel -j8 -pn bopit 2>/dev/null | sed -ne '/^SRCS/ {s/.*:= //;s/  */\n/g;p;q}' >$@
+o/$(MODE)/hdrs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x))))
+	$(MAKE) MODE=rel -j8 -pn bopit 2>/dev/null | sed -ne '/^HDRS/ {s/.*:= //;s/  */\n/g;p;q}' >$@
+endif
 
 o/$(MODE)/depend: o/$(MODE)/.x o/$(MODE)/srcs.txt o/$(MODE)/hdrs.txt $(SRCS) $(HDRS) $(INCS)
 	@$(COMPILE) -AMKDEPS $(MKDEPS) -o $@ -r o/$(MODE)/ o/$(MODE)/srcs.txt o/$(MODE)/hdrs.txt
@@ -227,10 +237,10 @@ loc: o/$(MODE)/tool/build/summy.com
 	$(XARGS) wc -l | grep total | awk '{print $$1}' | $<
 
 COSMOPOLITAN_OBJECTS =		\
-	LIBC_CRYPTO		\
 	LIBC_DNS		\
 	LIBC_SOCK		\
 	LIBC_NT_WS2_32		\
+	LIBC_NT_IPHLPAPI	\
 	LIBC_NT_MSWSOCK		\
 	LIBC_OHMYPLUS		\
 	LIBC_X			\
@@ -276,7 +286,6 @@ COSMOPOLITAN_HEADERS =		\
 	LIBC_ALG		\
 	LIBC_BITS		\
 	LIBC_CALLS		\
-	LIBC_CRYPTO		\
 	LIBC_DNS		\
 	LIBC_ELF		\
 	LIBC_FMT		\

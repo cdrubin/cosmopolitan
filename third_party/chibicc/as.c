@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/elf/def.h"
@@ -135,19 +136,15 @@
 #define ISRIP    0x00080000
 #define ISREG    0x00100000
 
-#define APPEND(L)    L.p = realloc(L.p, ++L.n * sizeof(*L.p))
+#define APPEND(L)                           \
+  if (++L.n > L.c) {                        \
+    L.c = L.n + 2 + (L.c >> 1);             \
+    L.p = realloc(L.p, L.c * sizeof(*L.p)); \
+  }
+
 #define IS(P, N, S)  (N == sizeof(S) - 1 && !strncasecmp(P, S, sizeof(S) - 1))
 #define MAX(X, Y)    ((Y) < (X) ? (X) : (Y))
-#define LOAD128BE(S) ((unsigned __int128)LOAD64BE(S) << 64 | LOAD64BE((S) + 8))
-#define LOAD64BE(S)                                  \
-  ((unsigned long)((unsigned char *)(S))[0] << 070 | \
-   (unsigned long)((unsigned char *)(S))[1] << 060 | \
-   (unsigned long)((unsigned char *)(S))[2] << 050 | \
-   (unsigned long)((unsigned char *)(S))[3] << 040 | \
-   (unsigned long)((unsigned char *)(S))[4] << 030 | \
-   (unsigned long)((unsigned char *)(S))[5] << 020 | \
-   (unsigned long)((unsigned char *)(S))[6] << 010 | \
-   (unsigned long)((unsigned char *)(S))[7] << 000)
+#define READ128BE(S) ((unsigned __int128)READ64BE(S) << 64 | READ64BE((S) + 8))
 
 struct As {
   int i;         // things
@@ -160,29 +157,29 @@ struct As {
   bool inhibiterr;
   bool inhibitwarn;
   struct Ints {
-    unsigned long n;
+    unsigned long n, c;
     long *p;
   } ints;
   struct Floats {
-    unsigned long n;
+    unsigned long n, c;
     long double *p;
   } floats;
   struct Slices {
-    unsigned long n;
+    unsigned long n, c;
     struct Slice {
-      unsigned long n;
+      unsigned long n, c;
       char *p;
     } * p;
   } slices;
   struct Sauces {
-    unsigned long n;
+    unsigned long n, c;
     struct Sauce {
       unsigned path;  // strings
       unsigned line;  // 1-indexed
     } * p;
   } sauces;
   struct Things {
-    unsigned long n;
+    unsigned long n, c;
     struct Thing {
       enum ThingType {
         TT_INT,
@@ -197,7 +194,7 @@ struct As {
     } * p;
   } things;
   struct Sections {
-    unsigned long n;
+    unsigned long n, c;
     struct Section {
       unsigned name;  // strings
       int flags;
@@ -207,7 +204,7 @@ struct As {
     } * p;
   } sections;
   struct Symbols {
-    unsigned long n;
+    unsigned long n, c;
     struct Symbol {
       bool isused;
       unsigned char stb;   // STB_*
@@ -228,7 +225,7 @@ struct As {
     } * p;
   } symbolindex;
   struct Labels {
-    unsigned long n;
+    unsigned long n, c;
     struct Label {
       unsigned id;
       unsigned tok;     // things
@@ -236,7 +233,7 @@ struct As {
     } * p;
   } labels;
   struct Relas {
-    unsigned long n;
+    unsigned long n, c;
     struct Rela {
       bool isdead;
       int kind;          // R_X86_64_{16,32,64,PC8,PC32,PLT32,GOTPCRELX,...}
@@ -247,7 +244,7 @@ struct As {
     } * p;
   } relas;
   struct Exprs {
-    unsigned long n;
+    unsigned long n, c;
     struct Expr {
       enum ExprKind {
         EX_INT,     // integer
@@ -285,11 +282,11 @@ struct As {
     } * p;
   } exprs;
   struct Strings {
-    unsigned long n;
+    unsigned long n, c;
     char **p;
   } strings, incpaths;
   struct SectionStack {
-    unsigned long n;
+    unsigned long n, c;
     int *p;
   } sectionstack;
 };
@@ -813,8 +810,7 @@ static void Tokenize(struct As *a, int path) {
       continue;
     }
     if (c == '"') {
-      buf.n = 0;
-      buf.p = NULL;
+      memset(&buf, 0, sizeof(buf));
       for (i = 1; (c = p[i++]);) {
         if (c == '"') break;
         c = ReadCharLiteral(&buf, c, p, &i);
@@ -1911,13 +1907,13 @@ static void CopyLower(char *k, const char *p, int n) {
 static unsigned long MakeKey64(const char *p, int n) {
   char k[8] = {0};
   CopyLower(k, p, n);
-  return LOAD64BE(k);
+  return READ64BE(k);
 }
 
 static unsigned __int128 MakeKey128(const char *p, int n) {
   char k[16] = {0};
   CopyLower(k, p, n);
-  return LOAD128BE(k);
+  return READ128BE(k);
 }
 
 static bool Prefix(struct As *a, const char *p, int n) {
@@ -1929,7 +1925,7 @@ static bool Prefix(struct As *a, const char *p, int n) {
     r = ARRAYLEN(kPrefix) - 1;
     while (l <= r) {
       m = (l + r) >> 1;
-      y = LOAD64BE(kPrefix[m]);
+      y = READ64BE(kPrefix[m]);
       if (x < y) {
         r = m - 1;
       } else if (x > y) {
@@ -1954,7 +1950,7 @@ static bool FindReg(const char *p, int n, struct Reg *out_reg) {
     r = ARRAYLEN(kRegs) - 1;
     while (l <= r) {
       m = (l + r) >> 1;
-      y = LOAD64BE(kRegs[m].s);
+      y = READ64BE(kRegs[m].s);
       if (x < y) {
         r = m - 1;
       } else if (x > y) {
@@ -3710,7 +3706,7 @@ static bool OnDirective8(struct As *a, struct Slice s) {
     r = ARRAYLEN(kDirective8) - 1;
     while (l <= r) {
       m = (l + r) >> 1;
-      y = LOAD64BE(kDirective8[m].s);
+      y = READ64BE(kDirective8[m].s);
       if (x < y) {
         r = m - 1;
       } else if (x > y) {
@@ -3733,7 +3729,7 @@ static bool OnDirective16(struct As *a, struct Slice s) {
     r = ARRAYLEN(kDirective16) - 1;
     while (l <= r) {
       m = (l + r) >> 1;
-      y = LOAD128BE(kDirective16[m].s);
+      y = READ128BE(kDirective16[m].s);
       if (x < y) {
         r = m - 1;
       } else if (x > y) {

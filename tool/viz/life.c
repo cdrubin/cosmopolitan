@@ -428,6 +428,7 @@ static void OnUnzoom(long y, long x) {
 }
 
 static void OnMouseLeftDrag(long y, long x) {
+  int i;
   if (y == save_y && x == save_x) return;
   save_y = y;
   save_x = x;
@@ -440,7 +441,10 @@ static void OnMouseLeftDrag(long y, long x) {
   if (erase) {
     Unset(y, x);
   } else {
-    Set(y, x);
+    for (i = 0; i < (2 << zoom); ++i) {
+      Set(y + (rand() % (zoom + 1)) - (rand() % (zoom + 1)),
+          x + (rand() % (zoom + 1)) - (rand() % (zoom + 1)));
+    }
   }
 }
 
@@ -831,6 +835,26 @@ static void OnMouse(char *p) {
   }
 }
 
+static void Rando1(void) {
+  long i, n;
+  n = (byn * bxn) >> 6;
+  for (i = 0; i < n; ++i) {
+    board[i] = rand64();
+  }
+}
+
+static void Rando2(void) {
+  long i, n;
+  n = (byn * bxn) >> 6;
+  for (i = 0; i < n; ++i) {
+    board[i] = rand();
+    board[i] <<= 31;
+    board[i] |= rand();
+    board[i] <<= 2;
+    board[i] |= rand() & 0b11;
+  }
+}
+
 static void ReadKeyboard(void) {
   char buf[32], *p = buf;
   memset(buf, 0, sizeof(buf));
@@ -856,6 +880,12 @@ static void ReadKeyboard(void) {
       break;
     case CTRL('V'):
       OnPageDown();
+      break;
+    case CTRL('R'):
+      Rando1();
+      break;
+    case CTRL('G'):
+      Rando2();
       break;
     case 'M':
       if (mousemode) {

@@ -16,42 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/reverse.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
-#include "libc/nt/enum/filesharemode.h"
 #include "libc/nt/ipc.h"
-#include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
-#include "libc/sysv/consts/o.h"
-
-static const char kPipeNamePrefix[] = "\\\\?\\pipe\\cosmo\\";
-
-static size_t UintToChar16Array(char16_t *a, uint64_t i) {
-  size_t j = 0;
-  do {
-    a[j++] = i % 10 + '0';
-    i /= 10;
-  } while (i > 0);
-  a[j] = 0;
-  reverse(a, j);
-  return j;
-}
-
-static char16_t *CreatePipeName(char16_t *a) {
-  static long x;
-  unsigned i;
-  for (i = 0; kPipeNamePrefix[i]; ++i) a[i] = kPipeNamePrefix[i];
-  i += UintToChar16Array(a + i, GetCurrentProcessId());
-  a[i++] = u'-';
-  i += UintToChar16Array(a + i, GetCurrentProcessId());
-  a[i++] = u'-';
-  i += UintToChar16Array(a + i, x++);
-  a[i] = u'\0';
-  return a;
-}
 
 textwindows int sys_pipe_nt(int pipefd[2], unsigned flags) {
   int64_t hin, hout;
@@ -66,8 +36,8 @@ textwindows int sys_pipe_nt(int pipefd[2], unsigned flags) {
   if ((hin = CreateNamedPipe(pipename, kNtPipeAccessInbound,
                              kNtPipeWait | kNtPipeReadmodeByte, 1, 65536, 65536,
                              0, &kNtIsInheritable)) != -1) {
-    if ((hout = CreateFile(pipename, kNtGenericWrite, kNtFileShareWrite,
-                           &kNtIsInheritable, kNtOpenExisting, 0, 0)) != -1) {
+    if ((hout = CreateFile(pipename, kNtGenericWrite, 0, &kNtIsInheritable,
+                           kNtOpenExisting, 0, 0)) != -1) {
       g_fds.p[reader].kind = kFdFile;
       g_fds.p[reader].flags = flags;
       g_fds.p[reader].handle = hin;

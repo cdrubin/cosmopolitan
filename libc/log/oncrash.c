@@ -58,7 +58,7 @@ static const char kGregNames[17][4] forcealign(1) = {
 static const char kCpuFlags[12] forcealign(1) = "CVPRAKZSTIDO";
 static const char kFpuExceptions[6] forcealign(1) = "IDZOUP";
 static const char kCrashSigNames[8][5] forcealign(1) = {
-    "QUIT", "FPE", "ILL", "SEGV", "TRAP", "ABRT", "BUS"};
+    "QUIT", "FPE", "ILL", "SEGV", "TRAP", "ABRT", "BUS", "PIPE"};
 
 hidden int kCrashSigs[8];
 hidden struct sigaction g_oldcrashacts[8];
@@ -133,7 +133,7 @@ relegated static void ShowGeneralRegisters(int fd, ucontext_t *ctx) {
       } else {
         memset(&st, 0, sizeof(st));
       }
-      dprintf(fd, " %s(%zu) %Lf", "ST", k, st);
+      dprintf(fd, " %s(%zu) %Lg", "ST", k, st);
       ++k;
       write(fd, "\r\n", 2);
     }
@@ -232,8 +232,6 @@ relegated void __oncrash(int sig, struct siginfo *si, ucontext_t *ctx) {
   err = errno;
   if (once) _exit(119);
   once = true;
-  /* TODO(jart): Needs translation for ucontext_t and possibly siginfo_t. */
-  if (IsFreebsd() || IsOpenbsd()) ctx = NULL;
   rip = ctx ? ctx->uc_mcontext.rip : 0;
   if ((gdbpid = IsDebuggerPresent(true))) {
     DebugBreak();

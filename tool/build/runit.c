@@ -42,7 +42,6 @@
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
-#include "libc/sysv/consts/ai.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/f.h"
@@ -260,7 +259,7 @@ void Connect(void) {
   struct addrinfo *ai;
   if ((rc = getaddrinfo(g_hostname, gc(xasprintf("%hu", g_runitdport)),
                         &kResolvHints, &ai)) != 0) {
-    FATALF("%s:%hu: EAI_%s %m", g_hostname, g_runitdport, eai2str(rc));
+    FATALF("%s:%hu: EAI_%s %m", g_hostname, g_runitdport, gai_strerror(rc));
     unreachable;
   }
   ip4 = (const char *)&ai->ai_addr4->sin_addr;

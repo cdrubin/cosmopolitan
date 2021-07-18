@@ -3,9 +3,12 @@
 #ifndef __STRICT_ANSI__
 #include "libc/assert.h"
 #include "libc/bits/bits.h"
+#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
+#include "libc/log/backtrace.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/symbols.internal.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 #if 0
@@ -674,15 +677,64 @@ extern struct MallocState g_dlmalloc[1];
 
 /* ───────────────────────────────  Hooks ──────────────────────────────── */
 
-#ifdef MTRACE /* TODO(jart): Add --mtrace flag for this */
-void *AddressBirthAction(void *);
-void *AddressDeathAction(void *);
-#define ADDRESS_BIRTH_ACTION(A) AddressBirthAction(A)
-#define ADDRESS_DEATH_ACTION(A) AddressDeathAction(A)
-#else
-#define ADDRESS_BIRTH_ACTION(A) (A)
-#define ADDRESS_DEATH_ACTION(A) (A)
+/*
+d = {}
+lines = open("log").read().split('\n')
+def bad(i):
+  while i < len(lines):
+    if lines[i].startswith(('BIRTH', 'DEATH')):
+      break
+    print lines[i]
+    i += 1
+for i, line in enumerate(lines):
+  i += 1
+  x = line.split()
+  if len(x) != 2: continue
+  if x[0] == 'DEATH':
+    b = int(x[1], 16)
+    if b in d:
+      if d[b] < 0:
+        print "OH NO", i, d[b]
+      else:
+        d[b] = -d[b]
+    else:
+      print "wut", i
+  elif x[0] == 'BIRTH':
+    b = int(x[1], 16)
+    if b in d:
+      if d[b] > 0:
+        print "bad malloc", i, d[b]
+      d[b] = i
+    else:
+      d[b] = i
+for k,v in d.items():
+  if v > 0:
+    print "unfreed", v
+    bad(v)
+*/
+#define MALLOC_TRACE 0
+
+static inline void *AddressBirthAction(void *p) {
+#if MALLOC_TRACE
+  (dprintf)(2, "BIRTH %p\n", p);
+  if (weaken(PrintBacktraceUsingSymbols) && weaken(GetSymbolTable)) {
+    weaken(PrintBacktraceUsingSymbols)(2, __builtin_frame_address(0),
+                                       weaken(GetSymbolTable)());
+  }
 #endif
+  return p;
+}
+
+static inline void *AddressDeathAction(void *p) {
+#if MALLOC_TRACE
+  (dprintf)(2, "DEATH %p\n", p);
+  if (weaken(PrintBacktraceUsingSymbols) && weaken(GetSymbolTable)) {
+    weaken(PrintBacktraceUsingSymbols)(2, __builtin_frame_address(0),
+                                       weaken(GetSymbolTable)());
+  }
+#endif
+  return p;
+}
 
 /*
   PREACTION should be defined to return 0 on success, and nonzero on
@@ -1230,12 +1282,12 @@ forceinline msegmentptr segment_holding(mstate m, char *addr) {
 #define check_malloc_state(M)         do_check_malloc_state(M)
 #endif /* DEBUG */
 
-void do_check_free_chunk(mstate m, mchunkptr p) hidden;
-void do_check_inuse_chunk(mstate m, mchunkptr p) hidden;
-void do_check_top_chunk(mstate m, mchunkptr p) hidden;
-void do_check_malloced_chunk(mstate m, void *mem, size_t s) hidden;
-void do_check_mmapped_chunk(mstate m, mchunkptr p) hidden;
-void do_check_malloc_state(mstate m) hidden;
+void do_check_free_chunk(mstate, mchunkptr) hidden;
+void do_check_inuse_chunk(mstate, mchunkptr) hidden;
+void do_check_top_chunk(mstate, mchunkptr) hidden;
+void do_check_malloced_chunk(mstate, void *, size_t) hidden;
+void do_check_mmapped_chunk(mstate, mchunkptr) hidden;
+void do_check_malloc_state(mstate) hidden;
 
 /* ─────────────────────────── prototypes ──────────────────────────────── */
 

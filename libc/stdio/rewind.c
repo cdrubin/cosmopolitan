@@ -25,6 +25,7 @@
  * Like fseek(), this function can be used to restore a stream from the
  * EOF state, without reopening it.
  */
-void rewind(FILE *stream) {
-  fseek(stream, 0, SEEK_SET);
+void rewind(FILE *f) {
+  fseek(f, 0, SEEK_SET);
+  f->state = 0;
 }

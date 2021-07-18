@@ -19,6 +19,7 @@
 #include "libc/alg/arraylist.internal.h"
 #include "libc/dns/dns.h"
 #include "libc/dns/hoststxt.h"
+#include "libc/errno.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/stdio/stdio.h"
@@ -42,29 +43,29 @@
  * @return 0 on success, or -1 w/ errno
  * @see hoststxtsort() which is the logical next step
  */
-int parsehoststxt(struct HostsTxt *ht, FILE *f) {
-  int rc;
+int ParseHostsTxt(struct HostsTxt *ht, FILE *f) {
   char *line;
   size_t linesize;
-  rc = 0;
+  struct HostsTxtEntry entry;
+  char *addr, *name, *tok, *comment;
   line = NULL;
   linesize = 0;
   while ((getline(&line, &linesize, f)) != -1) {
-    struct HostsTxtEntry entry;
-    char *addr, *name, *tok, *comment;
     if ((comment = strchr(line, '#'))) *comment = '\0';
     if ((addr = strtok_r(line, " \t\r\n\v", &tok)) &&
         inet_pton(AF_INET, addr, entry.ip) == 1) {
       entry.canon = ht->strings.i;
       while ((name = strtok_r(NULL, " \t\r\n\v", &tok))) {
         entry.name = ht->strings.i;
-        if (concat(&ht->strings, name, strnlen(name, DNS_NAME_MAX) + 1) == -1 ||
-            append(&ht->entries, &entry) == -1) {
-          rc = -1;
-        }
+        concat(&ht->strings, name, strnlen(name, DNS_NAME_MAX) + 1);
+        append(&ht->entries, &entry);
       }
     }
   }
   free(line);
-  return rc | ferror(f);
+  if (ferror(f)) {
+    errno = ferror(f);
+    return -1;
+  }
+  return 0;
 }

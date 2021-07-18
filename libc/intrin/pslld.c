@@ -26,12 +26,12 @@
  * @mayalias
  */
 void(pslld)(uint32_t a[4], const uint32_t b[4], unsigned char c) {
+  unsigned i;
   if (c <= 31) {
-    unsigned i;
     for (i = 0; i < 4; ++i) {
       a[i] = b[i] << c;
     }
   } else {
-    memset(a, 0, 16);
+    __builtin_memset(a, 0, 16);
   }
 }

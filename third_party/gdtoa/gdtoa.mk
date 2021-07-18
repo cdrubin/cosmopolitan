@@ -28,6 +28,7 @@ THIRD_PARTY_GDTOA_A_DIRECTDEPS =			\
 	LIBC_INTRIN					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
+	LIBC_RUNTIME					\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_SYSV					\
@@ -46,11 +47,9 @@ $(THIRD_PARTY_GDTOA_A).pkg:				\
 		$(foreach x,$(THIRD_PARTY_GDTOA_A_DIRECTDEPS),$($(x)_A).pkg)
 
 $(THIRD_PARTY_GDTOA_A_OBJS):				\
-	OVERRIDE_CFLAGS +=				\
-		$(OLD_CODE)				\
-		$(IEEE_MATH)				\
-		-ffunction-sections			\
-		-fdata-sections
+		OVERRIDE_CFLAGS +=			\
+			-ffunction-sections		\
+			-fdata-sections
 
 THIRD_PARTY_GDTOA_LIBS = $(foreach x,$(THIRD_PARTY_GDTOA_ARTIFACTS),$($(x)))
 THIRD_PARTY_GDTOA_SRCS = $(foreach x,$(THIRD_PARTY_GDTOA_ARTIFACTS),$($(x)_SRCS))

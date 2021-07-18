@@ -35,7 +35,7 @@ static struct HostsTxtInitialStaticMemory {
   char strings[64];
 } g_hoststxt_init;
 
-static textwindows noinline char *getnthoststxtpath(char *pathbuf,
+static textwindows noinline char *GetNtHostsTxtPath(char *pathbuf,
                                                     uint32_t size) {
   const char *const kWinHostsPath = "\\drivers\\etc\\hosts";
   uint32_t len = GetSystemDirectoryA(&pathbuf[0], size);
@@ -49,11 +49,11 @@ static textwindows noinline char *getnthoststxtpath(char *pathbuf,
 }
 
 /**
- * Returns parsed sorted singleton hardcoded hostname→ip4 map.
+ * Returns hosts.txt map.
  *
  * @note yoinking realloc() ensures there's no size limits
  */
-const struct HostsTxt *gethoststxt(void) {
+const struct HostsTxt *GetHostsTxt(void) {
   FILE *f;
   const char *path;
   char pathbuf[PATH_MAX];
@@ -65,16 +65,15 @@ const struct HostsTxt *gethoststxt(void) {
     init->ht.entries.p = init->entries;
     init->ht.strings.n = pushpop(ARRAYLEN(init->strings));
     init->ht.strings.p = init->strings;
-    __cxa_atexit(freehoststxt, &g_hoststxt, NULL);
+    __cxa_atexit(FreeHostsTxt, &g_hoststxt, NULL);
     path = "/etc/hosts";
     if (IsWindows()) {
-      path = firstnonnull(getnthoststxtpath(pathbuf, ARRAYLEN(pathbuf)), path);
+      path = firstnonnull(GetNtHostsTxtPath(pathbuf, ARRAYLEN(pathbuf)), path);
     }
-    if (!(f = fopen(path, "r")) || parsehoststxt(g_hoststxt, f) == -1) {
+    if (!(f = fopen(path, "r")) || ParseHostsTxt(g_hoststxt, f) == -1) {
       /* TODO(jart): Elevate robustness. */
     }
     fclose(f);
-    sorthoststxt(g_hoststxt);
   }
   return g_hoststxt;
 }

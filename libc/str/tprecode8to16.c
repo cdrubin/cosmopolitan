@@ -25,18 +25,18 @@
 #include "libc/str/utf16.h"
 
 /* 34x speedup for ascii */
-static noasan axdx_t tprecode8to16_sse2(char16_t *dst, size_t dstsize,
-                                        const char *src, axdx_t r) {
+static inline noasan axdx_t tprecode8to16_sse2(char16_t *dst, size_t dstsize,
+                                               const char *src, axdx_t r) {
   uint8_t v1[16], v2[16], vz[16];
-  memset(vz, 0, 16);
+  __builtin_memset(vz, 0, 16);
   while (r.ax + 16 < dstsize) {
-    memcpy(v1, src + r.dx, 16);
+    __builtin_memcpy(v1, src + r.dx, 16);
     pcmpgtb((int8_t *)v2, (int8_t *)v1, (int8_t *)vz);
     if (pmovmskb(v2) != 0xFFFF) break;
     punpcklbw(v2, v1, vz);
     punpckhbw(v1, v1, vz);
-    memcpy(dst + r.ax + 0, v2, 16);
-    memcpy(dst + r.ax + 8, v1, 16);
+    __builtin_memcpy(dst + r.ax + 0, v2, 16);
+    __builtin_memcpy(dst + r.ax + 8, v1, 16);
     r.ax += 16;
     r.dx += 16;
   }
@@ -46,6 +46,9 @@ static noasan axdx_t tprecode8to16_sse2(char16_t *dst, size_t dstsize,
 /**
  * Transcodes UTF-8 to UTF-16.
  *
+ * This is a low-level function intended for the core runtime. Use
+ * utf8toutf16() for a much better API that uses malloc().
+ *
  * @param dst is output buffer
  * @param dstsize is shorts in dst
  * @param src is NUL-terminated UTF-8 input string
@@ -54,25 +57,25 @@ static noasan axdx_t tprecode8to16_sse2(char16_t *dst, size_t dstsize,
  */
 axdx_t tprecode8to16(char16_t *dst, size_t dstsize, const char *src) {
   axdx_t r;
-  unsigned n;
-  uint64_t w;
-  wint_t x, y;
+  unsigned w;
+  int x, y, a, b, i, n;
   r.ax = 0;
   r.dx = 0;
   for (;;) {
     if (!IsTiny() && !((uintptr_t)(src + r.dx) & 15)) {
-      tprecode8to16_sse2(dst, dstsize, src, r);
+      r = tprecode8to16_sse2(dst, dstsize, src, r);
     }
-    x = src[r.dx++] & 0xff;
-    if (ThomPikeCont(x)) continue;
-    if (!isascii(x)) {
-      n = ThomPikeLen(x);
-      x = ThomPikeByte(x);
-      while (--n) {
-        if ((y = src[r.dx++] & 0xff)) {
-          x = ThomPikeMerge(x, y);
-        } else {
-          x = 0;
+    x = src[r.dx++] & 0377;
+    if (x >= 0300) {
+      a = ThomPikeByte(x);
+      n = ThomPikeLen(x) - 1;
+      for (i = 0;;) {
+        if (!(b = src[r.dx + i] & 0377)) break;
+        if (!ThomPikeCont(b)) break;
+        a = ThomPikeMerge(a, b);
+        if (++i == n) {
+          r.dx += i;
+          x = a;
           break;
         }
       }
@@ -80,7 +83,7 @@ axdx_t tprecode8to16(char16_t *dst, size_t dstsize, const char *src) {
     if (!x) break;
     w = EncodeUtf16(x);
     while (w && r.ax + 1 < dstsize) {
-      dst[r.ax++] = w & 0xFFFF;
+      dst[r.ax++] = w;
       w >>= 16;
     }
   }

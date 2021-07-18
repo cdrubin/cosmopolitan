@@ -38,7 +38,9 @@ static const signed char kBase64i[256] = {
 };
 
 /**
- * Converts base64 to 32-bit integer.
+ * Converts base64 to 32-bit integer, the posix way.
+ * @see l64a() for inverse
+ * @see DecodeBase64()
  */
 long a64l(const char *s) {
   uint32_t i, v, x;

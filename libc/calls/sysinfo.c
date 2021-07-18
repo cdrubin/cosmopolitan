@@ -17,16 +17,17 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/sysinfo.h"
 #include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/nt/accounting.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/memorystatusex.h"
 #include "libc/nt/systeminfo.h"
 #include "libc/str/str.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Returns amount of system ram, cores, etc.
@@ -35,14 +36,19 @@
  */
 int sysinfo(struct sysinfo *info) {
   int rc;
+  if (IsAsan()) {
+    if (info && !__asan_is_valid(info, sizeof(*info))) {
+      return efault();
+    }
+  }
   memset(info, 0, sizeof(*info));
   if (!IsWindows()) {
     rc = sys_sysinfo(info);
   } else {
     rc = sys_sysinfo_nt(info);
   }
-  info->procs = max(1, info->procs);
-  info->mem_unit = max(1, info->mem_unit);
-  info->totalram = max((8 * 1024 * 1024) / info->mem_unit, info->totalram);
+  info->procs = MAX(1, info->procs);
+  info->mem_unit = MAX(1, info->mem_unit);
+  info->totalram = MAX((8 * 1024 * 1024) / info->mem_unit, info->totalram);
   return rc;
 }

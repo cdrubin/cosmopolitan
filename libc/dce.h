@@ -45,12 +45,6 @@
 #define IsTrustworthy() 0
 #endif
 
-#ifdef SECURITY_BLANKETS
-#define UseSecurityBlankets() 1
-#else
-#define UseSecurityBlankets() 0
-#endif
-
 #ifdef TINY
 #define IsTiny() 1
 #else
@@ -61,6 +55,12 @@
 #define IsOptimized() 1
 #else
 #define IsOptimized() 0
+#endif
+
+#ifdef __FSANITIZE_ADDRESS__
+#define IsAsan() 1
+#else
+#define IsAsan() 0
 #endif
 
 #if defined(__PIE__) || defined(__PIC__)

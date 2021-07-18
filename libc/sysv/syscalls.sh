@@ -61,7 +61,7 @@ scall	sys_select		0x1a104705d205d017	globl hidden
 scall	pselect			0x1b406e20a218afff	globl
 scall	pselect6		0xfffffffffffff10e	globl
 scall	sys_sched_yield		0x15e12a14b103c018	globl hidden # swtch() on xnu
-scall	sys_mremap		0x19bffffffffff019	globl hidden
+scall	__sys_mremap		0x19bffffffffff019	globl hidden
 scall	mincore			0x04e04e04e204e01b	globl
 scall	sys_madvise		0x04b04b04b204b01c	globl hidden
 scall	shmget			0x0e71210e7210901d	globl # consider mmap
@@ -88,14 +88,14 @@ scall	sys_bind		0x0680680682068031	globl hidden
 scall	sys_listen		0x06a06a06a206a032	globl hidden
 scall	__sys_getsockname	0x0200200202020033	globl hidden
 scall	__sys_getpeername	0x01f01f08d201f034	globl hidden
-scall	sys_socketpair		0x0870870872087035	globl hidden
+scall	__sys_socketpair	0x0870870872087035	globl hidden
 scall	sys_setsockopt		0x0690690692069036	globl hidden
 scall	sys_getsockopt		0x0760760762076037	globl hidden
 scall	sys_fork		0x0020020022002039	globl hidden # xnu needs eax&=~-edx bc eax always holds pid and edx is 0 for parent and 1 for child
 #scall	vfork			0x042042042204203a	globl        # this syscall is from the moon so we implement it by hand in libc/calls/hefty/vfork.S
 scall	sys_posix_spawn		0xfffffffff20f4fff	globl hidden # good luck figuring out how xnu defines this
 scall	__sys_execve		0x03b03b03b203b03b	globl hidden
-scall	sys_wait4		0x1c100b007200703d	globl hidden
+scall	__sys_wait4		0x1c100b007200703d	globl hidden
 scall	sys_kill		0x02507a025202503e	globl hidden # kill(pid, sig, 1) b/c xnu
 scall	sys_killpg		0xffffff092fffffff	globl hidden
 scall	clone			0xfffffffffffff038	globl
@@ -112,7 +112,7 @@ scall	msgget			0x0e10e10e12103044	globl # won't polyfill for windows
 scall	msgsnd			0x0e20e20e22104045	globl # won't polyfill for windows
 scall	msgrcv			0x0e30e30e32105046	globl # won't polyfill for windows
 scall	msgctl			0x1bc1291ff2102047	globl # won't polyfill for windows
-scall	sys_fcntl		0x05c05c05c205c048	globl hidden
+scall	__sys_fcntl		0x05c05c05c205c048	globl hidden
 scall	sys_flock		0x0830830832083049	globl hidden
 scall	sys_fsync		0x05f05f05f205f04a	globl hidden
 scall	sys_fdatasync		0x0f105f22620bb04b	globl hidden # fsync() on openbsd
@@ -137,7 +137,7 @@ scall	sys_lchown		0x1130fe0fe216c05e	globl hidden # impl. w/ fchownat()
 scall	umask			0x03c03c03c203c05f	globl
 scall	sys_gettimeofday	0x1a20430742074060	globl hidden # xnu esi/edx=0
 scall	sys_getrlimit		0x0c20c20c220c2061	globl hidden
-scall	sys_getrusage		0x1bd0130752075062	globl hidden
+scall	__sys_getrusage		0x1bd0130752075062	globl hidden
 scall	sys_sysinfo		0xfffffffffffff063	globl hidden
 scall	sys_times		0xfffffffffffff064	globl hidden
 scall	sys_ptrace		0x01a01a01a201a065	globl hidden
@@ -190,7 +190,8 @@ scall	setfsgid		0xfffffffffffff07b	globl
 scall	capget			0xfffffffffffff07d	globl
 scall	capset			0xfffffffffffff07e	globl
 scall	sigtimedwait		0xffffff159ffff080	globl
-scall	rt_sigqueueinfo		0xfffffffffffff081	globl
+scall	sys_sigqueue		0xffffff1c8fffffff	globl
+scall	sys_sigqueueinfo	0x0f5ffffffffff081	globl # rt_sigqueueinfo on linux
 scall	personality		0xfffffffffffff087	globl
 scall	ustat			0xfffffffffffff088	globl
 scall	sysfs			0xfffffffffffff08b	globl
@@ -254,6 +255,11 @@ scall	timer_settime		0x1beffffffffff0df	globl
 scall	timer_gettime		0x1bfffffffffff0e0	globl
 scall	timer_getoverrun	0x0efffffffffff0e1	globl
 scall	timer_delete		0x0ecffffffffff0e2	globl
+scall	ktimer_create		0xffffff0ebfffffff	globl
+scall	ktimer_delete		0xffffff0ecfffffff	globl
+scall	ktimer_getoverrun	0xffffff0effffffff	globl
+scall	ktimer_gettime		0xffffff0eefffffff	globl
+scall	ktimer_settime		0xffffff0edfffffff	globl
 scall	clock_settime		0x1ac0580e9ffff0e3	globl
 scall	sys_clock_gettime	0x1ab0570e8ffff0e4	globl hidden # Linux 2.6+ (c. 2003); XNU uses magic address
 scall	clock_getres		0x1ad0590eaffff0e5	globl
@@ -343,7 +349,7 @@ scall	sched_setattr		0xfffffffffffff13a	globl #  ├─ desktop replaced with ta
 scall	sched_getattr		0xfffffffffffff13b	globl #  ├─ karen sandler requires systemd init and boot for tablet gui
 scall	renameat2		0xfffffffffffff13c	globl #  └─ debian founder ian murdock found strangled with vacuum cord
 scall	seccomp			0xfffffffffffff13d	globl
-scall	sys_getrandom		0x05b00723321f413e	globl hidden  # Linux 3.17+ and getentropy() on XNU/OpenBSD
+scall	sys_getrandom		0xfff00723321f413e	globl hidden  # Linux 3.17+ and getentropy() on XNU/OpenBSD, coming to NetBSD in 9.2
 scall	memfd_create		0xfffffffffffff13f	globl # wut
 scall	kexec_file_load		0xfffffffffffff140	globl
 scall	bpf			0xfffffffffffff141	globl
@@ -690,11 +696,6 @@ scall	ksem_timedwait		0xffffff1b9fffffff	globl
 scall	ksem_trywait		0xffffff193fffffff	globl
 scall	ksem_unlink		0xffffff196fffffff	globl
 scall	ksem_wait		0xffffff192fffffff	globl
-scall	ktimer_create		0xffffff0ebfffffff	globl
-scall	ktimer_delete		0xffffff0ecfffffff	globl
-scall	ktimer_getoverrun	0xffffff0effffffff	globl
-scall	ktimer_gettime		0xffffff0eefffffff	globl
-scall	ktimer_settime		0xffffff0edfffffff	globl
 scall	lchflags		0x130fff187fffffff	globl
 scall	lchmod			0x112fff112fffffff	globl
 scall	lgetfh			0xffffff0a0fffffff	globl
@@ -727,14 +728,13 @@ scall	recv			0xffffff066fffffff	globl
 scall	rfork			0xffffff0fbfffffff	globl
 scall	rtprio			0xffffff0a6fffffff	globl
 scall	rtprio_thread		0xffffff1d2fffffff	globl
-scall	send			0xffffff065fffffff	globl
+#scall	send			0xffffff065fffffff	globl
 scall	setaudit		0xffffff1c2fffffff	globl
 scall	setcontext		0x134fff1a6fffffff	globl
 scall	setfib			0xffffff0affffffff	globl
 scall	sethostid		0xffffff08ffffffff	globl
 scall	setloginclass		0xffffff20cfffffff	globl
 scall	sigblock		0xffffff06dfffffff	globl
-scall	sigqueue		0xffffff1c8fffffff	globl
 scall	sigsetmask		0xffffff06efffffff	globl
 scall	sigstack		0xffffff070fffffff	globl
 scall	sigvec			0xffffff06cfffffff	globl

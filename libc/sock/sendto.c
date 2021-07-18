@@ -20,6 +20,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
 #include "libc/str/str.h"
@@ -47,21 +48,35 @@
  */
 ssize_t sendto(int fd, const void *buf, size_t size, uint32_t flags,
                const void *opt_addr, uint32_t addrsize) {
-  assert(sizeof(struct sockaddr_in) == sizeof(struct sockaddr_in_bsd));
+  if (IsAsan() && (!__asan_is_valid(buf, size) ||
+                   (opt_addr && !__asan_is_valid(opt_addr, addrsize)))) {
+    return efault();
+  }
   if (!IsWindows()) {
     if (!IsBsd() || !opt_addr) {
       return sys_sendto(fd, buf, size, flags, opt_addr, addrsize);
     } else {
-      struct sockaddr_in_bsd addr2;
-      if (addrsize != sizeof(addr2)) return einval();
-      memcpy(&addr2, opt_addr, sizeof(struct sockaddr_in));
-      sockaddr2bsd(&addr2);
-      return sys_sendto(fd, buf, size, flags, &addr2, addrsize);
+      char addr2[sizeof(
+          struct sockaddr_un_bsd)]; /* sockaddr_un_bsd is the largest */
+      if (addrsize > sizeof(addr2)) return einval();
+      memcpy(&addr2, opt_addr, addrsize);
+      sockaddr2bsd(&addr2[0]);
+      return sys_sendto(fd, buf, size, flags, &addr2[0], addrsize);
     }
-  } else if (__isfdkind(fd, kFdSocket)) {
-    return sys_sendto_nt(&g_fds.p[fd], (struct iovec[]){{buf, size}}, 1, flags,
-                         opt_addr, addrsize);
   } else {
-    return ebadf();
+    if (__isfdopen(fd)) {
+      if (__isfdkind(fd, kFdSocket)) {
+        return sys_sendto_nt(&g_fds.p[fd], (struct iovec[]){{buf, size}}, 1,
+                             flags, opt_addr, addrsize);
+      } else if (__isfdkind(fd, kFdFile)) { /* e.g. socketpair() */
+        if (flags) return einval();
+        if (opt_addr) return eisconn();
+        return sys_write_nt(&g_fds.p[fd], (struct iovec[]){{buf, size}}, 1, -1);
+      } else {
+        return enotsock();
+      }
+    } else {
+      return ebadf();
+    }
   }
 }

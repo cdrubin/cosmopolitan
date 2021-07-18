@@ -23,6 +23,7 @@
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/fmts.h"
 #include "libc/fmt/internal.h"
+#include "libc/fmt/itoa.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/bsr.h"
@@ -31,11 +32,12 @@
 #include "libc/sysv/errfuns.h"
 #include "third_party/gdtoa/gdtoa.h"
 
-#define PUT(C)               \
-  do {                       \
-    if (out(C, arg) == -1) { \
-      return -1;             \
-    }                        \
+#define PUT(C)                    \
+  do {                            \
+    char Buf[1] = {C};            \
+    if (out(Buf, arg, 1) == -1) { \
+      return -1;                  \
+    }                             \
   } while (0)
 
 static const char kSpecialFloats[2][2][4] = {{"INF", "inf"}, {"NAN", "nan"}};
@@ -121,14 +123,18 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
     uint32_t u[2];
     uint64_t q;
   } pun;
+  long ld;
   void *p;
+  unsigned u;
+  char ibuf[21];
   bool longdouble;
   long double ldbl;
+  unsigned long lu;
   wchar_t charbuf[1];
   const char *alphabet;
-  int (*out)(long, void *);
+  int (*out)(const char *, void *, size_t);
   unsigned char signbit, log2base;
-  int c, d, k, w, i1, ui, bw, bex;
+  int c, d, k, w, n, i1, ui, bw, bex;
   char *s, *q, *se, qchar, special[8];
   int sgn, alt, sign, prec, prec1, flags, width, decpt, lasterr;
 
@@ -136,18 +142,64 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
   out = fn ? fn : (void *)missingno;
 
   while (*format) {
-    /* %[flags][width][.prec][length] */
     if (*format != '%') {
-      /* no */
-      PUT(*format);
-      format++;
+      for (n = 1; format[n]; ++n) {
+        if (format[n] == '%') break;
+      }
+      if (out(format, arg, n) == -1) return -1;
+      format += n;
       continue;
-    } else {
-      /* yes, evaluate it */
-      format++;
     }
 
-    /* evaluate flags */
+    if (!IsTiny()) {
+      if (format[1] == 's') { /* FAST PATH: PLAIN STRING */
+        s = va_arg(va, char *);
+        if (!s) s = "(null)";
+        if (out(s, arg, strlen(s)) == -1) return -1;
+        format += 2;
+        continue;
+      } else if (format[1] == 'd') { /* FAST PATH: PLAIN INTEGER */
+        d = va_arg(va, int);
+        if (out(ibuf, arg, int64toarray_radix10(d, ibuf)) == -1) return -1;
+        format += 2;
+        continue;
+      } else if (format[1] == 'u') { /* FAST PATH: PLAIN UNSIGNED */
+        u = va_arg(va, unsigned);
+        if (out(ibuf, arg, uint64toarray_radix10(u, ibuf)) == -1) return -1;
+        format += 2;
+        continue;
+      } else if (format[1] == 'x') { /* FAST PATH: PLAIN HEX */
+        u = va_arg(va, unsigned);
+        if (out(ibuf, arg, uint64toarray_radix16(u, ibuf)) == -1) return -1;
+        format += 2;
+        continue;
+      } else if (format[1] == 'l' && format[2] == 'x') {
+        lu = va_arg(va, unsigned long); /* FAST PATH: PLAIN LONG HEX */
+        if (out(ibuf, arg, uint64toarray_radix16(lu, ibuf)) == -1) return -1;
+        format += 3;
+        continue;
+      } else if (format[1] == 'l' && format[2] == 'd') {
+        ld = va_arg(va, long); /* FAST PATH: PLAIN LONG */
+        if (out(ibuf, arg, int64toarray_radix10(ld, ibuf)) == -1) return -1;
+        format += 3;
+        continue;
+      } else if (format[1] == 'l' && format[2] == 'u') {
+        lu = va_arg(va, unsigned long); /* FAST PATH: PLAIN UNSIGNED LONG */
+        if (out(ibuf, arg, uint64toarray_radix10(lu, ibuf)) == -1) return -1;
+        format += 3;
+        continue;
+      } else if (format[1] == '.' && format[2] == '*' && format[3] == 's') {
+        n = va_arg(va, unsigned); /* FAST PATH: PRECISION STRING */
+        s = va_arg(va, const char *);
+        if (!s) s = "(null)", n = MIN(6, n);
+        if (out(s, arg, n) == -1) return -1;
+        format += 4;
+        continue;
+      }
+    }
+
+    /* GENERAL PATH */
+    format++;
     sign = 0;
     flags = 0;
   getflag:
@@ -256,7 +308,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
     /* evaluate specifier */
     qchar = '"';
     log2base = 0;
-    alphabet = "0123456789abcdef";
+    alphabet = "0123456789abcdefpx";
     switch ((d = *format++)) {
       case 'p':
         flags |= FLAGS_HASH;
@@ -264,7 +316,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
         signbit = 63;
         goto FormatNumber;
       case 'X':
-        alphabet = "0123456789ABCDEF";
+        alphabet = "0123456789ABCDEFPX";
         /* fallthrough */
       case 'x':
         log2base = 4;
@@ -496,8 +548,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
         } else {
           PUT('+');
         }
-        for (c = 2, k = 10; 10 * k <= decpt; c++, k *= 10) {
-        }
+        for (c = 2, k = 10; 10 * k <= decpt; c++) k *= 10;
         for (;;) {
           i1 = decpt / k;
           PUT(i1 + '0');
@@ -560,7 +611,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           if (pun.d && prec < 13) {
             pun.u[1] |= 0x100000;
             if (prec < 5) {
-              ui = 1 << ((5 - prec) * 4 - 1);
+              ui = 1u << ((5 - prec) * 4 - 1);
               if (pun.u[1] & ui) {
                 if (pun.u[1] & ((ui - 1) | (ui << 1)) || pun.u[0]) {
                   pun.u[1] += ui;
@@ -579,7 +630,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
               }
             } else {
               i1 = (13 - prec) * 4;
-              ui = 1 << (i1 - 1);
+              ui = 1u << (i1 - 1);
               if (pun.u[0] & ui && pun.u[0] & ((ui - 1) | (ui << 1))) {
                 pun.u[0] += ui;
                 if (!(pun.u[0] >> i1)) goto BumpIt;
@@ -588,12 +639,13 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           }
         } else {
           if ((ui = pun.u[0])) {
-            for (prec = 6; (ui = (ui << 4) & 0xffffffff); ++prec) {
-            }
+            ui = __builtin_ctz(ui);
+            prec = 6 + ((32 - ROUNDDOWN(ui, 4)) >> 2) - 1;
+          } else if ((ui = pun.u[1] & 0xfffff)) {
+            ui = __builtin_ctz(ui);
+            prec = (20 - ROUNDDOWN(ui, 4)) >> 2;
           } else {
-            for (prec = 0, ui = pun.u[1] & 0xfffff; ui;
-                 ++prec, ui = (ui << 4) & 0xfffff) {
-            }
+            prec = 0;
           }
         }
         bw = 1;
@@ -604,7 +656,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
             i1 /= 10;
           }
         }
-        if ((sgn = pun.u[1] & 0x80000000)) {
+        if (pun.u[1] & 0x80000000) {
           pun.u[1] &= 0x7fffffff;
           if (pun.d || sign) sign = '-';
         }
@@ -633,18 +685,9 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
         PUT(alphabet[17]);
         PUT(c);
         if (prec > 0 || alt) PUT('.');
-        if (prec > 0) {
-          if ((i1 = prec) > 5) i1 = 5;
-          prec -= i1;
-          do {
-            PUT(alphabet[(pun.u[1] >> 16) & 0xf]);
-            pun.u[1] <<= 4;
-          } while (--i1 > 0);
-          while (prec > 0) {
-            --prec;
-            PUT(alphabet[(pun.u[0] >> 28) & 0xf]);
-            pun.u[0] <<= 4;
-          }
+        while (prec-- > 0) {
+          PUT(alphabet[(pun.q >> 48) & 0xf]);
+          pun.q <<= 4;
         }
         PUT(alphabet[16]);
         if (bex < 0) {
@@ -653,8 +696,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
         } else {
           PUT('+');
         }
-        for (c = 1; 10 * c <= bex; c *= 10) {
-        }
+        for (c = 1; 10 * c <= bex;) c *= 10;
         for (;;) {
           i1 = bex / c;
           PUT('0' + i1);
@@ -662,7 +704,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           bex -= i1 * c;
           bex *= 10;
         }
-        continue;
+        break;
 
       case '%':
         PUT('%');

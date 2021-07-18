@@ -24,58 +24,57 @@
 #include "libc/sysv/consts/af.h"
 #include "libc/testlib/testlib.h"
 
-static const char *ParseIp(unsigned char ip[4]) {
+static const char *parseip(unsigned char ip[4]) {
   static char g_ipbuf[16];
   return inet_ntop(AF_INET, ip, g_ipbuf, sizeof(g_ipbuf));
 }
 
-TEST(parsehoststxt, testEmpty) {
+TEST(ParseHostsTxt, testEmpty) {
   struct HostsTxt *ht = calloc(1, sizeof(struct HostsTxt));
   FILE *f = fmemopen(NULL, BUFSIZ, "r+");
-  ASSERT_EQ(0, parsehoststxt(ht, f));
+  ASSERT_EQ(0, ParseHostsTxt(ht, f));
   ASSERT_EQ(0, ht->entries.i);
-  freehoststxt(&ht);
+  FreeHostsTxt(&ht);
   fclose(f);
 }
 
-TEST(parsehoststxt, testCorrectlyTokenizesAndSorts) {
+TEST(ParseHostsTxt, testCorrectlyTokenizesAndSorts) {
   const char kInput[] = "# this is a comment\n"
                         "# IP            HOST1 HOST2\n"
                         "203.0.113.1     lol.example. lol\n"
                         "203.0.113.2     cat.example. cat\n";
   struct HostsTxt *ht = calloc(1, sizeof(struct HostsTxt));
   FILE *f = fmemopen(NULL, BUFSIZ, "r+");
-  fwrite(kInput, 1, strlen(kInput), f);
+  ASSERT_EQ(1, fwrite(kInput, strlen(kInput), 1, f));
   rewind(f);
-  ASSERT_EQ(0, parsehoststxt(ht, f));
-  sorthoststxt(ht);
+  ASSERT_EQ(0, ParseHostsTxt(ht, f));
   ASSERT_EQ(4, ht->entries.i);
-  EXPECT_STREQ("cat.example.", &ht->strings.p[ht->entries.p[0].name]);
-  EXPECT_STREQ("cat.example.", &ht->strings.p[ht->entries.p[0].canon]);
-  EXPECT_STREQ("203.0.113.2", ParseIp(ht->entries.p[0].ip));
-  EXPECT_STREQ("lol.example.", &ht->strings.p[ht->entries.p[1].name]);
+  EXPECT_STREQ("lol.example.", &ht->strings.p[ht->entries.p[0].name]);
+  EXPECT_STREQ("lol.example.", &ht->strings.p[ht->entries.p[0].canon]);
+  EXPECT_STREQ("203.0.113.1", parseip(ht->entries.p[0].ip));
+  EXPECT_STREQ("lol", &ht->strings.p[ht->entries.p[1].name]);
   EXPECT_STREQ("lol.example.", &ht->strings.p[ht->entries.p[1].canon]);
-  EXPECT_STREQ("203.0.113.1", ParseIp(ht->entries.p[1].ip));
-  EXPECT_STREQ("cat", &ht->strings.p[ht->entries.p[2].name]);
+  EXPECT_STREQ("203.0.113.1", parseip(ht->entries.p[1].ip));
+  EXPECT_STREQ("cat.example.", &ht->strings.p[ht->entries.p[2].name]);
   EXPECT_STREQ("cat.example.", &ht->strings.p[ht->entries.p[2].canon]);
-  EXPECT_STREQ("203.0.113.2", ParseIp(ht->entries.p[2].ip));
-  EXPECT_STREQ("lol", &ht->strings.p[ht->entries.p[3].name]);
-  EXPECT_STREQ("lol.example.", &ht->strings.p[ht->entries.p[3].canon]);
-  EXPECT_STREQ("203.0.113.1", ParseIp(ht->entries.p[3].ip));
-  freehoststxt(&ht);
+  EXPECT_STREQ("203.0.113.2", parseip(ht->entries.p[2].ip));
+  EXPECT_STREQ("cat", &ht->strings.p[ht->entries.p[3].name]);
+  EXPECT_STREQ("cat.example.", &ht->strings.p[ht->entries.p[3].canon]);
+  EXPECT_STREQ("203.0.113.2", parseip(ht->entries.p[3].ip));
+  FreeHostsTxt(&ht);
   fclose(f);
 }
 
-TEST(parsehoststxt, testIpv6_isIgnored) {
+TEST(ParseHostsTxt, testIpv6_isIgnored) {
   const char kInput[] = "::1             boop\n"
                         "203.0.113.2     cat     # ignore me\n";
   struct HostsTxt *ht = calloc(1, sizeof(struct HostsTxt));
   FILE *f = fmemopen(kInput, strlen(kInput), "r+");
-  ASSERT_EQ(0, parsehoststxt(ht, f));
+  ASSERT_EQ(0, ParseHostsTxt(ht, f));
   ASSERT_EQ(1, ht->entries.i);
   EXPECT_STREQ("cat", &ht->strings.p[ht->entries.p[0].name]);
   EXPECT_STREQ("cat", &ht->strings.p[ht->entries.p[0].canon]);
-  EXPECT_STREQ("203.0.113.2", ParseIp(ht->entries.p[0].ip));
-  freehoststxt(&ht);
+  EXPECT_STREQ("203.0.113.2", parseip(ht->entries.p[0].ip));
+  FreeHostsTxt(&ht);
   fclose(f);
 }

@@ -36,7 +36,8 @@ char *xasprintf(const char *, ...) printfesque(1) paramsnonnull((1)) _XMAL;
 char *xvasprintf(const char *, va_list) _XPNN _XMAL;
 char *xgetline(struct FILE *) _XPNN mallocesque;
 void *xmalloc(size_t) attributeallocsize((1)) _XMAL;
-void *xrealloc(void *, size_t) attributeallocsize((2)) _XRET;
+void *xrealloc(void *, size_t)
+    attributeallocsize((2)) nothrow nocallback nodiscard;
 void *xcalloc(size_t, size_t) attributeallocsize((1, 2)) _XMAL;
 void *xvalloc(size_t) attributeallocsize((1)) _XMALPG;
 void *xmemalign(size_t, size_t) attributeallocalign((1))
@@ -50,6 +51,8 @@ char *xstrmul(const char *, size_t) paramsnonnull((1)) _XMAL;
 char *xinet_ntop(int, const void *) _XPNN _XMAL;
 void *xunbinga(size_t, const char16_t *) attributeallocalign((1)) _XMAL _XRET;
 void *xunbing(const char16_t *) _XMAL _XRET;
+char16_t *utf8toutf16(const char *, size_t, size_t *) nodiscard;
+char *utf16toutf8(const char16_t *, size_t, size_t *) nodiscard;
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § eXtended apis » files                                     ─╬─│┼
@@ -72,7 +75,9 @@ char *xiso8601ts(struct timespec *) mallocesque;
 │ cosmopolitan § eXtended apis » input / output                            ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
-char *xslurp(const char *, size_t *) paramsnonnull((1)) _XMALPG nodiscard;
+void *xslurp(const char *, size_t *)
+    paramsnonnull((1)) returnspointerwithnoaliases
+    returnsaligned((PAGESIZE)) nodiscard;
 int xbarf(const char *, const void *, size_t);
 
 /*───────────────────────────────────────────────────────────────────────────│─╗

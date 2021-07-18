@@ -43,6 +43,8 @@ LIBC_CALLS_A_DIRECTDEPS =				\
 	LIBC_NT_ADVAPI32				\
 	LIBC_NT_KERNEL32				\
 	LIBC_NT_NTDLL					\
+	LIBC_NT_WS2_32					\
+	LIBC_NT_IPHLPAPI				\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_SYSV_CALLS					\
@@ -64,10 +66,6 @@ o/$(MODE)/libc/calls/raise.o:				\
 		OVERRIDE_COPTS +=			\
 			$(NO_MAGIC)
 
-o/$(MODE)/libc/calls/siggy.o:				\
-		OVERRIDE_COPTS +=			\
-			-ffunction-sections
-
 o/$(MODE)/libc/calls/sigenter-freebsd.o			\
 o/$(MODE)/libc/calls/sigenter-netbsd.o			\
 o/$(MODE)/libc/calls/sigenter-openbsd.o			\
@@ -84,6 +82,12 @@ o/$(MODE)/libc/calls/execve-sysv.o			\
 o/$(MODE)/libc/calls/mkntenvblock.o:			\
 		OVERRIDE_CPPFLAGS +=			\
 			-DSTACK_FRAME_UNLIMITED
+
+o/$(MODE)/libc/calls/ioctl-siocgifconf.o		\
+o/$(MODE)/libc/calls/ioctl-siocgifconf-nt.o:		\
+		OVERRIDE_COPTS +=			\
+			-ffunction-sections		\
+			-fdata-sections
 
 LIBC_CALLS_LIBS = $(foreach x,$(LIBC_CALLS_ARTIFACTS),$($(x)))
 LIBC_CALLS_SRCS = $(foreach x,$(LIBC_CALLS_ARTIFACTS),$($(x)_SRCS))

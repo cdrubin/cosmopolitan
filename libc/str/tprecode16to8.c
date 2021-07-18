@@ -31,15 +31,15 @@ static const int16_t kDel16[8] = {127, 127, 127, 127, 127, 127, 127, 127};
 static noasan axdx_t tprecode16to8_sse2(char *dst, size_t dstsize,
                                         const char16_t *src, axdx_t r) {
   int16_t v1[8], v2[8], v3[8], vz[8];
-  memset(vz, 0, 16);
+  __builtin_memset(vz, 0, 16);
   while (r.ax + 8 < dstsize) {
-    memcpy(v1, src + r.dx, 16);
+    __builtin_memcpy(v1, src + r.dx, 16);
     pcmpgtw(v2, v1, vz);
     pcmpgtw(v3, v1, kDel16);
     pandn((void *)v2, (void *)v3, (void *)v2);
     if (pmovmskb((void *)v2) != 0xFFFF) break;
     packsswb((void *)v1, v1, v1);
-    memcpy(dst + r.ax, v1, 8);
+    __builtin_memcpy(dst + r.ax, v1, 8);
     r.ax += 8;
     r.dx += 8;
   }
@@ -48,6 +48,9 @@ static noasan axdx_t tprecode16to8_sse2(char *dst, size_t dstsize,
 
 /**
  * Transcodes UTF-16 to UTF-8.
+ *
+ * This is a low-level function intended for the core runtime. Use
+ * utf16toutf8() for a much better API that uses malloc().
  *
  * @param dst is output buffer
  * @param dstsize is bytes in dst

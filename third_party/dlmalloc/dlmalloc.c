@@ -37,9 +37,10 @@ hidden struct MallocParams g_mparams;
  */
 static void *dlmalloc_requires_more_vespene_gas(size_t size) {
   char *p;
-  p = mapanon(size);
-  if (weaken(__asan_poison)) {
-    weaken(__asan_poison)((uintptr_t)p, size, kAsanHeapFree);
+  if ((p = mapanon(size)) != MAP_FAILED) {
+    if (weaken(__asan_poison)) {
+      weaken(__asan_poison)((uintptr_t)p, size, kAsanHeapFree);
+    }
   }
   return p;
 }
@@ -577,7 +578,7 @@ static void *tmalloc_large(mstate m, size_t nb) {
   return 0;
 }
 
-void *dlmalloc(size_t bytes) {
+void *dlmalloc_impl(size_t bytes, bool takeaction) {
   /*
      Basic algorithm:
      If a small request (< 256 bytes minus per-chunk overhead):
@@ -707,10 +708,14 @@ void *dlmalloc(size_t bytes) {
 
   postaction:
     POSTACTION(g_dlmalloc);
-    return ADDRESS_BIRTH_ACTION(mem);
+    return takeaction ? AddressBirthAction(mem) : mem;
   }
 
   return 0;
+}
+
+void *dlmalloc(size_t bytes) {
+  return dlmalloc_impl(bytes, true);
 }
 
 void dlfree(void *mem) {
@@ -720,7 +725,7 @@ void dlfree(void *mem) {
      with special cases for top, dv, mmapped chunks, and usage errors.
   */
   if (mem != 0) {
-    mem = ADDRESS_DEATH_ACTION(mem);
+    mem = AddressDeathAction(mem);
     mchunkptr p = mem2chunk(mem);
 
 #if FOOTERS
@@ -836,7 +841,7 @@ textstartup void dlmalloc_init(void) {
   if (g_mparams.magic == 0) {
     size_t magic;
     size_t psize = PAGESIZE;
-    size_t gsize = FRAMESIZE;
+    size_t gsize = DEFAULT_GRANULARITY;
     /* Sanity-check configuration:
        size_t must be unsigned and as wide as pointer type.
        ints must be at least 4 bytes.
@@ -886,7 +891,7 @@ void *dlmemalign$impl(mstate m, size_t alignment, size_t bytes) {
   } else {
     size_t nb = request2size(bytes);
     size_t req = nb + alignment + MIN_CHUNK_SIZE - CHUNK_OVERHEAD;
-    mem = dlmalloc(req);
+    mem = dlmalloc_impl(req, false);
     if (mem != 0) {
       mchunkptr p = mem2chunk(mem);
       if (PREACTION(m)) return 0;
@@ -935,7 +940,7 @@ void *dlmemalign$impl(mstate m, size_t alignment, size_t bytes) {
       POSTACTION(m);
     }
   }
-  return ADDRESS_BIRTH_ACTION(mem);
+  return AddressBirthAction(mem);
 }
 
 void *dlmemalign(size_t alignment, size_t bytes) {

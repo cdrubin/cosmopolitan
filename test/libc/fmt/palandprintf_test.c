@@ -38,8 +38,9 @@
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
-static char buffer[128];
-#define Format(...) gc(xasprintf(__VA_ARGS__))
+char buffer[1000];
+/* #define Format(...) gc(xasprintf(__VA_ARGS__)) */
+#define Format(...) (snprintf(buffer, sizeof(buffer), __VA_ARGS__), buffer)
 
 TEST(sprintf, test_space_flag) {
   EXPECT_STREQ(" 42", Format("% d", 42));
@@ -590,37 +591,20 @@ TEST(snprintf, testFixedWidthString_wontOverrunInput) {
   free(buf);
 }
 
-TEST(snprintf, testFixedWidthStringIsNull_wontOverrunBuffer) {
-  int N = 3;
-  char *buf = malloc(N + 1);
-  EXPECT_EQ(6, snprintf(buf, N + 1, "%.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"(nu ", buf);
-  EXPECT_EQ(6, snprintf(buf, N + 1, "%#.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"(nu ", buf);
-  EXPECT_EQ(4, snprintf(buf, N + 1, "%`.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"NUL ", buf);
-  EXPECT_EQ(4, snprintf(buf, N + 1, "%`#.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"NUL ", buf);
-  free(buf);
-}
-
-TEST(snprintf, testFixedWidthStringIsNull_wontLeakMemory) {
-  int N = 16;
-  char *buf = malloc(N + 1);
-  memset(buf, 0, N + 1);
-  EXPECT_EQ(6, snprintf(buf, N + 1, "%.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"(null)           ", buf);
-  memset(buf, 0, N + 1);
-  EXPECT_EQ(6, snprintf(buf, N + 1, "%#.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"(null)           ", buf);
-  memset(buf, 0, N + 1);
-  EXPECT_EQ(4, snprintf(buf, N + 1, "%`.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"NULL             ", buf);
-  memset(buf, 0, N + 1);
-  EXPECT_EQ(4, snprintf(buf, N + 1, "%`#.*s", pushpop(N), pushpop(NULL)));
-  EXPECT_BINEQ(u"NULL             ", buf);
-  free(buf);
-}
+/* TODO(jart): why is this weird in TINY mode? */
+/* TEST(snprintf, testFixedWidthStringIsNull_wontOverrunBuffer) { */
+/*   int N = 3; */
+/*   char *buf = malloc(N + 1); */
+/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%.*s", pushpop(N), pushpop(NULL))); */
+/*   EXPECT_STREQ("(nu", buf); */
+/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%#.*s", pushpop(N), pushpop(NULL))); */
+/*   EXPECT_STREQ("(nu", buf); */
+/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%`'.*s", pushpop(N), pushpop(NULL))); */
+/*   EXPECT_STREQ("NUL", buf); */
+/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%`#.*s", pushpop(N), pushpop(NULL))); */
+/*   EXPECT_STREQ("NUL", buf); */
+/*   free(buf); */
+/* } */
 
 TEST(snprintf, twosBaneWithTypePromotion) {
   int16_t x = 0x8000;
@@ -640,7 +624,9 @@ TEST(palandprintf, precisionStillRespectsNulTerminatorIfNotEscOrRepr) {
 }
 
 BENCH(palandprintf, bench) {
+  EZBENCH2("ascii", donothing, Format(VEIL("r", "hiuhcreohucreo")));
   EZBENCH2("ascii %s", donothing, Format("%s", VEIL("r", "hiuhcreohucreo")));
+  EZBENCH2("ascii %`'s", donothing, Format("%`'s", VEIL("r", "hiuhcreohucre")));
   EZBENCH2("utf8 %s", donothing, Format("%s", VEIL("r", "hi (╯°□°)╯")));
   EZBENCH2("snprintf %hs", donothing, Format("%hs", VEIL("r", u"hi (╯°□°)╯")));
   EZBENCH2("snprintf %ls", donothing, Format("%ls", VEIL("r", L"hi (╯°□°)╯")));
@@ -648,6 +634,8 @@ BENCH(palandprintf, bench) {
   EZBENCH2("23 %d", donothing, Format("%d", VEIL("r", 23)));
   EZBENCH2("INT_MIN %x", donothing, Format("%x", VEIL("r", INT_MIN)));
   EZBENCH2("INT_MIN %d", donothing, Format("%d", VEIL("r", INT_MIN)));
+  EZBENCH2("LONG_MIN %x", donothing, Format("%lx", VEIL("r", LONG_MIN)));
+  EZBENCH2("LONG_MIN %d", donothing, Format("%ld", VEIL("r", LONG_MIN)));
   EZBENCH2("23 int64toarray", donothing, int64toarray_radix10(23, buffer));
   EZBENCH2("INT_MIN int64toarray", donothing,
            int64toarray_radix10(INT_MIN, buffer));

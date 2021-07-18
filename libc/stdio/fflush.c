@@ -20,6 +20,7 @@
 #include "libc/bits/bits.h"
 #include "libc/bits/pushpop.h"
 #include "libc/calls/calls.h"
+#include "libc/errno.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -32,35 +33,22 @@
  * Blocks until data from stream buffer is written out.
  *
  * @param f is the stream handle
- * @return number of bytes written or -1 on error
+ * @return is 0 on success or -1 on error
  */
 int fflush(FILE *f) {
   size_t i;
-  int res, wrote;
-  res = 0;
   if (!f) {
     for (i = __fflush.handles.i; i; --i) {
       if ((f = __fflush.handles.p[i - 1])) {
-        if ((wrote = fflush(f)) != -1) {
-          res += wrote;
-        } else {
-          res = -1;
-          break;
-        }
+        if (fflush(f) == -1) return -1;
       }
     }
   } else if (f->fd != -1) {
-    while (f->beg && !f->end) {
-      if ((wrote = __fwritebuf(f)) != -1) {
-        res += wrote;
-      } else {
-        break;
-      }
-    }
+    if (__fflush_impl(f) == -1) return -1;
   } else if (f->beg && f->beg < f->size) {
     f->buf[f->beg] = 0;
   }
-  return res;
+  return 0;
 }
 
 textstartup int __fflush_register(FILE *f) {

@@ -39,23 +39,6 @@
 
 static struct timespec vflogf_ts;
 
-static int vflogf_loglevel2char(unsigned level) {
-  switch (level) {
-    case kLogInfo:
-      return 'I';
-    case kLogDebug:
-      return 'D';
-    case kLogWarn:
-      return 'W';
-    case kLogFatal:
-      return 'F';
-    case kLogVerbose:
-      return 'V';
-    default:
-      return '?';
-  }
-}
-
 /**
  * Takes corrective action if logging is on the fritz.
  */
@@ -64,7 +47,7 @@ void vflogf_onfail(FILE *f) {
   struct stat st;
   if (IsTiny()) return;
   err = ferror(f);
-  if ((err == ENOSPC || err == EDQUOT || err == EFBIG) &&
+  if (fileno(f) != -1 && (err == ENOSPC || err == EDQUOT || err == EFBIG) &&
       (fstat(fileno(f), &st) == -1 || st.st_size > kNontrivialSize)) {
     ftruncate(fileno(f), 0);
     fseek(f, SEEK_SET, 0);
@@ -91,6 +74,7 @@ void vflogf_onfail(FILE *f) {
  */
 void(vflogf)(unsigned level, const char *file, int line, FILE *f,
              const char *fmt, va_list va) {
+  int bufmode;
   struct tm tm;
   long double t2;
   const char *prog;
@@ -98,7 +82,8 @@ void(vflogf)(unsigned level, const char *file, int line, FILE *f,
   char buf32[32], *buf32p;
   int64_t secs, nsec, dots;
   if (!f) f = __log_file;
-  if (fileno(f) == -1) return;
+  if (!f) return;
+  ++ftrace;
   t2 = nowl();
   secs = t2;
   nsec = (t2 - secs) * 1e9L;
@@ -108,20 +93,26 @@ void(vflogf)(unsigned level, const char *file, int line, FILE *f,
   vflogf_ts.tv_nsec = nsec;
   if (!issamesecond) {
     localtime_r(&secs, &tm);
-    strftime(buf32, sizeof(buf32), "%Y-%m-%dT%H:%M:%S.", &tm);
+    strcpy(iso8601(buf32, &tm), ".");
     buf32p = buf32;
   } else {
     buf32p = "--------------------";
   }
   prog = basename(program_invocation_name);
-  if ((fprintf)(f, "%c%s%06ld:%s:%d:%.*s:%d] ", vflogf_loglevel2char(level),
-                buf32p, rem1000000int64(div1000int64(dots)), file, line,
+  bufmode = f->bufmode;
+  if (bufmode == _IOLBF) f->bufmode = _IOFBF;
+  if ((fprintf)(f, "%c%s%06ld:%s:%d:%.*s:%d] ", "FEWIVDNT"[level & 7], buf32p,
+                rem1000000int64(div1000int64(dots)), file, line,
                 strchrnul(prog, '.') - prog, prog, getpid()) <= 0) {
     vflogf_onfail(f);
   }
   (vfprintf)(f, fmt, va);
   va_end(va);
   fputs("\n", f);
+  if (bufmode == _IOLBF) {
+    f->bufmode = _IOLBF;
+    fflush(f);
+  }
   if (level == kLogFatal) {
     __start_fatal(file, line);
     strcpy(buf32, "unknown");
@@ -130,4 +121,5 @@ void(vflogf)(unsigned level, const char *file, int line, FILE *f,
     __die();
     unreachable;
   }
+  --ftrace;
 }

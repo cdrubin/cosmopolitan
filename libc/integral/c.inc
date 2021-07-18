@@ -584,8 +584,15 @@ typedef uint64_t uintmax_t;
 #define noasan
 #endif
 
+#if (__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 408 || \
+    __has_attribute(__no_sanitize_undefined__)
+#define noubsan __attribute__((__no_sanitize_undefined__))
+#else
+#define noubsan
+#endif
+
 #ifndef unreachable
-#if defined(__GNUC__) && !defined(__STRICT_ANSI)
+#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 #define unreachable __builtin_unreachable()
 #else
 #define unreachable \
@@ -659,6 +666,7 @@ typedef uint64_t uintmax_t;
 #pragma GCC diagnostic ignored "-Wformat" /* forces only gnu pf */
 #pragma GCC diagnostic ignored "-Wunused-parameter" /* extreme prejudice */
 #pragma GCC diagnostic ignored "-Wunused-function" /* contradicts dce! */
+#pragma GCC diagnostic ignored "-Wunused-const-variable" /* let me dce */
 #pragma GCC diagnostic ignored "-Wunused-variable" /* belongs in tidy */
 #pragma GCC diagnostic ignored "-Wformat-extra-args" /* is also broken */
 #pragma GCC diagnostic ignored "-Wparentheses" /* annoying tidy */

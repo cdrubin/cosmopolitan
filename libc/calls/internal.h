@@ -4,7 +4,10 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/itimerval.h"
+#include "libc/calls/struct/rusage.h"
 #include "libc/calls/struct/sigaction-xnu.internal.h"
+#include "libc/calls/struct/siginfo.h"
+#include "libc/calls/struct/sigval.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/dce.h"
@@ -106,12 +109,15 @@ char *sys_getcwd(char *, u64) hidden;
 char *sys_getcwd_xnu(char *, u64) hidden;
 i32 __sys_dup3(i32, i32, i32) hidden;
 i32 __sys_execve(const char *, char *const[], char *const[]) hidden;
+i32 __sys_fcntl(i32, i32, u64) hidden;
 i32 __sys_fstat(i32, struct stat *) hidden;
 i32 __sys_fstatat(i32, const char *, struct stat *, i32) hidden;
+i32 __sys_getrusage(i32, struct rusage *) hidden;
 i32 __sys_openat(i32, const char *, i32, u32) hidden;
 i32 __sys_pipe2(i32[hasatleast 2], u32) hidden;
 i32 __sys_utimensat(i32, const char *, const struct timespec *, i32) hidden;
-i32 getdents(i32, char *, u32, i64 *) hidden;
+i32 __sys_wait4(i32, i32 *, i32, struct rusage *) hidden;
+i32 getdents(i32, void *, u32, i64 *) hidden;
 i32 sys_chdir(const char *) hidden;
 i32 sys_clock_gettime(i32, struct timespec *) hidden;
 i32 sys_close(i32) hidden;
@@ -126,7 +132,7 @@ i32 sys_fchmod(i32, u32) hidden;
 i32 sys_fchmodat(i32, const char *, u32, u32) hidden;
 i32 sys_fchown(i64, u32, u32) hidden;
 i32 sys_fchownat(i32, const char *, u32, u32, u32) hidden;
-i32 sys_fcntl(i32, i32, ...) hidden;
+i32 sys_fcntl(i32, i32, u64) hidden;
 i32 sys_fdatasync(i32) hidden;
 i32 sys_flock(i32, i32) hidden;
 i32 sys_fstat(i32, struct stat *) hidden;
@@ -170,6 +176,8 @@ i32 sys_setrlimit(i32, const struct rlimit *) hidden;
 i32 sys_setsid(void) hidden;
 i32 sys_sigaction(i32, const void *, void *, i64, i64) hidden;
 i32 sys_sigprocmask(i32, const sigset *, sigset *, u64) hidden;
+i32 sys_sigqueue(i32, i32, const union sigval) hidden;
+i32 sys_sigqueueinfo(i32, const siginfo_t *) hidden;
 i32 sys_sigsuspend(const sigset *, u64) hidden;
 i32 sys_symlinkat(const char *, i32, const char *) hidden;
 i32 sys_sync(void) hidden;
@@ -220,6 +228,10 @@ int gethostname_linux(char *, size_t) hidden;
 int gethostname_bsd(char *, size_t) hidden;
 int gethostname_nt(char *, size_t) hidden;
 size_t __iovec_size(const struct iovec *, size_t) hidden;
+void __rusage2linux(struct rusage *) hidden;
+ssize_t WritevUninterruptible(int, struct iovec *, int);
+void flock2cosmo(uintptr_t);
+void cosmo2flock(uintptr_t);
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § syscalls » windows nt » veneers                           ─╬─│┼
@@ -236,13 +248,13 @@ int sys_execve_nt(const char *, char *const[], char *const[]) hidden;
 int sys_faccessat_nt(int, const char *, int, uint32_t) hidden;
 int sys_fadvise_nt(int, u64, u64, int) hidden;
 int sys_fchdir_nt(int) hidden;
-int sys_fcntl_nt(int, int, unsigned) hidden;
+int sys_fcntl_nt(int, int, uintptr_t) hidden;
 int sys_fdatasync_nt(int) hidden;
 int sys_flock_nt(int, int) hidden;
 int sys_fork_nt(void) hidden;
 int sys_fstat_nt(i64, struct stat *) hidden;
 int sys_fstatat_nt(int, const char *, struct stat *, uint32_t) hidden;
-int sys_ftruncate_nt(int, u64) hidden;
+int sys_ftruncate_nt(i64, u64) hidden;
 int sys_getppid_nt(void) hidden;
 int sys_getpriority_nt(int) hidden;
 int sys_getrusage_nt(int, struct rusage *) hidden;
@@ -290,6 +302,7 @@ int __mkntpathat(int, const char *, int, char16_t[PATH_MAX]) hidden;
 unsigned __wincrash_nt(struct NtExceptionPointers *);
 ssize_t sys_readv_nt(struct Fd *, const struct iovec *, int) hidden;
 ssize_t sys_writev_nt(struct Fd *, const struct iovec *, int) hidden;
+char16_t *CreatePipeName(char16_t *) hidden;
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § syscalls » metal                                          ─╬─│┼
