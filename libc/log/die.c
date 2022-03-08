@@ -19,7 +19,10 @@
 #include "libc/bits/bits.h"
 #include "libc/dce.h"
 #include "libc/log/backtrace.internal.h"
+#include "libc/log/internal.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
+#include "libc/runtime/runtime.h"
 
 /**
  * Aborts process after printing a backtrace.
@@ -27,10 +30,16 @@
  * If a debugger is present then this will trigger a breakpoint.
  */
 relegated wontreturn void __die(void) {
+  /* asan runtime depends on this function */
   static bool once;
   if (cmpxchg(&once, false, true)) {
-    if (IsDebuggerPresent(false)) DebugBreak();
+    __restore_tty(1);
+    if (IsDebuggerPresent(false)) {
+      DebugBreak();
+    }
     ShowBacktrace(2, NULL);
+    quick_exit(77);
   }
-  exit(77);
+  __write_str("PANIC: __DIE() DIED\r\n");
+  _Exit(78);
 }

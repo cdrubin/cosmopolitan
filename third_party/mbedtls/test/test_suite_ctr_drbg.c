@@ -125,7 +125,7 @@ static void ctr_drbg_validate_internal( int reseed_mode, data_t * nonce,
                      &ctx,
                      buf, result->len,
                      add2->x, add2->len ) == 0 );
-    TEST_ASSERT( memcmp( buf, result->x, result->len ) == 0 );
+    TEST_ASSERT( timingsafe_bcmp( buf, result->x, result->len ) == 0 );
 
 exit:
     mbedtls_ctr_drbg_free( &ctx );
@@ -733,7 +733,7 @@ int main( int argc, const char *argv[] )
 {
     int ret;
     mbedtls_test_platform_setup();
-    ret = execute_tests( argc, argv, "zip:third_party/mbedtls/test/test_suite_ctr_drbg.datax" );
+    ret = execute_tests( argc, argv, "/zip/third_party/mbedtls/test/test_suite_ctr_drbg.datax" );
     mbedtls_test_platform_teardown();
     return( ret );
 }

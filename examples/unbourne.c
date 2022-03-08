@@ -111,6 +111,8 @@
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
 #include "libc/alg/alg.h"
+#include "libc/assert.h"
+#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/sigbits.h"
 #include "libc/calls/struct/dirent.h"
@@ -125,6 +127,7 @@
 #include "libc/fmt/fmt.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
+#include "libc/macros.internal.h"
 #include "libc/mem/alloca.h"
 #include "libc/mem/mem.h"
 #include "libc/paths.h"
@@ -132,6 +135,7 @@
 #include "libc/runtime/sysconf.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
+#include "libc/sysv/consts/dt.h"
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/fd.h"
 #include "libc/sysv/consts/fileno.h"
@@ -141,6 +145,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/w.h"
 #include "third_party/gdtoa/gdtoa.h"
+#include "third_party/linenoise/linenoise.h"
 #include "third_party/musl/passwd.h"
 
 #define likely(expr)   __builtin_expect(!!(expr), 1)
@@ -597,30 +602,16 @@
  * shell.  If SHELL is defined, we try to map the standard UNIX library
  * routines to ash routines using defines.
  */
-/* #undef stdout  /\* TODO(jart): XXX *\/ */
-/* #undef stderr */
-/* #undef putc */
-/* #undef putchar */
-#undef fileno
-/* #define stdout out1 */
-/* #define stderr out2 */
-#undef printf
-#define printf out1fmt
-/* #define putc(c, file) outc(c, file) */
-/* #define putchar(c) out1c(c) */
-#define FILE      struct output
-#define fileno(f) ((f)->fd)
-/* #define ferror outerr */
+#define Printf out1fmt
 #define INITARGS(argv)
 #define setprogname(s)
 #define getprogname() commandname
 
 #define setlocate(l, s) 0
-#define equal(s1, s2)   (strcmp(s1, s2) == 0)
-/* #define getenv(p)       bltinlookup((p), 0) */
-#define isodigit(c)   ((c) >= '0' && (c) <= '7')
-#define octtobin(c)   ((c) - '0')
-#define scopy(s1, s2) ((void)strcpy(s2, s1))
+#define equal(s1, s2)   (!strcmp(s1, s2))
+#define isodigit(c)     ((c) >= '0' && (c) <= '7')
+#define octtobin(c)     ((c) - '0')
+#define scopy(s1, s2)   ((void)strcpy(s2, s1))
 
 #define TRACE(param)
 /* #define TRACE(param)   \ */
@@ -1030,6 +1021,7 @@ struct t_op {
 │ cosmopolitan § the unbourne shell » bss                                  ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
+static int inter;
 static char **argptr; /* argument list for builtin commands */
 static char **gargv;
 static char **t_wp;
@@ -1827,7 +1819,7 @@ printfesque(3) static int fmtstr(char *outbuf, unsigned length, const char *fmt,
   return ret > (int)length ? length : ret;
 }
 
-printfesque(2) static int xasprintf(char **sp, const char *fmt, ...) {
+printfesque(2) static int Xasprintf(char **sp, const char *fmt, ...) {
   va_list ap;
   int ret;
   va_start(ap, fmt);
@@ -5629,12 +5621,128 @@ static int pgetc2() {
   return c;
 }
 
+static void AddUniqueCompletion(linenoiseCompletions *c, char *s) {
+  size_t i;
+  if (!s) return;
+  for (i = 0; i < c->len; ++i) {
+    if (!strcmp(s, c->cvec[i])) {
+      return;
+    }
+  }
+  c->cvec = realloc(c->cvec, ++c->len * sizeof(*c->cvec));
+  c->cvec[c->len - 1] = s;
+}
+
+static void CompleteCommand(const char *p, const char *q, const char *b, linenoiseCompletions *c) {
+  DIR *d;
+  size_t i;
+  struct dirent *e;
+  const char *x, *y, *path;
+  struct tblentry **pp, *cmdp;
+  for (pp = cmdtable; pp < &cmdtable[CMDTABLESIZE]; pp++) {
+    for (cmdp = *pp; cmdp; cmdp = cmdp->next) {
+      if (cmdp->cmdtype >= 0 && !strncmp(cmdp->cmdname, p, q - p)) {
+        AddUniqueCompletion(c, strdup(cmdp->cmdname));
+      }
+    }
+  }
+  for (i = 0; i < ARRAYLEN(kBuiltinCmds); ++i) {
+    if (!strncmp(kBuiltinCmds[i].name, p, q - p)) {
+      AddUniqueCompletion(c, strdup(kBuiltinCmds[i].name));
+    }
+  }
+  for (y = x = lookupvar("PATH"); *y; x = y + 1) {
+    if ((path = strndup(x, (y = strchrnul(x, ':')) - x))) {
+      if ((d = opendir(path))) {
+        while ((e = readdir(d))) {
+          if (e->d_type == DT_REG && !strncmp(e->d_name, p, q - p)) {
+            AddUniqueCompletion(c, strdup(e->d_name));
+          }
+        }
+        closedir(d);
+      }
+      free(path);
+    }
+  }
+}
+
+static void CompleteFilename(const char *p, const char *q, const char *b, linenoiseCompletions *c) {
+  DIR *d;
+  char *buf;
+  const char *g;
+  struct dirent *e;
+  if ((buf = malloc(512))) {
+    if ((g = memrchr(p, '/', q - p))) {
+      *(char *)mempcpy(buf, p, MIN(g - p, 511)) = 0;
+      p = ++g;
+    } else {
+      strcpy(buf, ".");
+    }
+    if ((d = opendir(buf))) {
+      while ((e = readdir(d))) {
+        if (!strcmp(e->d_name, ".")) continue;
+        if (!strcmp(e->d_name, "..")) continue;
+        if (!strncmp(e->d_name, p, q - p)) {
+          snprintf(buf, 512, "%.*s%s%s", p - b, b, e->d_name, e->d_type == DT_DIR ? "/" : "");
+          AddUniqueCompletion(c, strdup(buf));
+        }
+      }
+      closedir(d);
+    }
+    free(buf);
+  }
+}
+
+static void ShellCompletion(const char *p, linenoiseCompletions *c) {
+  bool slashed;
+  const char *q, *b;
+  struct tblentry **pp, *cmdp;
+  for (slashed = false, b = p, q = (p += strlen(p)); p > b; --p) {
+    if (p[-1] == '/' && p[-1] == '\\') slashed = true;
+    if (!isalnum(p[-1]) && (p[-1] != '.' && p[-1] != '_' && p[-1] != '-' && p[-1] != '+' &&
+                            p[-1] != '[' && p[-1] != '/' && p[-1] != '\\')) {
+      break;
+    }
+  }
+  if (b == p && !slashed) {
+    CompleteCommand(p, q, b, c);
+  } else {
+    CompleteFilename(p, q, b, c);
+  }
+}
+
+static char *ShellHint(const char *p, const char **ansi1, const char **ansi2) {
+  char *h = 0;
+  linenoiseCompletions c = {0};
+  ShellCompletion(p, &c);
+  if (c.len == 1) {
+    h = strdup(c.cvec[0] + strlen(p));
+  }
+  linenoiseFreeCompletions(&c);
+  return h;
+}
+
 static ssize_t preadfd(void) {
   ssize_t nr;
-  char *buf = parsefile->buf;
+  char *p, *buf = parsefile->buf;
   parsefile->nextc = buf;
 retry:
-  nr = read(parsefile->fd, buf, IBUFSIZ - 1);
+  if (!parsefile->fd && isatty(0)) {
+    linenoiseSetFreeHintsCallback(free);
+    linenoiseSetHintsCallback(ShellHint);
+    linenoiseSetCompletionCallback(ShellCompletion);
+    if ((p = linenoiseWithHistory("$ ", "unbourne"))) {
+      nr = min(strlen(p), IBUFSIZ - 2);
+      memcpy(buf, p, nr);
+      buf[nr++] = '\n';
+      free(p);
+    } else {
+      write(1, "\n", 1);
+      nr = 0;
+    }
+  } else {
+    nr = read(parsefile->fd, buf, IBUFSIZ - 1);
+  }
   if (nr < 0) {
     if (errno == EINTR) goto retry;
     if (parsefile->fd == 0 && errno == EAGAIN) {
@@ -7036,12 +7144,12 @@ static int readcmd(int argc, char **argv) {
   if (prompt && isatty(0)) {
     outstr(prompt, out2);
   }
-  if (*(ap = argptr) == NULL) sh_error("arg count");
+  if (!*(ap = argptr)) sh_error("arg count");
   status = 0;
   STARTSTACKSTR(p);
   goto start;
   for (;;) {
-    switch (read(STDIN_FILENO, &c, 1)) {
+    switch (read(0, &c, 1)) {
       case 1:
         break;
       default:
@@ -7051,7 +7159,7 @@ static int readcmd(int argc, char **argv) {
         status = 1;
         goto out;
     }
-    if (c == '\0') continue;
+    if (!c) continue;
     if (newloc >= startloc) {
       if (c == '\n') goto resetbs;
       goto put;
@@ -8820,7 +8928,7 @@ static void setprompt(int which) {
   int show;
   needprompt = 0;
   whichprompt = which;
-  show = 1;
+  show = 0;
   if (show) {
     pushstackmark(&smark, stackblocksize());
     outstr(getprompt(NULL), out2);
@@ -9361,13 +9469,13 @@ static void sigblockall(sigset_t *oldmask) {
   {                                                \
     switch ((char *)param - (char *)array) {       \
       default:                                     \
-        (void)printf(f, array[0], array[1], func); \
+        (void)Printf(f, array[0], array[1], func); \
         break;                                     \
       case sizeof(*param):                         \
-        (void)printf(f, array[0], func);           \
+        (void)Printf(f, array[0], func);           \
         break;                                     \
       case 0:                                      \
-        (void)printf(f, func);                     \
+        (void)Printf(f, func);                     \
         break;                                     \
     }                                              \
   }
@@ -9377,13 +9485,13 @@ static void sigblockall(sigset_t *oldmask) {
     int ret;                                              \
     switch ((char *)param - (char *)array) {              \
       default:                                            \
-        ret = xasprintf(sp, f, array[0], array[1], func); \
+        ret = Xasprintf(sp, f, array[0], array[1], func); \
         break;                                            \
       case sizeof(*param):                                \
-        ret = xasprintf(sp, f, array[0], func);           \
+        ret = Xasprintf(sp, f, array[0], func);           \
         break;                                            \
       case 0:                                             \
-        ret = xasprintf(sp, f, func);                     \
+        ret = Xasprintf(sp, f, func);                     \
         break;                                            \
     }                                                     \
     ret;                                                  \
@@ -9996,7 +10104,7 @@ static int timescmd() {
   struct tms buf;
   long int clk_tck = sysconf(_SC_CLK_TCK);
   times(&buf);
-  printf("%dm%fs %dm%fs\n%dm%fs %dm%fs\n", (int)(buf.tms_utime / clk_tck / 60),
+  Printf("%dm%fs %dm%fs\n%dm%fs %dm%fs\n", (int)(buf.tms_utime / clk_tck / 60),
          ((double)buf.tms_utime) / clk_tck, (int)(buf.tms_stime / clk_tck / 60),
          ((double)buf.tms_stime) / clk_tck, (int)(buf.tms_cutime / clk_tck / 60),
          ((double)buf.tms_cutime) / clk_tck, (int)(buf.tms_cstime / clk_tck / 60),
@@ -10788,8 +10896,6 @@ static int exitcmd(int argc, char **argv) {
  * is used to figure out how far we had gotten.
  */
 int main(int argc, char **argv) {
-  showcrashreports();
-  unsetenv("PS1");
   char *shinit;
   volatile int state;
   struct jmploc jmploc;

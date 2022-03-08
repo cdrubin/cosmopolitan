@@ -1,27 +1,20 @@
-/*
-** $Id: lua.h $
-** Lua - A Scripting Language
-** Lua.org, PUC-Rio, Brazil (http://www.lua.org)
-** See Copyright Notice at the end of this file
-*/
-
-#ifndef lua_h
-#define lua_h
-
+#ifndef COSMOPOLITAN_THIRD_PARTY_LUA_LUA_H_
+#define COSMOPOLITAN_THIRD_PARTY_LUA_LUA_H_
 #include "third_party/lua/luaconf.h"
-
+#if !(__ASSEMBLER__ + __LINKER__ + 0)
+COSMOPOLITAN_C_START_
 /* clang-format off */
 
 #define LUA_VERSION_MAJOR	"5"
 #define LUA_VERSION_MINOR	"4"
-#define LUA_VERSION_RELEASE	"2"
+#define LUA_VERSION_RELEASE	"3"
 
 #define LUA_VERSION_NUM			504
 #define LUA_VERSION_RELEASE_NUM		(LUA_VERSION_NUM * 100 + 0)
 
 #define LUA_VERSION	"Lua " LUA_VERSION_MAJOR "." LUA_VERSION_MINOR
 #define LUA_RELEASE	LUA_VERSION "." LUA_VERSION_RELEASE
-#define LUA_COPYRIGHT	LUA_RELEASE "  Copyright (C) 1994-2020 Lua.org, PUC-Rio"
+#define LUA_COPYRIGHT	LUA_RELEASE "  Copyright (C) 1994-2021 Lua.org, PUC-Rio"
 #define LUA_AUTHORS	"R. Ierusalimschy, L. H. de Figueiredo, W. Celes"
 
 
@@ -486,29 +479,8 @@ struct lua_Debug {
 
 /* }====================================================================== */
 
+extern const char *g_lua_path_default;
 
-/******************************************************************************
-* Copyright (C) 1994-2020 Lua.org, PUC-Rio.
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the
-* "Software"), to deal in the Software without restriction, including
-* without limitation the rights to use, copy, modify, merge, publish,
-* distribute, sublicense, and/or sell copies of the Software, and to
-* permit persons to whom the Software is furnished to do so, subject to
-* the following conditions:
-*
-* The above copyright notice and this permission notice shall be
-* included in all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-******************************************************************************/
-
-
-#endif
+COSMOPOLITAN_C_END_
+#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
+#endif /* COSMOPOLITAN_THIRD_PARTY_LUA_LUA_H_ */

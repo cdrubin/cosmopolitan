@@ -42,6 +42,15 @@
 
 static const char kSpecialFloats[2][2][4] = {{"INF", "inf"}, {"NAN", "nan"}};
 
+static void __fmt_free_dtoa(char **mem) {
+  if (*mem) {
+    if (weaken(freedtoa)) {
+      weaken(freedtoa)(*mem);
+    }
+    *mem = 0;
+  }
+}
+
 static int __fmt_atoi(const char **str) {
   int i;
   for (i = 0; '0' <= **str && **str <= '9'; ++*str) {
@@ -135,11 +144,12 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
   int (*out)(const char *, void *, size_t);
   unsigned char signbit, log2base;
   int c, d, k, w, n, i1, ui, bw, bex;
-  char *s, *q, *se, qchar, special[8];
+  char *s, *q, *se, *mem, qchar, special[8];
   int sgn, alt, sign, prec, prec1, flags, width, decpt, lasterr;
 
   lasterr = errno;
   out = fn ? fn : (void *)missingno;
+  mem = 0;
 
   while (*format) {
     if (*format != '%') {
@@ -191,7 +201,12 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
       } else if (format[1] == '.' && format[2] == '*' && format[3] == 's') {
         n = va_arg(va, unsigned); /* FAST PATH: PRECISION STRING */
         s = va_arg(va, const char *);
-        if (!s) s = "(null)", n = MIN(6, n);
+        if (s) {
+          n = strnlen(s, n);
+        } else {
+          s = "(null)";
+          n = MIN(6, n);
+        }
         if (out(s, arg, n) == -1) return -1;
         format += 4;
         continue;
@@ -383,10 +398,12 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           p = "?";
           goto FormatThatThing;
         }
-        s = weaken(__fmt_dtoa)(pun.d, 3, prec, &decpt, &sgn, &se);
+        assert(!mem);
+        s = mem = weaken(__fmt_dtoa)(pun.d, 3, prec, &decpt, &sgn, &se);
         if (decpt == 9999) {
         Format9999:
-          p = q = memset(special, 0, sizeof(special));
+          bzero(special, sizeof(special));
+          p = q = special;
           if (sgn) {
             *q++ = '-';
           } else if (flags & FLAGS_PLUS) {
@@ -396,6 +413,8 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           }
           memcpy(q, kSpecialFloats[*s == 'N'][d >= 'a'], 4);
         FormatThatThing:
+          __fmt_free_dtoa(&mem);
+          mem = 0;
           prec = alt = 0;
           flags &= ~(FLAGS_PRECISION | FLAGS_PLUS | FLAGS_SPACE);
           goto FormatString;
@@ -456,6 +475,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
         while (--width >= 0) {
           PUT(' ');
         }
+        __fmt_free_dtoa(&mem);
         continue;
 
       case 'G':
@@ -471,7 +491,9 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           p = "?";
           goto FormatThatThing;
         }
-        s = weaken(__fmt_dtoa)(pun.d, prec ? 2 : 0, prec, &decpt, &sgn, &se);
+        assert(!mem);
+        s = mem =
+            weaken(__fmt_dtoa)(pun.d, prec ? 2 : 0, prec, &decpt, &sgn, &se);
         if (decpt == 9999) goto Format9999;
         c = se - s;
         prec1 = prec;
@@ -506,7 +528,8 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           p = "?";
           goto FormatThatThing;
         }
-        s = weaken(__fmt_dtoa)(pun.d, 2, prec + 1, &decpt, &sgn, &se);
+        assert(!mem);
+        s = mem = weaken(__fmt_dtoa)(pun.d, 2, prec + 1, &decpt, &sgn, &se);
         if (decpt == 9999) goto Format9999;
       FormatExpo:
         if (sgn) sign = '-';
@@ -541,6 +564,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
           }
           PUT(c);
         }
+        __fmt_free_dtoa(&mem);
         PUT(d);
         if (decpt < 0) {
           PUT('-');
@@ -715,5 +739,7 @@ hidden int __fmt(void *fn, void *arg, const char *format, va_list va) {
         break;
     }
   }
+
+  assert(!mem);
   return 0;
 }

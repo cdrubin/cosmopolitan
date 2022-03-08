@@ -73,6 +73,8 @@ hidden extern int64_t __iocp;
 
 errno_t __dos2errno(uint32_t);
 
+void _firewall(const void *, uint32_t) hidden;
+
 int32_t __sys_accept(int32_t, void *, uint32_t *, int) nodiscard hidden;
 int32_t __sys_accept4(int32_t, void *, uint32_t *, int) nodiscard hidden;
 int32_t __sys_connect(int32_t, const void *, uint32_t) hidden;
@@ -106,6 +108,7 @@ int sys_setsockopt(int, int, int, const void *, uint32_t) hidden;
 int32_t sys_epoll_create(int32_t) hidden;
 int32_t sys_epoll_ctl(int32_t, int32_t, int32_t, void *) hidden;
 int32_t sys_epoll_wait(int32_t, void *, int32_t, int32_t) hidden;
+int sys_poll_metal(struct pollfd *, size_t, unsigned);
 
 int sys_poll_nt(struct pollfd *, uint64_t, uint64_t) hidden;
 int sys_getsockopt_nt(struct Fd *, int, int, void *, uint32_t *) hidden;

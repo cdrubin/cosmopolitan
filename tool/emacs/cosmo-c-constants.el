@@ -4,7 +4,10 @@
     "WEOF"
     "NDEBUG"
     "HUGE_VAL"
-    "CLK_TCK"))
+    "HUGE_VALF"
+    "HUGE_VALL"
+    "CLK_TCK"
+    "FLT_ROUNDS"))
 
 (defconst cosmo-c-constants-c11
   '("__func__"
@@ -101,7 +104,9 @@
     "FLT_MAX"))
 
 (defconst cosmo-c-constants-math
-  '("M_E"
+  '("NAN"
+    "INFINITY"
+    "M_E"
     "M_LOG2_10"
     "M_LOG10_2"
     "M_LOG2E"

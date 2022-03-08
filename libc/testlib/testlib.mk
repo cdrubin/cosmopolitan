@@ -21,6 +21,7 @@ LIBC_TESTLIB_A_HDRS =						\
 	libc/testlib/bench.h					\
 	libc/testlib/blocktronics.h				\
 	libc/testlib/ezbench.h					\
+	libc/testlib/fastrandomstring.h				\
 	libc/testlib/hyperion.h					\
 	libc/testlib/moby.h					\
 	libc/testlib/testlib.h
@@ -34,6 +35,7 @@ LIBC_TESTLIB_A_SRCS_S =						\
 	libc/testlib/moby.S					\
 	libc/testlib/testcase.S					\
 	libc/testlib/thrashcodecache.S				\
+	libc/testlib/polluteregisters.S				\
 	libc/testlib/thunks/assert_eq.S				\
 	libc/testlib/thunks/assert_false.S			\
 	libc/testlib/thunks/assert_ne.S				\
@@ -48,11 +50,17 @@ LIBC_TESTLIB_A_SRCS_S =						\
 LIBC_TESTLIB_A_SRCS_C =						\
 	libc/testlib/almostequallongdouble.c			\
 	libc/testlib/benchrunner.c				\
+	libc/testlib/getcore.c					\
+	libc/testlib/getinterrupts.c				\
+	libc/testlib/ezbenchwarn.c				\
 	libc/testlib/binequals.c				\
+	libc/testlib/quota.c					\
 	libc/testlib/clearxmmregisters.c			\
 	libc/testlib/comborunner.c				\
 	libc/testlib/contains.c					\
 	libc/testlib/endswith.c					\
+	libc/testlib/leaks.c					\
+	libc/testlib/yield.c					\
 	libc/testlib/ezbenchcontrol.c				\
 	libc/testlib/ezbenchreport.c				\
 	libc/testlib/fixturerunner.c				\
@@ -68,7 +76,6 @@ LIBC_TESTLIB_A_SRCS_C =						\
 	libc/testlib/incrementfailed.c				\
 	libc/testlib/shoulddebugbreak.c				\
 	libc/testlib/showerror.c				\
-	libc/testlib/showerror_.c				\
 	libc/testlib/startswith.c				\
 	libc/testlib/strcaseequals.c				\
 	libc/testlib/strequals.c				\
@@ -85,6 +92,7 @@ LIBC_TESTLIB_A_OBJS =						\
 
 LIBC_TESTLIB_A_DIRECTDEPS =					\
 	LIBC_ALG						\
+	LIBC_BITS						\
 	LIBC_CALLS						\
 	LIBC_FMT						\
 	LIBC_INTRIN						\
@@ -97,12 +105,14 @@ LIBC_TESTLIB_A_DIRECTDEPS =					\
 	LIBC_STDIO						\
 	LIBC_STR						\
 	LIBC_STUBS						\
+	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TIME						\
 	LIBC_TINYMATH						\
 	LIBC_UNICODE						\
 	LIBC_X							\
 	LIBC_ZIPOS						\
+	THIRD_PARTY_DLMALLOC					\
 	THIRD_PARTY_GDTOA
 
 LIBC_TESTLIB_A_DEPS :=						\
@@ -180,6 +190,7 @@ LIBC_TESTMAIN_DIRECTDEPS =					\
 	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\
 	LIBC_TESTLIB_RUNNER					\
+	THIRD_PARTY_DLMALLOC					\
 	THIRD_PARTY_GETOPT
 
 LIBC_TESTMAIN_DEPS :=						\

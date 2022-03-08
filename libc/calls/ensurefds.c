@@ -24,6 +24,10 @@
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
 
+static void __ensurefds_destroy(void) {
+  weaken(free)(g_fds.p);
+}
+
 int __ensurefds(int fd) {
   size_t n1, n2;
   struct Fd *p1, *p2;
@@ -35,10 +39,16 @@ int __ensurefds(int fd) {
       n2 = MAX(fd + 1, n1 + (n1 << 1));
       if ((p2 = weaken(malloc)(n2 * sizeof(*p1)))) {
         memcpy(p2, p1, n1 * sizeof(*p1));
-        memset(p2 + n1, 0, (n2 - n1) * sizeof(*p1));
-        if (p1 != g_fds.__init_p && weaken(free)) weaken(free)(p1);
+        bzero(p2 + n1, (n2 - n1) * sizeof(*p1));
         if (cmpxchg(&g_fds.p, p1, p2)) {
           g_fds.n = n2;
+          if (weaken(free)) {
+            if (p1 == g_fds.__init_p) {
+              atexit(__ensurefds_destroy);
+            } else {
+              weaken(free)(p1);
+            }
+          }
           return fd;
         } else if (weaken(free)) {
           weaken(free)(p2);

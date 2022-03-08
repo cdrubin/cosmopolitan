@@ -30,29 +30,27 @@
 //	@see	examples/ctrlc.c
 //	@noreturn
 _gclongjmp:
-	.leafprologue
+	push	%rbp
+	mov	%rsp,%rbp
 	.profilable
-	.weak	__garbage
 	lea	__garbage(%rip),%r12
-	test	%r12,%r12
+	mov	(%r12),%r13			# garbage.i
+	test	%r13,%r13
 	jnz	.L.unwind.destructors
 0:	jmp	longjmp
 .L.unwind.destructors:
 	push	%rdi
 	push	%rsi
-	mov	(%r12),%r13			# garbage.i
 	mov	16(%r12),%r14			# garbage.p
 	mov	(%rdi),%r15			# jmp_buf[0] is new %rsp
-	shl	$5,%r13
-1:	test	%r13,%r13
-	jz	2f
-	sub	$32,%r13
-	cmp	(%r14,%r13),%r15
-	ja	2f
-	mov	8(%r14,%r13),%rax		# garbage.p[𝑖].fn
+	shl	$5,%r13				# log2(sizeof(struct Garbage))
+1:	sub	$32,%r13			# 𝑖--
+	js	2f
+	cmp	(%r14,%r13),%r15		# new %rsp > garbage.p[𝑖].frame
+	jbe	2f
 	mov	16(%r14,%r13),%rdi		# garbage.p[𝑖].arg
-	call	*%rax
-	decq	(%r12)
+	callq	*8(%r14,%r13)			# garbage.p[𝑖].fn
+	decq	(%r12)				# garbage.i--
 	jmp	1b
 2:	pop	%rsi
 	pop	%rdi

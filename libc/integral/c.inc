@@ -157,7 +157,7 @@ typedef uint64_t uintmax_t;
 #define strlenesque libcesque nosideeffect paramsnonnull()
 #define vallocesque \
   libcesque nodiscard returnsaligned((PAGESIZE)) returnspointerwithnoaliases
-#define reallocesque libcesque returnsaligned((__BIGGEST_ALIGNMENT__))
+#define reallocesque libcesque returnsaligned((16))
 #define mallocesque  reallocesque returnspointerwithnoaliases
 #define interruptfn  nocallersavedregisters forcealignargpointer
 
@@ -241,13 +241,13 @@ typedef uint64_t uintmax_t;
 #endif
 #endif
 
-#ifndef noinline
+#ifndef dontinline
 #if !defined(__STRICT_ANSI__) &&      \
     (__has_attribute(__noinline__) || \
      (__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 301)
-#define noinline __attribute__((__noinline__))
+#define dontinline __attribute__((__noinline__))
 #else
-#define noinline
+#define dontinline
 #endif
 #endif
 
@@ -606,7 +606,7 @@ typedef uint64_t uintmax_t;
   } while (0)
 
 #ifndef __STRICT_ANSI__
-#define testonly    noinline _Section(".test")
+#define testonly    dontinline _Section(".test")
 #define textstartup _Section(".text.startup") noinstrument
 #define textexit    _Section(".text.exit") noinstrument
 #define textreal    _Section(".text.real")
@@ -642,6 +642,10 @@ typedef uint64_t uintmax_t;
 #define offsetof(type, member) ((unsigned long)&((type *)0)->member)
 #else
 #define offsetof(type, member) __builtin_offsetof(type, member)
+#endif
+
+#ifdef __llvm__
+#define __builtin_ia32_movntdq(x, y) (*(x) = (y))
 #endif
 
 #ifndef _Section

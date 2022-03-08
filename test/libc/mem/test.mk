@@ -25,6 +25,7 @@ TEST_LIBC_MEM_DIRECTDEPS =				\
 	LIBC_CALLS					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
+	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
 	LIBC_RAND					\
@@ -33,7 +34,8 @@ TEST_LIBC_MEM_DIRECTDEPS =				\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_SYSV					\
-	LIBC_TESTLIB
+	LIBC_TESTLIB					\
+	THIRD_PARTY_DLMALLOC
 
 TEST_LIBC_MEM_DEPS :=					\
 	$(call uniq,$(foreach x,$(TEST_LIBC_MEM_DIRECTDEPS),$($(x))))

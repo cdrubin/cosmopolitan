@@ -19,6 +19,7 @@
 #include "libc/macros.internal.h"
 #include "libc/dce.h"
 #include "libc/notice.inc"
+
 #define INITIAL_CAPACITY 4
 
 //	Invokes deferred function calls.
@@ -31,6 +32,7 @@
 //
 //	@param	rax,rdx,xmm0,xmm1,st0,st1 is return value
 //	@see	test/libc/runtime/gc_test.c
+	nop	# backtrace workaround
 //	<LIMBO>
 __gc:	decq	__garbage(%rip)
 	mov	__garbage(%rip),%r8
@@ -44,19 +46,17 @@ __gc:	decq	__garbage(%rip)
 //	</LIMBO>
 	push	%rbp
 	mov	%rsp,%rbp
-	sub	$0x20,%rsp
+	sub	$16,%rsp
 	push	%rax
 	push	%rdx
-	movdqa	%xmm0,-0x20(%rbp)
-	movdqa	%xmm1,-0x10(%rbp)
+	movdqa	%xmm0,-16(%rbp)
 	call	*%r9
-	movdqa	-0x10(%rbp),%xmm1
-	movdqa	-0x20(%rbp),%xmm0
+	movdqa	-16(%rbp),%xmm0
 	pop	%rdx
 	pop	%rax
 	leave
 	ret
-9:	call	abort
+9:	hlt
 	.endfn	__gc,globl,hidden
 	.source	__FILE__
 

@@ -16,8 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/rlimit.h"
+#include "libc/limits.h"
+#include "libc/macros.internal.h"
 #include "libc/runtime/clktck.h"
 #include "libc/runtime/sysconf.h"
+#include "libc/sysv/consts/rlim.h"
+#include "libc/sysv/consts/rlimit.h"
 
 /**
  * Returns configuration value about system.
@@ -27,20 +33,27 @@
  * - `_SC_CLK_TCK` returns number of clock ticks per second
  * - `_SC_ARG_MAX` currently always returns 32768 due to Windows
  * - `_SC_PAGESIZE` currently always returns 65536 due to Windows
+ * - `_SC_NPROCESSORS_ONLN` returns number of CPUs in the system
+ * - `_SC_OPEN_MAX` returns maximum number of open files
+ * - `_SC_CHILD_MAX` returns maximum number of processes
  *
- * You are encouraged to undiamond calls to this API as follows:
- *
- * - Use `CLK_TCK` instead of `getconf(_SC_CLK_TCK)`
- * - Use `PAGESIZE` or `FRAMESIZE` instead of `getconf(_SC_PAGESIZE)`
  */
 long sysconf(int name) {
+  int n;
   switch (name) {
     case _SC_ARG_MAX:
       return ARG_MAX;
+    case _SC_CHILD_MAX:
+      return GetResourceLimit(RLIMIT_NPROC);
     case _SC_CLK_TCK:
       return CLK_TCK;
+    case _SC_OPEN_MAX:
+      return GetMaxFd();
     case _SC_PAGESIZE:
       return FRAMESIZE;
+    case _SC_NPROCESSORS_ONLN:
+      n = GetCpuCount();
+      return n > 0 ? n : -1;
     default:
       return -1;
   }

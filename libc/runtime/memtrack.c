@@ -17,168 +17,113 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/bits/bits.h"
+#include "libc/bits/likely.h"
+#include "libc/bits/weaken.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/sysdebug.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/asan.internal.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/memtrack.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/directmap.internal.h"
+#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/map.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
 
-typedef long long xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
-
-static noasan void *MoveMemoryNoAsan(void *dst, const void *src, size_t n) {
-  size_t i;
-  xmm_t v, w;
-  char *d, *r;
-  const char *s;
-  uint64_t a, b;
-  d = dst;
-  s = src;
-  switch (n) {
-    case 9 ... 15:
-      __builtin_memcpy(&a, s, 8);
-      __builtin_memcpy(&b, s + n - 8, 8);
-      __builtin_memcpy(d, &a, 8);
-      __builtin_memcpy(d + n - 8, &b, 8);
-      return d;
-    case 5 ... 7:
-      __builtin_memcpy(&a, s, 4);
-      __builtin_memcpy(&b, s + n - 4, 4);
-      __builtin_memcpy(d, &a, 4);
-      __builtin_memcpy(d + n - 4, &b, 4);
-      return d;
-    case 17 ... 32:
-      __builtin_memcpy(&v, s, 16);
-      __builtin_memcpy(&w, s + n - 16, 16);
-      __builtin_memcpy(d, &v, 16);
-      __builtin_memcpy(d + n - 16, &w, 16);
-      return d;
-    case 16:
-      __builtin_memcpy(&v, s, 16);
-      __builtin_memcpy(d, &v, 16);
-      return d;
-    case 0:
-      return d;
-    case 1:
-      *d = *s;
-      return d;
-    case 8:
-      __builtin_memcpy(&a, s, 8);
-      __builtin_memcpy(d, &a, 8);
-      return d;
-    case 4:
-      __builtin_memcpy(&a, s, 4);
-      __builtin_memcpy(d, &a, 4);
-      return d;
-    case 2:
-      __builtin_memcpy(&a, s, 2);
-      __builtin_memcpy(d, &a, 2);
-      return d;
-    case 3:
-      __builtin_memcpy(&a, s, 2);
-      __builtin_memcpy(&b, s + 1, 2);
-      __builtin_memcpy(d, &a, 2);
-      __builtin_memcpy(d + 1, &b, 2);
-      return d;
-    default:
-      r = d;
-      if (d > s) {
-        do {
-          n -= 32;
-          __builtin_memcpy(&v, s + n, 16);
-          __builtin_memcpy(&w, s + n + 16, 16);
-          __builtin_memcpy(d + n, &v, 16);
-          __builtin_memcpy(d + n + 16, &w, 16);
-        } while (n >= 32);
-      } else {
-        i = 0;
-        do {
-          __builtin_memcpy(&v, s + i, 16);
-          __builtin_memcpy(&w, s + i + 16, 16);
-          __builtin_memcpy(d + i, &v, 16);
-          __builtin_memcpy(d + i + 16, &w, 16);
-        } while ((i += 32) + 32 <= n);
-        d += i;
-        s += i;
-        n -= i;
-      }
-      switch (n) {
-        case 0:
-          return r;
-        case 17 ... 31:
-          __builtin_memcpy(&v, s, 16);
-          __builtin_memcpy(&w, s + n - 16, 16);
-          __builtin_memcpy(d, &v, 16);
-          __builtin_memcpy(d + n - 16, &w, 16);
-          return r;
-        case 9 ... 15:
-          __builtin_memcpy(&a, s, 8);
-          __builtin_memcpy(&b, s + n - 8, 8);
-          __builtin_memcpy(d, &a, 8);
-          __builtin_memcpy(d + n - 8, &b, 8);
-          return r;
-        case 5 ... 7:
-          __builtin_memcpy(&a, s, 4);
-          __builtin_memcpy(&b, s + n - 4, 4);
-          __builtin_memcpy(d, &a, 4);
-          __builtin_memcpy(d + n - 4, &b, 4);
-          return r;
-        case 16:
-          __builtin_memcpy(&v, s, 16);
-          __builtin_memcpy(d, &v, 16);
-          return r;
-        case 8:
-          __builtin_memcpy(&a, s, 8);
-          __builtin_memcpy(d, &a, 8);
-          return r;
-        case 4:
-          __builtin_memcpy(&a, s, 4);
-          __builtin_memcpy(d, &a, 4);
-          return r;
-        case 1:
-          *d = *s;
-          return r;
-        case 2:
-          __builtin_memcpy(&a, s, 2);
-          __builtin_memcpy(d, &a, 2);
-          return r;
-        case 3:
-          __builtin_memcpy(&a, s, 2);
-          __builtin_memcpy(&b, s + 1, 2);
-          __builtin_memcpy(d, &a, 2);
-          __builtin_memcpy(d + 1, &b, 2);
-          return r;
-        default:
-          unreachable;
-      }
+static noasan void *MoveMemoryIntervals(struct MemoryInterval *d,
+                                        const struct MemoryInterval *s, int n) {
+  /* asan runtime depends on this function */
+  int i;
+  assert(n >= 0);
+  if (d > s) {
+    for (i = n; i--;) {
+      d[i] = s[i];
+    }
+  } else {
+    for (i = 0; i < n; ++i) {
+      d[i] = s[i];
+    }
   }
+  return d;
 }
-
-#ifndef __FSANITIZE_ADDRESS__
-#define MoveMemoryNoAsan memmove
-#endif
 
 static noasan void RemoveMemoryIntervals(struct MemoryIntervals *mm, int i,
                                          int n) {
+  /* asan runtime depends on this function */
   assert(i >= 0);
   assert(i + n <= mm->i);
-  MoveMemoryNoAsan(mm->p + i, mm->p + i + n,
-                   (intptr_t)(mm->p + mm->i) - (intptr_t)(mm->p + i + n));
+  MoveMemoryIntervals(mm->p + i, mm->p + i + n, mm->i - (i + n));
   mm->i -= n;
 }
 
-static noasan void CreateMemoryInterval(struct MemoryIntervals *mm, int i) {
+static noasan bool ExtendMemoryIntervals(struct MemoryIntervals *mm) {
+  int prot, flags;
+  char *base, *shad;
+  size_t gran, size;
+  struct DirectMap dm;
+  gran = kMemtrackGran;
+  base = (char *)kMemtrackStart;
+  prot = PROT_READ | PROT_WRITE;
+  flags = MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED;
+  if (mm->p == mm->s) {
+    if (IsAsan()) {
+      shad = (char *)(((intptr_t)base >> 3) + 0x7fff8000);
+      dm = sys_mmap(shad, gran >> 3, prot, flags, -1, 0);
+      if (!dm.addr) {
+        SYSDEBUG("ExtendMemoryIntervals() fail #1");
+        return false;
+      }
+    }
+    dm = sys_mmap(base, gran, prot, flags, -1, 0);
+    if (!dm.addr) {
+      SYSDEBUG("ExtendMemoryIntervals() fail #2");
+      return false;
+    }
+    MoveMemoryIntervals(dm.addr, mm->p, mm->i);
+    mm->p = dm.addr;
+    mm->n = gran / sizeof(*mm->p);
+  } else {
+    size = ROUNDUP(mm->n * sizeof(*mm->p), gran);
+    base += size;
+    if (IsAsan()) {
+      shad = (char *)(((intptr_t)base >> 3) + 0x7fff8000);
+      dm = sys_mmap(shad, gran >> 3, prot, flags, -1, 0);
+      if (!dm.addr) {
+        SYSDEBUG("ExtendMemoryIntervals() fail #3");
+        return false;
+      }
+    }
+    dm = sys_mmap(base, gran, prot, flags, -1, 0);
+    if (!dm.addr) {
+      SYSDEBUG("ExtendMemoryIntervals() fail #4");
+      return false;
+    }
+    mm->n = (size + gran) / sizeof(*mm->p);
+  }
+  assert(AreMemoryIntervalsOk(mm));
+  return true;
+}
+
+noasan int CreateMemoryInterval(struct MemoryIntervals *mm, int i) {
+  /* asan runtime depends on this function */
+  int rc;
+  rc = 0;
   assert(i >= 0);
   assert(i <= mm->i);
-  assert(mm->i < ARRAYLEN(mm->p));
-  MoveMemoryNoAsan(mm->p + i + 1, mm->p + i,
-                   (intptr_t)(mm->p + mm->i) - (intptr_t)(mm->p + i));
-  ++mm->i;
+  assert(mm->n >= 0);
+  if (UNLIKELY(mm->i == mm->n) && !ExtendMemoryIntervals(mm)) return enomem();
+  MoveMemoryIntervals(mm->p + i + 1, mm->p + i, mm->i++ - i);
+  return 0;
 }
 
 static noasan int PunchHole(struct MemoryIntervals *mm, int x, int y, int i) {
-  if (mm->i == ARRAYLEN(mm->p)) return enomem();
-  CreateMemoryInterval(mm, i);
+  if (CreateMemoryInterval(mm, i) == -1) return -1;
   mm->p[i].y = x - 1;
   mm->p[i + 1].x = y + 1;
   return 0;
@@ -226,6 +171,7 @@ noasan int ReleaseMemoryIntervals(struct MemoryIntervals *mm, int x, int y,
 
 noasan int TrackMemoryInterval(struct MemoryIntervals *mm, int x, int y, long h,
                                int prot, int flags) {
+  /* asan runtime depends on this function */
   unsigned i;
   assert(y >= x);
   assert(AreMemoryIntervalsOk(mm));
@@ -242,8 +188,7 @@ noasan int TrackMemoryInterval(struct MemoryIntervals *mm, int x, int y, long h,
              prot == mm->p[i].prot && flags == mm->p[i].flags) {
     mm->p[i].x = x;
   } else {
-    if (mm->i == ARRAYLEN(mm->p)) return enomem();
-    CreateMemoryInterval(mm, i);
+    if (CreateMemoryInterval(mm, i) == -1) return -1;
     mm->p[i].x = x;
     mm->p[i].y = y;
     mm->p[i].h = h;

@@ -41,10 +41,11 @@ LIBC_CALLS_A_DIRECTDEPS =				\
 	LIBC_INTRIN					\
 	LIBC_NEXGEN32E					\
 	LIBC_NT_ADVAPI32				\
+	LIBC_NT_IPHLPAPI				\
 	LIBC_NT_KERNEL32				\
 	LIBC_NT_NTDLL					\
+	LIBC_NT_POWERPROF				\
 	LIBC_NT_WS2_32					\
-	LIBC_NT_IPHLPAPI				\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_SYSV_CALLS					\
@@ -66,6 +67,8 @@ o/$(MODE)/libc/calls/raise.o:				\
 		OVERRIDE_COPTS +=			\
 			$(NO_MAGIC)
 
+o/$(MODE)/libc/calls/termios2linux.o			\
+o/$(MODE)/libc/calls/termios2host.o			\
 o/$(MODE)/libc/calls/sigenter-freebsd.o			\
 o/$(MODE)/libc/calls/sigenter-netbsd.o			\
 o/$(MODE)/libc/calls/sigenter-openbsd.o			\
@@ -73,6 +76,25 @@ o/$(MODE)/libc/calls/sigenter-xnu.o			\
 o/$(MODE)/libc/calls/ntcontext2linux.o:			\
 		OVERRIDE_COPTS +=			\
 			-O3
+
+# TODO(jart): make va_arg optimize well in default mode
+o//libc/calls/ioctl.o					\
+o//libc/calls/ioctl_default.o				\
+o//libc/calls/ioctl_fioclex-nt.o			\
+o//libc/calls/ioctl_fioclex.o				\
+o//libc/calls/ioctl_siocgifconf-nt.o			\
+o//libc/calls/ioctl_siocgifconf.o			\
+o//libc/calls/ioctl_tcgets-nt.o				\
+o//libc/calls/ioctl_tcgets.o				\
+o//libc/calls/ioctl_tcsets-nt.o				\
+o//libc/calls/ioctl_tcsets.o				\
+o//libc/calls/ioctl_tiocgwinsz-nt.o			\
+o//libc/calls/ioctl_tiocgwinsz.o			\
+o//libc/calls/ioctl_tiocswinsz-nt.o			\
+o//libc/calls/ioctl_tiocswinsz.o			\
+o//libc/calls/fcntl.o:					\
+		OVERRIDE_CFLAGS +=			\
+			-Os
 
 o/$(MODE)/libc/calls/execl.o				\
 o/$(MODE)/libc/calls/execle.o				\

@@ -30,6 +30,7 @@
 #include "libc/calls/typedef/sigaction_f.h"
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
@@ -48,12 +49,12 @@
     autotype((S2).B) b = (typeof((S2).B))(S1).B;           \
     autotype((S2).C) c = (typeof((S2).C))(S1).C;           \
     typeof((S2).D) d;                                      \
-    memset(&d, 0, sizeof(d));                              \
+    bzero(&d, sizeof(d));                                  \
     memcpy(&d, &((S1).D), MIN(sizeof(d), sizeof((S1).D))); \
     (S2).A = a;                                            \
     (S2).B = b;                                            \
     (S2).C = c;                                            \
-    memset(&((S2).D), 0, sizeof((S2).D));                  \
+    bzero(&((S2).D), sizeof((S2).D));                      \
     memcpy(&((S2).D), &d, MIN(sizeof(d), sizeof((S2).D))); \
   } while (0);
 #endif
@@ -141,18 +142,23 @@ static void sigaction_native2cosmo(union metasigaction *sa) {
  * @vforksafe
  */
 int(sigaction)(int sig, const struct sigaction *act, struct sigaction *oldact) {
+  _Static_assert((sizeof(struct sigaction) > sizeof(struct sigaction_linux) &&
+                  sizeof(struct sigaction) > sizeof(struct sigaction_xnu_in) &&
+                  sizeof(struct sigaction) > sizeof(struct sigaction_xnu_out) &&
+                  sizeof(struct sigaction) > sizeof(struct sigaction_freebsd) &&
+                  sizeof(struct sigaction) > sizeof(struct sigaction_openbsd) &&
+                  sizeof(struct sigaction) > sizeof(struct sigaction_netbsd)),
+                 "sigaction cosmo abi needs tuning");
   int64_t arg4, arg5;
   int rc, rva, oldrva;
   struct sigaction *ap, copy;
-  assert(sizeof(struct sigaction) > sizeof(struct sigaction_linux) &&
-         sizeof(struct sigaction) > sizeof(struct sigaction_xnu_in) &&
-         sizeof(struct sigaction) > sizeof(struct sigaction_xnu_out) &&
-         sizeof(struct sigaction) > sizeof(struct sigaction_freebsd) &&
-         sizeof(struct sigaction) > sizeof(struct sigaction_openbsd) &&
-         sizeof(struct sigaction) > sizeof(struct sigaction_netbsd));
   if (IsMetal()) return enosys(); /* TODO: Signals on Metal */
   if (!(0 < sig && sig < NSIG)) return einval();
   if (sig == SIGKILL || sig == SIGSTOP) return einval();
+  if (IsAsan() && ((act && !__asan_is_valid(act, sizeof(*act))) ||
+                   (oldact && !__asan_is_valid(oldact, sizeof(*oldact))))) {
+    return efault();
+  }
   if (!act) {
     rva = (int32_t)(intptr_t)SIG_DFL;
   } else if ((intptr_t)act->sa_handler < kSigactionMinRva) {
@@ -211,7 +217,7 @@ int(sigaction)(int sig, const struct sigaction *act, struct sigaction *oldact) {
     }
   } else {
     if (oldact) {
-      memset(oldact, 0, sizeof(*oldact));
+      bzero(oldact, sizeof(*oldact));
     }
     rc = 0;
   }

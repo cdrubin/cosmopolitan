@@ -18,9 +18,11 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/bits/bits.h"
+#include "libc/bits/weaken.h"
 #include "libc/intrin/repmovsb.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/kompressor.h"
+#include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/str/undeflate.h"
 
@@ -74,7 +76,7 @@ static uint32_t undeflatetree(struct DeflateState *ds, uint32_t *tree,
   size_t i, len;
   uint32_t code, slot;
   uint16_t codes[16], first[16], counts[16];
-  memset(counts, 0, sizeof(counts));
+  bzero(counts, sizeof(counts));
   for (i = 0; i < symcount; i++) {
     counts[lens[i]]++;
   }
@@ -137,11 +139,12 @@ ssize_t undeflate(void *output, size_t outputsize, void *input,
   struct DeflateHold hold;
   bool isfinalblock;
   size_t i, nlit, ndist;
-  uint8_t *ip, *op, *si, b, al, last, compressiontype;
+  uint8_t *ip, *ipe, *op, *si, b, al, last, compressiontype;
   uint32_t j, l, len, sym, tlit, tdist, tlen, nlen;
 
   op = output;
   ip = input;
+  ipe = ip + inputsize;
   hold.word = 0;
   hold.bits = 0;
   isfinalblock = 0;

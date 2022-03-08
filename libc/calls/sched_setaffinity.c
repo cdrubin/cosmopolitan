@@ -28,9 +28,9 @@
 #include "libc/nt/thread.h"
 #include "libc/str/str.h"
 
-static textwindows noinline int sys_sched_setaffinity_nt(int pid,
-                                                     uint64_t bitsetsize,
-                                                     const void *bitset) {
+static textwindows dontinline int sys_sched_setaffinity_nt(int pid,
+                                                         uint64_t bitsetsize,
+                                                         const void *bitset) {
   int rc;
   uintptr_t mask;
   int64_t handle;

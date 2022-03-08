@@ -42,7 +42,6 @@
 #     ASFLAGS      assembler flags (don't use -Wa, frontend prefix)
 #     TARGET_ARCH  microarchitecture flags (e.g. -march=native)
 
-V ?= 1
 LC_ALL = C
 SOURCE_DATE_EPOCH = 0
 
@@ -70,24 +69,30 @@ GCC = o/third_party/gcc/bin/x86_64-linux-musl-gcc
 STRIP = o/third_party/gcc/bin/x86_64-linux-musl-strip
 OBJCOPY = o/third_party/gcc/bin/x86_64-linux-musl-objcopy
 OBJDUMP = o/third_party/gcc/bin/x86_64-linux-musl-objdump
-ADDR2LINE = o/third_party/gcc/bin/x86_64-linux-musl-addr2line
+ADDR2LINE = $(shell pwd)/o/third_party/gcc/bin/x86_64-linux-musl-addr2line
 
 COMMA := ,
 PWD := $(shell pwd)
 IMAGE_BASE_VIRTUAL ?= 0x400000
 HELLO := $(shell build/hello)
 TMPDIR := $(shell build/findtmp)
-COMPILE := $(shell build/getcompile) -V$(shell build/getccversion $(CC))
+SPAWNER := $(shell build/getcompile) -V$(shell build/getccversion $(CC))
+COMPILE = $(SPAWNER) $(HARNESSFLAGS) $(QUOTA)
 
 export ADDR2LINE
 export LC_ALL
 export MODE
 export SOURCE_DATE_EPOCH
 export TMPDIR
-export V
 
 FTRACE =								\
 	-pg
+
+BACKTRACES =								\
+	-fno-schedule-insns2						\
+	-fno-omit-frame-pointer						\
+	-fno-optimize-sibling-calls					\
+	-mno-omit-leaf-frame-pointer
 
 SANITIZER =								\
 	-fsanitize=address
@@ -95,7 +100,6 @@ SANITIZER =								\
 NO_MAGIC =								\
 	-mno-fentry							\
 	-fno-stack-protector						\
-	-fno-sanitize=all						\
 	-fwrapv
 
 OLD_CODE =								\
@@ -127,9 +131,7 @@ DEFAULT_COPTS =								\
 	-fno-gnu-unique							\
 	-fstrict-aliasing						\
 	-fstrict-overflow						\
-	-fno-omit-frame-pointer						\
-	-fno-semantic-interposition					\
-	-mno-omit-leaf-frame-pointer
+	-fno-semantic-interposition
 
 MATHEMATICAL =								\
 	-O3								\
@@ -163,13 +165,16 @@ DEFAULT_ASFLAGS =							\
 DEFAULT_LDFLAGS =							\
 	-static								\
 	-nostdlib							\
-	-m elf_x86_64							\
+	-melf_x86_64							\
 	--gc-sections							\
 	--build-id=none							\
 	--no-dynamic-linker						\
-	-z max-page-size=0x1000
+	-zmax-page-size=0x1000
 
 ZIPOBJ_FLAGS =								\
+	 -b$(IMAGE_BASE_VIRTUAL)
+
+PYFLAGS =								\
 	 -b$(IMAGE_BASE_VIRTUAL)
 
 ASONLYFLAGS =								\
@@ -181,7 +186,6 @@ DEFAULT_LDLIBS =
 
 MCA =	llvm-mca-10							\
 	-mtriple=x86_64-pc-linux-gnu					\
-	-iterations=3							\
 	-instruction-info						\
 	-iterations=3							\
 	-all-stats							\
@@ -205,7 +209,7 @@ cpp.flags =								\
 	$(CONFIG_CPPFLAGS)						\
 	$(CPPFLAGS)							\
 	$(OVERRIDE_CPPFLAGS)						\
-	-include libc/integral/normalize.inc
+	-includelibc/integral/normalize.inc
 
 copt.flags =								\
 	$(TARGET_ARCH)							\

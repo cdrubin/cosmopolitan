@@ -37,6 +37,7 @@
  * @return 0 on success, or -1 w/ errno
  * @see libc/sysv/consts.sh
  * @asyncsignalsafe
+ * @vforksafe
  */
 int xsigaction(int sig, void *handler, uint64_t flags, uint64_t mask,
                struct sigaction *old) {
@@ -44,7 +45,7 @@ int xsigaction(int sig, void *handler, uint64_t flags, uint64_t mask,
      parity; (2) compiler emits 1/3rd as much binary code at call-site;
      and (3) it removes typing that just whines without added saftey. */
   struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
+  bzero(&sa, sizeof(sa));
   sa.sa_handler = handler;
   sa.sa_flags = flags;
   memcpy(&sa.sa_mask, &mask, sizeof(mask));

@@ -29,6 +29,7 @@
 #define INITIALIZE(x)      x = 0
 
 STATIC_YOINK("zip_uri_support");
+STATIC_YOINK("usr/share/zoneinfo/");
 STATIC_YOINK("usr/share/zoneinfo/Beijing");
 STATIC_YOINK("usr/share/zoneinfo/Berlin");
 STATIC_YOINK("usr/share/zoneinfo/Boulder");
@@ -1170,11 +1171,11 @@ tzsetwall(void)
 	if (lcl_is_set < 0)
 		return;
 	lcl_is_set = -1;
-
 #ifdef ALL_STATE
 	if (lclptr == NULL) {
-		lclptr = (struct state *) malloc(sizeof *lclptr);
-		if (lclptr == NULL) {
+		if ((lclptr = malloc(sizeof(*lclptr)))) {
+			__cxa_atexit(free, lclptr, 0);
+		} else {
 			settzname();	/* all we can do */
 			return;
 		}
@@ -1210,8 +1211,9 @@ tzset(void)
 
 #ifdef ALL_STATE
 	if (lclptr == NULL) {
-		lclptr = (struct state *) malloc(sizeof *lclptr);
-		if (lclptr == NULL) {
+		if ((lclptr = malloc(sizeof(*lclptr)))) {
+			__cxa_atexit(free, lclptr, 0);
+		} else {
 			settzname();	/* all we can do */
 			return;
 		}
@@ -1371,8 +1373,11 @@ gmtsub(
 	if (!gmt_is_set) {
 		gmt_is_set = TRUE;
 #ifdef ALL_STATE
-		gmtptr = (struct state *) malloc(sizeof *gmtptr);
-		if (gmtptr != NULL)
+		if (!gmtptr) {
+			gmtptr = malloc(sizeof(*gmtptr));
+			__cxa_atexit(free, gmtptr, 0);
+		}
+		if (gmtptr)
 #endif /* defined ALL_STATE */
 			gmtload(gmtptr);
 	}

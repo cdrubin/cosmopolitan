@@ -35,7 +35,7 @@
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 
-asm(".ident\t\"\\n\\n\
+asm(".ident\t\"\\n\
 getopt (BSD-3)\\n\
 Copyright 1987, 1993, 1994 The Regents of the University of California\"");
 asm(".include \"libc/disclaimer.inc\"");
@@ -77,6 +77,15 @@ char *optarg;
 
 hidden char *getopt_place;
 char kGetoptEmsg[1] hidden;
+
+static void getopt_print_badch(const char *s) {
+  fputs(program_invocation_name, stderr);
+  fputs(": ", stderr);
+  fputs(s, stderr);
+  fputs(" -- ", stderr);
+  fputc(optopt, stderr);
+  fputc('\n', stderr);
+}
 
 /**
  * Parses argc/argv argument vector, e.g.
@@ -134,11 +143,8 @@ int getopt(int nargc, char *const nargv[], const char *ostr) {
   /* See if option letter is one the caller wanted... */
   if (optopt == ':' || (oli = strchr(ostr, optopt)) == NULL) {
     if (*getopt_place == 0) ++optind;
-    if (opterr && *ostr != ':') {
-      fprintf(stderr, "%s%s%c\n", program_invocation_name,
-              ": illegal option -- ", optopt);
-    }
-    return (BADCH);
+    if (opterr && *ostr != ':') getopt_print_badch("illegal option");
+    return BADCH;
   }
   /* Does this option need an argument? */
   if (oli[1] != ':') {
@@ -155,11 +161,9 @@ int getopt(int nargc, char *const nargv[], const char *ostr) {
     } else {
       /* option-argument absent */
       getopt_place = kGetoptEmsg;
-      if (*ostr == ':') return (BADARG);
-      if (opterr)
-        fprintf(stderr, "%s%s%c\n", program_invocation_name,
-                ": option requires an argument -- ", optopt);
-      return (BADCH);
+      if (*ostr == ':') return BADARG;
+      if (opterr) getopt_print_badch("option requires an argument");
+      return BADCH;
     }
     getopt_place = kGetoptEmsg;
     ++optind;

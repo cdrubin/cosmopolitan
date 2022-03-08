@@ -24,13 +24,17 @@
  */
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/internal.h"
 #include "libc/calls/ioctl.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
+#include "libc/calls/typedef/sighandler_t.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/limits.h"
+#include "libc/nt/synchronization.h"
 #include "libc/runtime/dlfcn.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sock/select.h"
@@ -50,6 +54,8 @@ QuickJS (MIT License)\\n\
 Copyright (c) 2017-2021 Fabrice Bellard\\n\
 Copyright (c) 2017-2021 Charlie Gordon\"");
 asm(".include \"libc/disclaimer.inc\"");
+
+#define MAXPATH 1024
 
 /* clang-format off */
 
@@ -497,7 +503,7 @@ int js_module_set_import_meta(JSContext *ctx, JSValueConst func_val,
                               JS_BOOL use_realpath, JS_BOOL is_main)
 {
     JSModuleDef *m;
-    char buf[PATH_MAX + 16];
+    char buf[MAXPATH + 16];
     JSValue meta_obj;
     JSAtom module_name_atom;
     const char *module_name;
@@ -1737,8 +1743,7 @@ static JSValue js_os_ttySetRaw(JSContext *ctx, JSValueConst this_val,
     
     if (JS_ToInt32(ctx, &fd, argv[0]))
         return JS_EXCEPTION;
-    
-    memset(&tty, 0, sizeof(tty));
+    bzero(&tty, sizeof(tty));
     tcgetattr(fd, &tty);
     oldtty = tty;
 
@@ -2063,9 +2068,14 @@ static void call_handler(JSContext *ctx, JSValueConst func)
     JS_FreeValue(ctx, ret);
 }
 
-#if defined(_WIN32)
+#if defined(COSMO)
+#define DWORD	uint32_t
+#define HANDLE	int64_t
+#define _get_osfhandle(fd)	g_fds.p[fd].handle
+#define INFINITE		((DWORD)-1)
+#define WAIT_OBJECT_0		((DWORD)0)
 
-static int js_os_poll(JSContext *ctx)
+static int js_os_poll_nt(JSContext *ctx)
 {
     JSRuntime *rt = JS_GetRuntime(ctx);
     JSThreadState *ts = JS_GetRuntimeOpaque(rt);
@@ -2138,7 +2148,6 @@ static int js_os_poll(JSContext *ctx)
     }
     return 0;
 }
-#else
 
 #ifdef USE_WORKER
 
@@ -2219,6 +2228,9 @@ static int handle_posted_message(JSRuntime *rt, JSContext *ctx,
 
 static int js_os_poll(JSContext *ctx)
 {
+    if (IsWindows()) {
+        return js_os_poll_nt(ctx);
+    }
     JSRuntime *rt = JS_GetRuntime(ctx);
     JSThreadState *ts = JS_GetRuntimeOpaque(rt);
     int ret, fd_max, min_delay;
@@ -2229,8 +2241,7 @@ static int js_os_poll(JSContext *ctx)
     struct timeval tv, *tvp;
 
     /* only check signals in the main thread */
-    if (!ts->recv_pipe &&
-        unlikely(os_pending_signals != 0)) {
+    if (!ts->recv_pipe && UNLIKELY(os_pending_signals != 0)) {
         JSOSSignalHandler *sh;
         uint64_t mask;
         
@@ -2360,7 +2371,7 @@ static JSValue make_string_error(JSContext *ctx,
 static JSValue js_os_getcwd(JSContext *ctx, JSValueConst this_val,
                             int argc, JSValueConst *argv)
 {
-    char buf[PATH_MAX];
+    char buf[MAXPATH];
     int err;
     
     if (!getcwd(buf, sizeof(buf))) {
@@ -2626,24 +2637,12 @@ static JSValue js_os_sleep(JSContext *ctx, JSValueConst this_val,
     return JS_NewInt32(ctx, ret);
 }
 
-#if defined(_WIN32)
-static char *realpath(const char *path, char *buf)
-{
-    if (!_fullpath(buf, path, PATH_MAX)) {
-        errno = ENOENT;
-        return NULL;
-    } else {
-        return buf;
-    }
-}
-#endif
-
 /* return [path, errorcode] */
 static JSValue js_os_realpath(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
 {
     const char *path;
-    char buf[PATH_MAX], *res;
+    char buf[MAXPATH], *res;
     int err;
 
     path = JS_ToCString(ctx, argv[0]);
@@ -2686,7 +2685,7 @@ static JSValue js_os_readlink(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
 {
     const char *path;
-    char buf[PATH_MAX];
+    char buf[MAXPATH];
     int err;
     ssize_t res;
     
@@ -3314,7 +3313,7 @@ static JSValue js_worker_ctor(JSContext *ctx, JSValueConst new_target,
     args = malloc(sizeof(*args));
     if (!args)
         goto oom_fail;
-    memset(args, 0, sizeof(*args));
+    bzero(args, sizeof(*args));
     args->filename = strdup(filename);
     args->basename = strdup(basename);
 
@@ -3711,7 +3710,7 @@ void js_std_init_handlers(JSRuntime *rt)
         fprintf(stderr, "Could not allocate memory for the worker");
         exit(1);
     }
-    memset(ts, 0, sizeof(*ts));
+    bzero(ts, sizeof(*ts));
     init_list_head(&ts->os_rw_handlers);
     init_list_head(&ts->os_signal_handlers);
     init_list_head(&ts->os_timers);
@@ -3723,7 +3722,7 @@ void js_std_init_handlers(JSRuntime *rt)
     /* set the SharedArrayBuffer memory handlers */
     {
         JSSharedArrayBufferFunctions sf;
-        memset(&sf, 0, sizeof(sf));
+        bzero(&sf, sizeof(sf));
         sf.sab_alloc = js_sab_alloc;
         sf.sab_free = js_sab_free;
         sf.sab_dup = js_sab_dup;

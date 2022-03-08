@@ -30,6 +30,8 @@
 #include "third_party/infozip/zip/ttyio.h"
 #include "libc/calls/calls.h"
 #include "libc/log/log.h"
+#include "libc/calls/struct/sigaction.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/stdio/temp.h"
 #ifndef NO_STDLIB_H
 #  include "libc/mem/mem.h"
@@ -386,10 +388,10 @@ int main(argc, argv)
     /* Informational messages are written to stdout. */
     mesg = stdout;
 
-    init_upper();               /* build case map table */
-
+#ifndef USE_ZLIB
     crc_32_tab = get_crc_table();
                                 /* initialize crc table for crypt */
+#endif
 
     /* Go through args */
     zipfile = tempzip = NULL;

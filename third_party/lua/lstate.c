@@ -165,7 +165,7 @@ void luaE_checkcstack (lua_State *L) {
 
 LUAI_FUNC void luaE_incCstack (lua_State *L) {
   L->nCcalls++;
-  if (unlikely(getCcalls(L) >= LUAI_MAXCCALLS))
+  if (l_unlikely(getCcalls(L) >= LUAI_MAXCCALLS))
     luaE_checkcstack(L);
 }
 
@@ -275,6 +275,16 @@ static void close_state (lua_State *L) {
 }
 
 
+/**
+ * lua_newthread [-0, +1, m]
+ *
+ * Creates a new thread, pushes it on the stack, and returns a pointer to a
+ * lua_State that represents this new thread. The new thread returned by this
+ * function shares with the original thread its global environment, but has
+ * an independent execution stack.
+ *
+ * Threads are subject to garbage collection, like any Lua object.
+ */
 LUA_API lua_State *lua_newthread (lua_State *L) {
   global_State *g;
   lua_State *L1;
@@ -372,6 +382,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
   g->panic = NULL;
   g->gcstate = GCSpause;
   g->gckind = KGC_INC;
+  g->gcstopem = 0;
   g->gcemergency = 0;
   g->finobj = g->tobefnz = g->fixedgc = NULL;
   g->firstold1 = g->survival = g->old1 = g->reallyold = NULL;

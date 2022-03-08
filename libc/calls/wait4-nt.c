@@ -16,9 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/rusage.h"
+#include "libc/calls/sysdebug.internal.h"
 #include "libc/fmt/conv.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/accounting.h"
@@ -62,22 +64,36 @@ textwindows int sys_wait4_nt(int pid, int *opt_out_wstatus, int options,
     dwExitCode = kNtStillActive;
     if (options & WNOHANG) {
       i = WaitForMultipleObjects(count, handles, false, 0);
-      if (i == kNtWaitTimeout) return 0;
+      if (i == kNtWaitTimeout) {
+        return 0;
+      }
     } else {
       i = WaitForMultipleObjects(count, handles, false, -1);
     }
-    if (i == kNtWaitFailed) return __winerr();
-    if (!GetExitCodeProcess(handles[i], &dwExitCode)) return __winerr();
+    if (i == kNtWaitFailed) {
+      SYSDEBUG("WaitForMultipleObjects failed %d", GetLastError());
+      return __winerr();
+    }
+    assert(__isfdkind(pids[i], kFdProcess));
+    if (!GetExitCodeProcess(handles[i], &dwExitCode)) {
+      SYSDEBUG("GetExitCodeProcess failed %d", GetLastError());
+      return __winerr();
+    }
     if (dwExitCode == kNtStillActive) continue;
     if (opt_out_wstatus) { /* @see WEXITSTATUS() */
       *opt_out_wstatus = (dwExitCode & 0xff) << 8;
     }
     if (opt_out_rusage) {
-      memset(opt_out_rusage, 0, sizeof(*opt_out_rusage));
-      GetProcessTimes(GetCurrentProcess(), &createfiletime, &exitfiletime,
-                      &kernelfiletime, &userfiletime);
-      FileTimeToTimeVal(&opt_out_rusage->ru_utime, userfiletime);
-      FileTimeToTimeVal(&opt_out_rusage->ru_stime, kernelfiletime);
+      bzero(opt_out_rusage, sizeof(*opt_out_rusage));
+      if (GetProcessTimes(g_fds.p[pids[i]].handle, &createfiletime,
+                          &exitfiletime, &kernelfiletime, &userfiletime)) {
+        opt_out_rusage->ru_utime =
+            WindowsDurationToTimeVal(ReadFileTime(userfiletime));
+        opt_out_rusage->ru_stime =
+            WindowsDurationToTimeVal(ReadFileTime(kernelfiletime));
+      } else {
+        SYSDEBUG("GetProcessTimes failed %d", GetLastError());
+      }
     }
     CloseHandle(g_fds.p[pids[i]].handle);
     g_fds.p[pids[i]].kind = kFdEmpty;

@@ -19,6 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -28,12 +29,10 @@
  * @param rlim specifies new resource limit
  * @return 0 on success or -1 w/ errno
  * @see libc/sysv/consts.sh
+ * @vforksafe
  */
 int setrlimit(int resource, const struct rlimit *rlim) {
   if (resource == 127) return einval();
-  if (!IsWindows()) {
-    return sys_setrlimit(resource, rlim);
-  } else {
-    return enosys(); /* TODO(jart): Implement me! */
-  }
+  if (IsAsan() && !__asan_is_valid(rlim, sizeof(*rlim))) return efault();
+  return sys_setrlimit(resource, rlim);
 }

@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/sysdebug.internal.h"
 #include "libc/calls/wait4.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
@@ -37,19 +38,21 @@
  */
 int wait4(int pid, int *opt_out_wstatus, int options,
           struct rusage *opt_out_rusage) {
-  if (IsAsan()) {
-    if (opt_out_wstatus &&
-        !__asan_is_valid(opt_out_wstatus, sizeof(*opt_out_wstatus))) {
-      return efault();
-    }
-    if (opt_out_rusage &&
-        !__asan_is_valid(opt_out_rusage, sizeof(*opt_out_rusage))) {
-      return efault();
-    }
+  int rc, ws;
+  if (IsAsan() &&
+      ((opt_out_wstatus &&
+        !__asan_is_valid(opt_out_wstatus, sizeof(*opt_out_wstatus))) ||
+       (opt_out_rusage &&
+        !__asan_is_valid(opt_out_rusage, sizeof(*opt_out_rusage))))) {
+    return efault();
   }
+  ws = 0;
   if (!IsWindows()) {
-    return sys_wait4(pid, opt_out_wstatus, options, opt_out_rusage);
+    rc = sys_wait4(pid, &ws, options, opt_out_rusage);
   } else {
-    return sys_wait4_nt(pid, opt_out_wstatus, options, opt_out_rusage);
+    rc = sys_wait4_nt(pid, &ws, options, opt_out_rusage);
   }
+  SYSDEBUG("waitpid(%d, [0x%x], %d) -> [%d]", pid, ws, options, rc);
+  if (opt_out_wstatus) *opt_out_wstatus = ws;
+  return rc;
 }

@@ -16,13 +16,16 @@ THIRD_PARTY_MBEDTLS_A_CHECKS =						\
 	$(THIRD_PARTY_MBEDTLS_A_HDRS:%=o/$(MODE)/%.ok)
 
 THIRD_PARTY_MBEDTLS_A_DIRECTDEPS =					\
+	LIBC_BITS							\
 	LIBC_CALLS							\
+	LIBC_DNS							\
 	LIBC_FMT							\
 	LIBC_INTRIN							\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
 	LIBC_RAND							\
 	LIBC_RUNTIME							\
+	LIBC_SOCK							\
 	LIBC_LOG							\
 	LIBC_STDIO							\
 	LIBC_STR							\
@@ -31,7 +34,8 @@ THIRD_PARTY_MBEDTLS_A_DIRECTDEPS =					\
 	LIBC_UNICODE							\
 	NET_HTTP							\
 	THIRD_PARTY_COMPILER_RT						\
-	THIRD_PARTY_GDTOA
+	THIRD_PARTY_GDTOA						\
+	THIRD_PARTY_ZLIB
 
 THIRD_PARTY_MBEDTLS_A_DEPS :=						\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_MBEDTLS_A_DIRECTDEPS),$($(x))))
@@ -50,19 +54,28 @@ $(THIRD_PARTY_MBEDTLS_A_OBJS):						\
 				-fdata-sections				\
 				-ffunction-sections
 
-o/$(MODE)/third_party/mbedtls/bignum.o					\
-o/$(MODE)/third_party/mbedtls/ecp.o					\
-o/$(MODE)/third_party/mbedtls/ecp_curves.o:				\
+o/$(MODE)/third_party/mbedtls/everest.o:				\
 			OVERRIDE_CFLAGS +=				\
 				-O3
 
-o/$(MODE)/third_party/mbedtls/everest.o:				\
+o/$(MODE)/third_party/mbedtls/bigmul4.o					\
+o/$(MODE)/third_party/mbedtls/bigmul6.o:				\
 			OVERRIDE_CFLAGS +=				\
-				-Os
+				-O2
 
-# tail recursion is so important because everest was written in f*
-o/$(MODE)/third_party/mbedtls/everest.o:				\
+o/$(MODE)/third_party/mbedtls/shiftright-avx.o:				\
 			OVERRIDE_CFLAGS +=				\
+				-O3 -mavx
+
+o/$(MODE)/third_party/mbedtls/shiftright2-avx.o:			\
+			OVERRIDE_CFLAGS +=				\
+				-O3 -mavx
+
+o/$(MODE)/third_party/mbedtls/zeroize.o:				\
+			OVERRIDE_CFLAGS +=				\
+				-O3					\
+				-x-no-pg				\
+				-fomit-frame-pointer			\
 				-foptimize-sibling-calls
 
 THIRD_PARTY_MBEDTLS_LIBS = $(foreach x,$(THIRD_PARTY_MBEDTLS_ARTIFACTS),$($(x)))

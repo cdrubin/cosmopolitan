@@ -167,8 +167,9 @@ COSMOPOLITAN_C_START_
 #define MBEDTLS_SSL_ARC4_ENABLED                0
 #define MBEDTLS_SSL_ARC4_DISABLED               1
 
-#define MBEDTLS_SSL_PRESET_DEFAULT              0
+#define MBEDTLS_SSL_PRESET_DEFAULT              MBEDTLS_SSL_PRESET_SUITEC
 #define MBEDTLS_SSL_PRESET_SUITEB               2
+#define MBEDTLS_SSL_PRESET_SUITEC               0
 
 #define MBEDTLS_SSL_CERT_REQ_CA_LIST_ENABLED       1
 #define MBEDTLS_SSL_CERT_REQ_CA_LIST_DISABLED      0
@@ -1074,6 +1075,7 @@ struct mbedtls_ssl_config
     unsigned int dtls_srtp_mki_support : 1; /* support having mki_value
                                                in the use_srtp extension     */
 #endif
+    bool disable_compression;
 };
 
 struct mbedtls_ssl_context
@@ -1112,7 +1114,8 @@ struct mbedtls_ssl_context
     mbedtls_ssl_session *session;               /*!<  negotiated session data     */
     mbedtls_ssl_session *session_negotiate;     /*!<  session data in negotiation */
     mbedtls_ssl_handshake_params *handshake;    /*!<  params required only during
-                                              the handshake process        */
+                                                      the handshake process        */
+    const mbedtls_ecp_curve_info *curve;
     /*
      * Record layer transformations
      */
@@ -1418,7 +1421,7 @@ int mbedtls_ssl_conf_dh_param_ctx( mbedtls_ssl_config *, mbedtls_dhm_context * )
 int mbedtls_ssl_conf_dtls_srtp_protection_profiles( mbedtls_ssl_config *, const mbedtls_ssl_srtp_profile * );
 int mbedtls_ssl_conf_max_frag_len( mbedtls_ssl_config *, unsigned char );
 int mbedtls_ssl_conf_own_cert( mbedtls_ssl_config *, mbedtls_x509_crt *, mbedtls_pk_context * );
-int mbedtls_ssl_conf_psk( mbedtls_ssl_config *, const unsigned char *, size_t, const unsigned char *,  size_t );
+int mbedtls_ssl_conf_psk( mbedtls_ssl_config *, const void *, size_t, const void *, size_t );
 int mbedtls_ssl_context_load( mbedtls_ssl_context *,  const unsigned char *, size_t );
 int mbedtls_ssl_context_save( mbedtls_ssl_context *, unsigned char *, size_t, size_t * );
 int mbedtls_ssl_get_ciphersuite_id( const char * );
@@ -1441,7 +1444,7 @@ int mbedtls_ssl_set_client_transport_id( mbedtls_ssl_context *, const unsigned c
 int mbedtls_ssl_set_hostname( mbedtls_ssl_context *, const char * );
 int mbedtls_ssl_set_hs_ecjpake_password( mbedtls_ssl_context *, const unsigned char *, size_t );
 int mbedtls_ssl_set_hs_own_cert( mbedtls_ssl_context *, mbedtls_x509_crt *, mbedtls_pk_context * );
-int mbedtls_ssl_set_hs_psk( mbedtls_ssl_context *, const unsigned char *, size_t );
+int mbedtls_ssl_set_hs_psk( mbedtls_ssl_context *, const void *, size_t );
 int mbedtls_ssl_set_session( mbedtls_ssl_context *, const mbedtls_ssl_session * );
 int mbedtls_ssl_setup( mbedtls_ssl_context *, const mbedtls_ssl_config * );
 int mbedtls_ssl_tls_prf( const mbedtls_tls_prf_types , const unsigned char *, size_t, const char *, const unsigned char *, size_t, unsigned char *, size_t );
@@ -1545,6 +1548,8 @@ forceinline int mbedtls_ssl_config_defaults( mbedtls_ssl_config *conf,
       return MBEDTLS_ERR_SSL_FEATURE_UNAVAILABLE;
   }
 }
+
+const char *GetSslStateName(mbedtls_ssl_states);
 
 COSMOPOLITAN_C_END_
 #endif /* COSMOPOLITAN_THIRD_PARTY_MBEDTLS_SSL_H_ */

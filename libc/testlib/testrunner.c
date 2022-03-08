@@ -19,20 +19,23 @@
 #include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/check.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/process.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/stdio/stdio.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
 static int x;
-static char cwd[PATH_MAX];
-static char tmp[PATH_MAX];
+char g_testlib_olddir[PATH_MAX];
+char g_testlib_tmpdir[PATH_MAX];
 
 void testlib_finish(void) {
   if (g_testlib_failed) {
@@ -48,15 +51,22 @@ wontreturn void testlib_abort(void) {
 }
 
 static void SetupTmpDir(void) {
-  snprintf(tmp, sizeof(tmp), "o/tmp/%s.%d.%d", program_invocation_short_name,
-           getpid(), x++);
-  CHECK_NE(-1, makedirs(tmp, 0755), "tmp=%s", tmp);
-  CHECK_NE(-1, chdir(tmp), "tmp=%s", tmp);
+  char *p = g_testlib_tmpdir;
+  p = __stpcpy(p, "o/tmp/");
+  p = __stpcpy(p, program_invocation_short_name), *p++ = '.';
+  p = __intcpy(p, __getpid()), *p++ = '.';
+  p = __intcpy(p, x++);
+  p[0] = '\0';
+  CHECK_NE(-1, makedirs(g_testlib_tmpdir, 0755), "%s", g_testlib_tmpdir);
+  CHECK_EQ(1, isdirectory(g_testlib_tmpdir), "%s", g_testlib_tmpdir);
+  CHECK_NOTNULL(realpath(g_testlib_tmpdir, g_testlib_tmpdir), "%`'s",
+                g_testlib_tmpdir);
+  CHECK_NE(-1, chdir(g_testlib_tmpdir), "%s", g_testlib_tmpdir);
 }
 
 static void TearDownTmpDir(void) {
-  CHECK_NE(-1, chdir(cwd));
-  CHECK_NE(-1, rmrf(tmp));
+  CHECK_NE(-1, chdir(g_testlib_olddir));
+  CHECK_NE(-1, rmrf(g_testlib_tmpdir));
 }
 
 /**
@@ -80,7 +90,7 @@ testonly void testlib_runtestcases(testfn_t *start, testfn_t *end,
    * @see ape/ape.lds
    */
   const testfn_t *fn;
-  CHECK_NOTNULL(getcwd(cwd, sizeof(cwd)));
+  CHECK_NOTNULL(getcwd(g_testlib_olddir, sizeof(g_testlib_olddir)));
   if (weaken(testlib_enable_tmp_setup_teardown_once)) SetupTmpDir();
   if (weaken(SetUpOnce)) weaken(SetUpOnce)();
   for (x = 0, fn = start; fn != end; ++fn) {

@@ -18,14 +18,25 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/bits/bits.h"
 #include "libc/bits/safemacros.internal.h"
+#include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/sigaction.h"
+#include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
+#include "libc/mem/mem.h"
 #include "libc/nexgen32e/x86feature.h"
+#include "libc/runtime/internal.h"
+#include "libc/runtime/memtrack.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
+#include "third_party/dlmalloc/dlmalloc.internal.h"
 #include "third_party/getopt/getopt.h"
 
 #define USAGE \
@@ -38,17 +49,19 @@ Flags:\n\
 \n"
 
 STATIC_YOINK("__die");
+STATIC_YOINK("__get_symbol_by_addr");
+STATIC_YOINK("testlib_quota_handlers");
 
 static bool runbenchmarks_;
 
-static testonly void PrintUsage(int rc, FILE *f) {
+void PrintUsage(int rc, FILE *f) {
   fputs("Usage: ", f);
   fputs(program_invocation_name, f);
   fputs(USAGE, f);
   exit(rc);
 }
 
-static testonly void GetOpts(int argc, char *argv[]) {
+void GetOpts(int argc, char *argv[]) {
   int opt;
   while ((opt = getopt(argc, argv, "?hbv")) != -1) {
     switch (opt) {
@@ -70,20 +83,25 @@ static testonly void GetOpts(int argc, char *argv[]) {
 /**
  * Generic test program main function.
  */
-testonly int main(int argc, char *argv[]) {
+noasan int main(int argc, char *argv[]) {
   const char *comdbg;
   __log_level = kLogInfo;
   GetOpts(argc, argv);
-  showcrashreports();
-  if ((comdbg = FindDebugBinary())) {
-    setenv("COMDBG", comdbg, true);
-  }
+  ShowCrashReports();
   g_testlib_shoulddebugbreak = IsDebuggerPresent(false);
   sys_getpid(); /* make strace easier to read */
   testlib_clearxmmregisters();
   testlib_runalltests();
   if (!g_testlib_failed && runbenchmarks_ && weaken(testlib_runallbenchmarks)) {
     weaken(testlib_runallbenchmarks)();
+    if (!g_testlib_failed) {
+      testlib_checkformemoryleaks();
+    }
+    if (!g_testlib_failed && IsRunningUnderMake()) {
+      return 254; /* compile.com considers this 0 and propagates output */
+    }
+  } else if (!g_testlib_failed) {
+    testlib_checkformemoryleaks();
   }
-  return min(255, g_testlib_failed);
+  exit(min(255, g_testlib_failed));
 }

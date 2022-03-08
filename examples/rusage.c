@@ -10,6 +10,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/sigbits.h"
 #include "libc/calls/struct/rusage.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/errno.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -106,6 +107,7 @@ int main(int argc, char *argv[]) {
     sigaction(SIGQUIT, &dflt, 0);
     sigprocmask(SIG_SETMASK, &savemask, 0);
     execvp(argv[1], argv + 1);
+    fprintf(stderr, "exec failed %d\n", errno);
     _Exit(127);
   }
   while (wait4(pid, &wstatus, 0, &rusage) == -1) {

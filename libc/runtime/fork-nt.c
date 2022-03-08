@@ -21,11 +21,13 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/ntspawn.h"
+#include "libc/calls/sysdebug.internal.h"
 #include "libc/fmt/itoa.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/nt2sysv.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/filemapflags.h"
+#include "libc/nt/enum/memflags.h"
 #include "libc/nt/enum/pageflags.h"
 #include "libc/nt/enum/startf.h"
 #include "libc/nt/enum/wt.h"
@@ -37,9 +39,10 @@
 #include "libc/nt/synchronization.h"
 #include "libc/nt/thread.h"
 #include "libc/runtime/directmap.internal.h"
-#include "libc/runtime/memtrack.h"
+#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
@@ -56,33 +59,42 @@ static textwindows noasan char16_t *ParseInt(char16_t *p, int64_t *x) {
   return p;
 }
 
-static noinline textwindows noasan void ForkIo(int64_t h, void *buf, size_t n,
+static dontinline textwindows noasan bool ForkIo(int64_t h, void *buf, size_t n,
                                                bool32 (*f)()) {
   char *p;
   size_t i;
   uint32_t x;
   for (p = buf, i = 0; i < n; i += x) {
-    f(h, p + i, n - i, &x, NULL);
+    if (!f(h, p + i, n - i, &x, NULL)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static dontinline textwindows noasan void WriteAll(int64_t h, void *buf,
+                                                 size_t n) {
+  if (!ForkIo(h, buf, n, WriteFile)) {
+    SYSDEBUG("fork() WriteFile(%zu) failed %d\n", n, GetLastError());
   }
 }
 
-static noinline textwindows noasan void WriteAll(int64_t h, void *buf,
-                                                 size_t n) {
-  ForkIo(h, buf, n, WriteFile);
-}
-
-static textwindows noinline noasan void ReadAll(int64_t h, void *buf,
+static textwindows dontinline noasan void ReadAll(int64_t h, void *buf,
                                                 size_t n) {
-  ForkIo(h, buf, n, ReadFile);
+  if (!ForkIo(h, buf, n, ReadFile)) {
+    SYSDEBUG("fork() ReadFile(%zu) failed %d\n", n, GetLastError());
+  }
 }
 
-textwindows noasan void WinMainForked(void) {
+textwindows noasan noinstrument void WinMainForked(void) {
   void *addr;
   jmp_buf jb;
+  long mapcount;
   uint64_t size;
   uint32_t i, varlen;
   struct DirectMap dm;
   int64_t reader, writer;
+  struct MemoryInterval *maps;
   char16_t var[21 + 1 + 21 + 1];
   varlen = GetEnvironmentVariable(u"_FORK", var, ARRAYLEN(var));
   if (!varlen) return;
@@ -90,29 +102,33 @@ textwindows noasan void WinMainForked(void) {
   SetEnvironmentVariable(u"_FORK", NULL);
   ParseInt(ParseInt(var, &reader), &writer);
   ReadAll(reader, jb, sizeof(jb));
-  ReadAll(reader, &_mmi.i, sizeof(_mmi.i));
-  for (i = 0; i < _mmi.i; ++i) {
-    ReadAll(reader, &_mmi.p[i], sizeof(_mmi.p[i]));
-    addr = (void *)((uint64_t)_mmi.p[i].x << 16);
-    size = ((uint64_t)(_mmi.p[i].y - _mmi.p[i].x) << 16) + FRAMESIZE;
-    if (_mmi.p[i].flags & MAP_PRIVATE) {
-      CloseHandle(_mmi.p[i].h);
-      _mmi.p[i].h =
-          sys_mmap_nt(addr, size, _mmi.p[i].prot, _mmi.p[i].flags, -1, 0)
-              .maphandle;
+  ReadAll(reader, &mapcount, sizeof(_mmi.i));
+  maps = GlobalAlloc(0, mapcount * sizeof(*_mmi.p));
+  ReadAll(reader, maps, mapcount * sizeof(*_mmi.p));
+  for (i = 0; i < mapcount; ++i) {
+    addr = (void *)((uint64_t)maps[i].x << 16);
+    size = ((uint64_t)(maps[i].y - maps[i].x) << 16) + FRAMESIZE;
+    if (maps[i].flags & MAP_PRIVATE) {
+      CloseHandle(maps[i].h);
+      maps[i].h =
+          sys_mmap_nt(addr, size, maps[i].prot, maps[i].flags, -1, 0).maphandle;
       ReadAll(reader, addr, size);
     } else {
       MapViewOfFileExNuma(
-          _mmi.p[i].h,
-          (_mmi.p[i].prot & PROT_WRITE)
+          maps[i].h,
+          (maps[i].prot & PROT_WRITE)
               ? kNtFileMapWrite | kNtFileMapExecute | kNtFileMapRead
               : kNtFileMapExecute | kNtFileMapRead,
           0, 0, size, addr, kNtNumaNoPreferredNode);
     }
   }
-  ReadAll(reader, _edata, _end - _edata);
+  ReadAll(reader, _etext, _end - _etext);
+  for (i = 0; i < mapcount; ++i) {
+    _mmi.p[i].h = maps[i].h;
+  }
   CloseHandle(reader);
   CloseHandle(writer);
+  GlobalFree(maps);
   if (weaken(__wincrash_nt)) {
     AddVectoredExceptionHandler(1, (void *)weaken(__wincrash_nt));
   }
@@ -121,7 +137,6 @@ textwindows noasan void WinMainForked(void) {
 
 textwindows int sys_fork_nt(void) {
   jmp_buf jb;
-  char exe[PATH_MAX];
   int64_t reader, writer;
   int i, rc, pid, releaseme;
   char *p, forkvar[6 + 21 + 1 + 21 + 1];
@@ -131,18 +146,17 @@ textwindows int sys_fork_nt(void) {
   if (!setjmp(jb)) {
     if (CreatePipe(&reader, &writer, &kNtIsInheritable, 0)) {
       p = stpcpy(forkvar, "_FORK=");
-      p += uint64toarray_radix10(reader, p);
-      *p++ = ' ';
+      p += uint64toarray_radix10(reader, p), *p++ = ' ';
       p += uint64toarray_radix10(writer, p);
-      memset(&startinfo, 0, sizeof(startinfo));
+      bzero(&startinfo, sizeof(startinfo));
       startinfo.cb = sizeof(struct NtStartupInfo);
       startinfo.dwFlags = kNtStartfUsestdhandles;
       startinfo.hStdInput = g_fds.p[0].handle;
       startinfo.hStdOutput = g_fds.p[1].handle;
       startinfo.hStdError = g_fds.p[2].handle;
-      GetModuleFileNameA(0, exe, ARRAYLEN(exe));
-      if (ntspawn(exe, __argv, environ, forkvar, &kNtIsInheritable, NULL, true,
-                  0, NULL, &startinfo, &procinfo) != -1) {
+      if (ntspawn(program_executable_name, __argv, environ, forkvar,
+                  &kNtIsInheritable, NULL, true, 0, NULL, &startinfo,
+                  &procinfo) != -1) {
         CloseHandle(reader);
         CloseHandle(procinfo.hThread);
         if (weaken(__sighandrvas) &&
@@ -156,14 +170,14 @@ textwindows int sys_fork_nt(void) {
         }
         WriteAll(writer, jb, sizeof(jb));
         WriteAll(writer, &_mmi.i, sizeof(_mmi.i));
+        WriteAll(writer, _mmi.p, _mmi.i * sizeof(*_mmi.p));
         for (i = 0; i < _mmi.i; ++i) {
-          WriteAll(writer, &_mmi.p[i], sizeof(_mmi.p[i]));
           if (_mmi.p[i].flags & MAP_PRIVATE) {
             WriteAll(writer, (void *)((uint64_t)_mmi.p[i].x << 16),
                      ((uint64_t)(_mmi.p[i].y - _mmi.p[i].x) << 16) + FRAMESIZE);
           }
         }
-        WriteAll(writer, _edata, _end - _edata);
+        WriteAll(writer, _etext, _end - _etext);
         CloseHandle(writer);
       } else {
         rc = -1;

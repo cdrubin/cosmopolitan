@@ -267,9 +267,8 @@ void test_pkcs1_v15_decode( int mode,
     if( expected_result == 0 )
     {
         TEST_ASSERT( output_length == expected_plaintext_length );
-        TEST_ASSERT( memcmp( original + sizeof( N ) - output_length,
-                             final,
-                             output_length ) == 0 );
+        TEST_ASSERT( timingsafe_bcmp( original + sizeof( N ) - output_length,
+                                      final, output_length ) == 0 );
     }
     else if( expected_result == MBEDTLS_ERR_RSA_INVALID_PADDING ||
              expected_result == MBEDTLS_ERR_RSA_OUTPUT_TOO_LARGE )
@@ -691,7 +690,7 @@ int main( int argc, const char *argv[] )
 {
     int ret;
     mbedtls_test_platform_setup();
-    ret = execute_tests( argc, argv, "zip:third_party/mbedtls/test/test_suite_pkcs1_v15.datax" );
+    ret = execute_tests( argc, argv, "/zip/third_party/mbedtls/test/test_suite_pkcs1_v15.datax" );
     mbedtls_test_platform_teardown();
     return( ret );
 }

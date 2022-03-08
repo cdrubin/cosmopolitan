@@ -5,16 +5,16 @@
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
-│ above copyright notice and this permission notice appear in all copies.      │
+│ above copyright notice & this permission notice appear in all copies         │
 │                                                                              │
 │ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL                │
 │ WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED                │
-│ WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE             │
-│ AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL         │
-│ DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR        │
-│ PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER               │
-│ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
-│ PERFORMANCE OF THIS SOFTWARE.                                                │
+│ WARRANTIES OF MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL                │
+│ THE AUTHOR BE LIABLE FOR ANY SPECIAL DIRECT INDIRECT, OR EVEN                │
+│ CONSEQUENTIAL DAMAGE OR ANY DAMAGES WHATSOEVER RESULTING FROM                │
+│ LOSS OF USE, DATA OR PROFITS WHETHER IN AN ACTION OF CONTRACT                │
+│ NEGLIGENCE OR OTHER TORTIOUS ACTION, THAT ARISE OUT OF, OR IN                │
+│ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.                     │
 ╠──────────────────────────────────────────────────────────────────────────────╣
 │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
 │░░░░░░░█▀█░█▀█░▀█▀░█░█░█▀█░█░░░█░░░█░█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
@@ -540,11 +540,33 @@ apesh:	.ascii	"'\n#'\"\n"			# sixth edition shebang
 //	modify the binary to follow the local system's convention.
 //	There isn't a one-size-fits-all approach for this, thus we
 //	present two choices.
+	.ascii	"o=\"$(command -v \"$0\")\"\n"
+//	Try to use a system-wide APE loader.
+	.ascii	"type ape-loader >/dev/null 2>&1 && "
+	.ascii	"exec ape-loader \"$o\" \"$@\"\n"
+#ifdef APE_LOADER
+//	There is no system-wide APE loader, but there is one
+//	embedded inside the APE. So if the system is not MacOs,
+//	extract the loader into a temp folder, and use it to
+//	load the APE without modifying it.
+	.ascii	"if [ ! -d /Applications ]; then\n"
+	.ascii	  "t=\"${TMPDIR:-/tmp}/ape-loader\"\n"
+	.ascii	  "[ -x \"$t\" ] || {\n"
+	.ascii	    "dd if=\"$o\" of=\"$t.$$\" skip=\""
+	.shstub	      ape_loader_dd_skip,2
+	.ascii	      "\" count=\""
+	.shstub	      ape_loader_dd_count,2
+	.ascii	      "\" bs=64 2>/dev/null &&\n"
+	.ascii	    "chmod 755 \"$t.$$\" &&\n"
+	.ascii	    "mv \"$t.$$\" \"$t\"\n"
+	.ascii	  "}\n"
+	.ascii	  "exec \"$t\" \"$o\" \"$@\"\n"
+	.ascii	"fi\n"
+#endif
 #ifndef APE_NO_MODIFY_SELF
 //	The default behavior is: to overwrite the header in place.
 //	We prefer this because it's a tiny constant one time cost.
 //	We simply printf a 64-byte header and call execve() again.
-	.ascii	"o=\"$(command -v \"$0\")\"\n"
 #else
 //	The alternative behavior is to copy to $TMPDIR and edit.
 //	This imposes a variety of caveats of its own that should
@@ -629,6 +651,11 @@ apesh:	.ascii	"'\n#'\"\n"			# sixth edition shebang
 	.ascii	"fi\n"
 	.ascii	"exit $R\n"
 	.endobj	apesh
+#ifdef APE_LOADER
+        .section .ape.loader,"a",@progbits
+        .incbin APE_LOADER
+        .previous
+#endif /* APE_LOADER */
 #endif /* SupportsWindows() || SupportsMetal() || SupportsXnu() */
 
 #if SupportsSystemv() || SupportsMetal()
@@ -1533,6 +1560,7 @@ kernel:	movabs	$ape_stack_vaddr,%rsp
 	.type	__test_end,@object
 
 	.section .commentprologue,"a",@progbits
+	.globl	kLegalNotices
 	.type	kLegalNotices,@object
 	.hidden	kLegalNotices
 kLegalNotices:/*

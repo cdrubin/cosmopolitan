@@ -16,8 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/bits/bits.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/mem/mem.h"
+#include "libc/runtime/symbols.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
@@ -93,7 +96,11 @@ void ReadHyperionLines(void) {
   char *line = NULL;
   size_t linesize = 0;
   ASSERT_NE(NULL, (f = fopen("hyperion.txt", "r")));
-  while ((rc = getline(&line, &linesize, f)) != -1) {
+  int i = 0;
+  for (;;) {
+    __printf("i=%d\n", i++);
+    rc = getline(&line, &linesize, f);
+    if (rc == -1) break;
     data = xrealloc(data, size + rc);
     memcpy(data + size, line, rc);
     size += rc;

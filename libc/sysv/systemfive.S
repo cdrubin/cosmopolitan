@@ -21,6 +21,8 @@
 #include "libc/sysv/consts/nr.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/macros.internal.h"
+#include "libc/sysv/consts/prot.h"
+#include "libc/nexgen32e/macros.h"
 
 /*                                           ▄▄▄
                        ▄▄▄                    ▀▓▓▒▄
@@ -238,7 +240,7 @@ _init_systemfive_linux:
 	.endfn	_init_systemfive_linux
 _init_systemfive_metal:
 #if SupportsMetal()
-	pushb	systemfive_linux-.Lanchorpoint
+	pushb	systemfive_enosys-.Lanchorpoint
 	mov	$syscon_linux,%esi
 	jmp	_init_systemfive_os
 #endif
@@ -348,6 +350,34 @@ _init_systemfive_stack:					# determinism ftw!
 	syscall
 2:	test	%rax,%rax
 	js	1b
+
+//	prevent operating system from auto-mapping stack
+//	we guarantee stack overflows are always detected
+//	so long as you never use -DSTACK_FRAME_UNLIMITED
+//	TODO: Why does this fail sometimes with FreeBSD?
+	testb	IsFreebsd()
+	jnz	9f
+	push	%rax
+	push	%rdx
+	push	%r11
+	mov	__NR_mprotect,%eax
+	mov	$PAGESIZE,%esi
+	xor	%edx,%edx				# PROT_NONE
+	syscall
+	pop	%r11
+	pop	%rdx
+	pop	%rax
+9:	
+
+//	update the memory intervals
+//	m.i		0	4
+//	m.n		8	4
+//	m.p		16	8
+//	m.p[0].x	24	4
+//	m.p[0].y	28	4
+//	m.p[0].h	32	8
+//	m.p[0].prot	40	4
+//	m.p[0].flags	44	4
 	.weak	_mmi
 	ezlea	_mmi,cx
 	test	%rcx,%rcx
@@ -357,14 +387,16 @@ _init_systemfive_stack:					# determinism ftw!
 	shr	$16,%r11				# for the stack range
 	shr	$16,%r9
 	movb	$1,(%rcx)				# _mmi.i
-	mov	%r11d,8(%rcx)				# _mmi.p[0].x
-	mov	%r9d,12(%rcx)				# _mmi.p[0].y
-	mov	%edx,20(%rcx)				# _mmi.p[0].prot
-	mov	%r10d,24(%rcx)				# _mmi.p[0].flags
+	mov	%r11d,24(%rcx)				# _mmi.s[0].x
+	mov	%r9d,28(%rcx)				# _mmi.s[0].y
+	orq	$-1,32(%rcx)				# _mmi.s[0].h
+	mov	%edx,40(%rcx)				# _mmi.s[0].prot
+	mov	%r10d,44(%rcx)				# _mmi.s[0].flags
 3:	pop	%r9					# restore stack size
 	pop	%rsi
 	pop	%rdi
 	leave
+//	switch stacks
 	pop	%rcx
 	lea	(%rax,%r9),%rsp
 	sub	$ape_stack_align,%rsp			# openbsd:stackbound

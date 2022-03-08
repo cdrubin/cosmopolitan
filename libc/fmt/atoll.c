@@ -19,10 +19,13 @@
 #include "libc/fmt/conv.h"
 #include "libc/limits.h"
 
+/**
+ * Decodes decimal number from ASCII string.
+ *
+ * @param s is a non-null nul-terminated string
+ * @return the decoded signed saturated integer
+ */
 long long atoll(const char *s) {
-  long long res;
-  res = strtoimax(s, NULL, 10);
-  if (res < LONG_LONG_MIN) return LONG_LONG_MIN;
-  if (res > LONG_LONG_MAX) return LONG_LONG_MAX;
-  return res;
+  _Static_assert(LONG_MAX == LONG_LONG_MAX, "need atoll impl");
+  return atol(s);
 }

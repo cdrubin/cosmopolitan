@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
 #include "libc/sysv/consts/at.h"
 
 /**
@@ -33,8 +32,6 @@
  *     CHECK_NE(-1, chmod("/usr/bin/sudo", 04755));  // setuid bit
  *     CHECK_NE(-1, chmod("/usr/bin/wall", 02755));  // setgid bit
  *
- * This works on Windows NT if you ignore the error ;-)
- *
  * @param pathname must exist
  * @param mode contains octal flags (base 8)
  * @errors ENOENT, ENOTDIR, ENOSYS
@@ -42,5 +39,5 @@
  * @see fchmod()
  */
 int chmod(const char *pathname, uint32_t mode) {
-  return sys_fchmodat(AT_FDCWD, pathname, mode, 0);
+  return fchmodat(AT_FDCWD, pathname, mode, 0);
 }

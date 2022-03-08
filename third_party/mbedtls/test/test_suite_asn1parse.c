@@ -15,6 +15,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
+#include "libc/stdio/stdio.h"
 #include "third_party/mbedtls/test/test.inc"
 /*
  * *** THIS FILE WAS MACHINE GENERATED ***
@@ -1253,7 +1254,7 @@ int main( int argc, const char *argv[] )
 {
     int ret;
     mbedtls_test_platform_setup();
-    ret = execute_tests( argc, argv, "zip:third_party/mbedtls/test/test_suite_asn1parse.datax" );
+    ret = execute_tests( argc, argv, "/zip/third_party/mbedtls/test/test_suite_asn1parse.datax" );
     mbedtls_test_platform_teardown();
     return( ret );
 }

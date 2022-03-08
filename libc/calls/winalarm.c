@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/siginfo.h"
+#include "libc/calls/typedef/sigaction_f.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
 
@@ -25,7 +26,7 @@ void __winalarm(void *lpArgToCompletionRoutine, uint32_t dwTimerLowValue,
                 uint32_t dwTimerHighValue) {
   int rva;
   siginfo_t info;
-  memset(&info, 0, sizeof(info));
+  bzero(&info, sizeof(info));
   info.si_signo = SIGALRM;
   rva = __sighandrvas[SIGALRM];
   if (rva >= kSigactionMinRva) {

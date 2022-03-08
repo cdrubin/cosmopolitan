@@ -18,18 +18,32 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/winsize.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/sysv/consts/termios.h"
 
 /**
  * Returns true if file descriptor is backed by a terminal device.
- * @asyncsignalsafe
  */
 bool32 isatty(int fd) {
-  _Alignas(short) char buf[sizeof(uint16_t) * 4];
-  if (!IsWindows()) {
-    return sys_ioctl(fd, TIOCGWINSZ, &buf) != -1;
+  int err;
+  bool32 res;
+  struct winsize ws;
+  if (fd >= 0) {
+    if (__isfdkind(fd, kFdZip)) {
+      return false;
+    } else if (IsMetal()) {
+      return false;
+    } else if (!IsWindows()) {
+      err = errno;
+      res = sys_ioctl(fd, TIOCGWINSZ, &ws) != -1;
+      errno = err;
+      return res;
+    } else {
+      return sys_isatty_nt(fd);
+    }
   } else {
-    return sys_isatty_nt(fd);
+    return false;
   }
 }

@@ -1,3 +1,20 @@
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:4;coding:utf-8 -*-│
+│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+╞══════════════════════════════════════════════════════════════════════════════╡
+│ Copyright The Mbed TLS Contributors                                          │
+│                                                                              │
+│ Licensed under the Apache License, Version 2.0 (the "License");              │
+│ you may not use this file except in compliance with the License.             │
+│ You may obtain a copy of the License at                                      │
+│                                                                              │
+│     http://www.apache.org/licenses/LICENSE-2.0                               │
+│                                                                              │
+│ Unless required by applicable law or agreed to in writing, software          │
+│ distributed under the License is distributed on an "AS IS" BASIS,            │
+│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
+│ See the License for the specific language governing permissions and          │
+│ limitations under the License.                                               │
+╚─────────────────────────────────────────────────────────────────────────────*/
 #include "third_party/mbedtls/common.h"
 #include "third_party/mbedtls/endian.h"
 #include "third_party/mbedtls/error.h"
@@ -45,26 +62,6 @@ asm(".include \"libc/disclaimer.inc\"");
 #define KW_SEMIBLOCK_LENGTH    8
 #define MIN_SEMIBLOCKS_COUNT   3
 
-/* constant-time buffer comparison */
-static inline unsigned char mbedtls_nist_kw_safer_memcmp( const void *a, const void *b, size_t n )
-{
-    size_t i;
-    volatile const unsigned char *A = (volatile const unsigned char *) a;
-    volatile const unsigned char *B = (volatile const unsigned char *) b;
-    volatile unsigned char diff = 0;
-
-    for( i = 0; i < n; i++ )
-    {
-        /* Read volatile data in order before computing diff.
-         * This avoids IAR compiler warning:
-         * 'the order of volatile accesses is undefined ..' */
-        unsigned char x = A[i], y = B[i];
-        diff |= x ^ y;
-    }
-
-    return( diff );
-}
-
 /*! The 64-bit default integrity check value (ICV) for KW mode. */
 static const unsigned char NIST_KW_ICV1[] = {0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6};
 /*! The 32-bit default integrity check value (ICV) for KWP mode. */
@@ -75,7 +72,7 @@ static const  unsigned char NIST_KW_ICV2[] = {0xA6, 0x59, 0x59, 0xA6};
  */
 void mbedtls_nist_kw_init( mbedtls_nist_kw_context *ctx )
 {
-    memset( ctx, 0, sizeof( mbedtls_nist_kw_context ) );
+    mbedtls_platform_zeroize( ctx, sizeof( mbedtls_nist_kw_context ) );
 }
 
 int mbedtls_nist_kw_setkey( mbedtls_nist_kw_context *ctx,
@@ -84,7 +81,7 @@ int mbedtls_nist_kw_setkey( mbedtls_nist_kw_context *ctx,
                             unsigned int keybits,
                             const int is_wrap )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     const mbedtls_cipher_info_t *cipher_info;
 
     cipher_info = mbedtls_cipher_info_from_values( cipher,
@@ -275,7 +272,7 @@ cleanup:
 
     if( ret != 0)
     {
-        memset( output, 0, semiblocks * KW_SEMIBLOCK_LENGTH );
+        mbedtls_platform_zeroize( output, semiblocks * KW_SEMIBLOCK_LENGTH );
     }
     mbedtls_platform_zeroize( inbuff, KW_SEMIBLOCK_LENGTH * 2 );
     mbedtls_platform_zeroize( outbuff, KW_SEMIBLOCK_LENGTH * 2 );
@@ -341,7 +338,7 @@ static int unwrap( mbedtls_nist_kw_context *ctx,
 
 cleanup:
     if( ret != 0)
-        memset( output, 0, ( semiblocks - 1 ) * KW_SEMIBLOCK_LENGTH );
+        mbedtls_platform_zeroize( output, ( semiblocks - 1 ) * KW_SEMIBLOCK_LENGTH );
     mbedtls_platform_zeroize( inbuff, sizeof( inbuff )  );
     mbedtls_platform_zeroize( outbuff, sizeof( outbuff ) );
 
@@ -389,7 +386,7 @@ int mbedtls_nist_kw_unwrap( mbedtls_nist_kw_context *ctx,
             goto cleanup;
 
         /* Check ICV in "constant-time" */
-        diff = mbedtls_nist_kw_safer_memcmp( NIST_KW_ICV1, A, KW_SEMIBLOCK_LENGTH );
+        diff = timingsafe_bcmp( NIST_KW_ICV1, A, KW_SEMIBLOCK_LENGTH );
 
         if( diff != 0 )
         {
@@ -438,7 +435,7 @@ int mbedtls_nist_kw_unwrap( mbedtls_nist_kw_context *ctx,
         }
 
         /* Check ICV in "constant-time" */
-        diff = mbedtls_nist_kw_safer_memcmp( NIST_KW_ICV2, A, KW_SEMIBLOCK_LENGTH / 2 );
+        diff = timingsafe_bcmp( NIST_KW_ICV2, A, KW_SEMIBLOCK_LENGTH / 2 );
 
         if( diff != 0 )
         {
@@ -477,7 +474,7 @@ int mbedtls_nist_kw_unwrap( mbedtls_nist_kw_context *ctx,
         {
             goto cleanup;
         }
-        memset( output + Plen, 0, padlen );
+        mbedtls_platform_zeroize( output + Plen, padlen );
         *out_len = Plen;
     }
     else
@@ -489,7 +486,7 @@ int mbedtls_nist_kw_unwrap( mbedtls_nist_kw_context *ctx,
 cleanup:
     if( ret != 0 )
     {
-        memset( output, 0, *out_len );
+        mbedtls_platform_zeroize( output, *out_len );
         *out_len = 0;
     }
 
@@ -619,7 +616,7 @@ int mbedtls_nist_kw_self_test( int verbose )
         ret = mbedtls_nist_kw_wrap( &ctx, MBEDTLS_KW_MODE_KW, kw_msg[i],
                                     kw_msg_len[i], out, &olen, sizeof( out ) );
         if( ret != 0 || kw_out_len[i] != olen ||
-            memcmp( out, kw_res[i], kw_out_len[i] ) != 0 )
+            timingsafe_bcmp( out, kw_res[i], kw_out_len[i] ) != 0 )
         {
             if( verbose != 0 )
                 mbedtls_printf( "failed. ");
@@ -642,7 +639,7 @@ int mbedtls_nist_kw_self_test( int verbose )
                                       out, olen, out, &olen, sizeof( out ) );
 
         if( ret != 0 || olen != kw_msg_len[i] ||
-            memcmp( out, kw_msg[i], kw_msg_len[i] ) != 0 )
+            timingsafe_bcmp( out, kw_msg[i], kw_msg_len[i] ) != 0 )
         {
             if( verbose != 0 )
                 mbedtls_printf( "failed\n" );
@@ -674,7 +671,7 @@ int mbedtls_nist_kw_self_test( int verbose )
                                     kwp_msg_len[i], out, &olen, sizeof( out ) );
 
         if( ret != 0 || kwp_out_len[i] != olen ||
-            memcmp( out, kwp_res[i], kwp_out_len[i] ) != 0 )
+            timingsafe_bcmp( out, kwp_res[i], kwp_out_len[i] ) != 0 )
         {
             if( verbose != 0 )
                 mbedtls_printf( "failed. ");
@@ -697,7 +694,7 @@ int mbedtls_nist_kw_self_test( int verbose )
                                        olen, out, &olen, sizeof( out ) );
 
         if( ret != 0 || olen != kwp_msg_len[i] ||
-            memcmp( out, kwp_msg[i], kwp_msg_len[i] ) != 0 )
+            timingsafe_bcmp( out, kwp_msg[i], kwp_msg_len[i] ) != 0 )
         {
             if( verbose != 0 )
                 mbedtls_printf( "failed. ");

@@ -4,7 +4,7 @@ if [ "$MODE" = dbg ]; then
   exit  # TODO
 fi
 
-if [ "$MODE" = opt ]; then
+if [ "$MODE" = opt ] || [ "$MODE" = optlinux ]; then
   exit
 fi
 
@@ -12,7 +12,6 @@ fi
 CMD="o/$MODE/tool/build/blinkenlights.com.dbg o/$MODE/examples/hello.com"
 if OUTPUT="$($CMD)"; then
   if [ x"$OUTPUT" = x"hello world" ]; then
-    touch o/$MODE/test/libc/release/emulate.ok
     exit 0
   else
     printf '%s\n' "error: $CMD printed wrong output: $OUTPUT" >&2

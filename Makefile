@@ -59,10 +59,9 @@
 #
 #   build/config.mk
 
-SHELL         = /bin/sh
-HOSTS        ?= freebsd openbsd netbsd rhel7 rhel5 xnu win7 win10
-SANITY       := $(shell build/sanitycheck $$PPID)
-GNUMAKEFLAGS += --output-sync
+SHELL   = /bin/sh
+HOSTS  ?= freebsd openbsd netbsd rhel7 rhel5 xnu win7 win10
+SANITY := $(shell build/sanitycheck $$PPID)
 
 .SUFFIXES:
 .DELETE_ON_ERROR:
@@ -115,8 +114,10 @@ include third_party/gdtoa/gdtoa.mk		# │  You can finally call malloc()
 include libc/time/time.mk			# │
 include libc/alg/alg.mk				# │
 include libc/stdio/stdio.mk			# │
+include libc/thread/thread.mk			# │
 include net/net.mk				# │
 include libc/log/log.mk				# │
+include third_party/bzip2/bzip2.mk		# │
 include dsp/core/core.mk			# │
 include libc/x/x.mk				# │
 include third_party/stb/stb.mk			# │
@@ -136,7 +137,10 @@ include third_party/regex/regex.mk		#─┘
 include third_party/third_party.mk
 include libc/testlib/testlib.mk
 include tool/viz/lib/vizlib.mk
+include third_party/linenoise/linenoise.mk
 include third_party/lua/lua.mk
+include third_party/make/make.mk
+include third_party/argon2/argon2.mk
 include third_party/sqlite3/sqlite3.mk
 include third_party/mbedtls/test/test.mk
 include third_party/quickjs/quickjs.mk
@@ -145,10 +149,12 @@ include third_party/infozip/infozip.mk
 include tool/build/lib/buildlib.mk
 include third_party/chibicc/chibicc.mk
 include third_party/chibicc/test/test.mk
+include third_party/python/python.mk
 include tool/build/emucrt/emucrt.mk
 include tool/build/emubin/emubin.mk
 include tool/build/build.mk
 include examples/examples.mk
+include examples/pyapp/pyapp.mk
 include tool/decode/lib/decodelib.mk
 include tool/decode/decode.mk
 include tool/hash/hash.mk
@@ -164,6 +170,7 @@ include test/libc/runtime/test.mk
 include test/libc/sock/test.mk
 include test/libc/bits/test.mk
 include test/libc/str/test.mk
+include test/libc/log/test.mk
 include test/libc/unicode/test.mk
 include test/libc/calls/test.mk
 include test/libc/x/test.mk
@@ -176,6 +183,7 @@ include test/libc/stdio/test.mk
 include test/libc/release/test.mk
 include test/libc/test.mk
 include test/net/http/test.mk
+include test/net/https/test.mk
 include test/net/test.mk
 include test/tool/build/lib/test.mk
 include test/tool/build/test.mk
@@ -209,26 +217,25 @@ tags:	TAGS HTAGS
 o/$(MODE)/.x:
 	@mkdir -p $(@D) && touch $@
 
-ifneq ($(findstring 4.,,$(MAKE_VERSION)),$(MAKE_VERSION))
 o/$(MODE)/srcs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x))))
+	$(file >$@,$(SRCS))
+o/$(MODE)/hdrs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x))))
+	$(file >$@,$(HDRS) $(INCS))
+o/$(MODE)/incs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(INCS) $(INCS),$(dir $(x))))
+	$(file >$@,$(INCS))
+o/$(MODE)/depend: o/$(MODE)/.x o/$(MODE)/srcs.txt o/$(MODE)/hdrs.txt o/$(MODE)/incs.txt $(SRCS) $(HDRS) $(INCS)
+	@$(COMPILE) -AMKDEPS -L320 $(MKDEPS) -o $@ -r o/$(MODE)/ @o/$(MODE)/srcs.txt @o/$(MODE)/hdrs.txt @o/$(MODE)/incs.txt
+
+o/$(MODE)/srcs-old.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x))))
 	$(file >$@) $(foreach x,$(SRCS),$(file >>$@,$(x)))
-o/$(MODE)/hdrs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x))))
+o/$(MODE)/hdrs-old.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x))))
 	$(file >$@) $(foreach x,$(HDRS) $(INCS),$(file >>$@,$(x)))
-else
-o/$(MODE)/srcs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x))))
-	$(MAKE) MODE=rel -j8 -pn bopit 2>/dev/null | sed -ne '/^SRCS/ {s/.*:= //;s/  */\n/g;p;q}' >$@
-o/$(MODE)/hdrs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x))))
-	$(MAKE) MODE=rel -j8 -pn bopit 2>/dev/null | sed -ne '/^HDRS/ {s/.*:= //;s/  */\n/g;p;q}' >$@
-endif
 
-o/$(MODE)/depend: o/$(MODE)/.x o/$(MODE)/srcs.txt o/$(MODE)/hdrs.txt $(SRCS) $(HDRS) $(INCS)
-	@$(COMPILE) -AMKDEPS $(MKDEPS) -o $@ -r o/$(MODE)/ o/$(MODE)/srcs.txt o/$(MODE)/hdrs.txt
-
-TAGS:	o/$(MODE)/srcs.txt $(SRCS)
+TAGS:	o/$(MODE)/srcs-old.txt $(SRCS)
 	@rm -f $@
 	@$(COMPILE) -ATAGS -T$@ $(TAGS) $(TAGSFLAGS) -L $< -o $@
 
-HTAGS:	o/$(MODE)/hdrs.txt $(HDRS)
+HTAGS:	o/$(MODE)/hdrs-old.txt $(HDRS)
 	@rm -f $@
 	@$(COMPILE) -ATAGS -T$@ build/htags -L $< -o $@
 
@@ -274,6 +281,7 @@ COSMOPOLITAN_OBJECTS =		\
 	LIBC_NT_ADVAPI32	\
 	LIBC_FMT		\
 	THIRD_PARTY_COMPILER_RT	\
+	LIBC_THREAD		\
 	LIBC_TINYMATH		\
 	LIBC_STR		\
 	LIBC_SYSV		\
@@ -301,6 +309,7 @@ COSMOPOLITAN_HEADERS =		\
 	LIBC_STDIO		\
 	LIBC_STR		\
 	LIBC_SYSV		\
+	LIBC_THREAD		\
 	LIBC_TIME		\
 	LIBC_TINYMATH		\
 	LIBC_UNICODE		\
@@ -313,14 +322,15 @@ COSMOPOLITAN_HEADERS =		\
 	THIRD_PARTY_ZLIB	\
 	THIRD_PARTY_REGEX
 
-o/$(MODE)/cosmopolitan.a.txt:
-	printf "%s\n" $(call reverse,$(call uniq,$(foreach x,$(COSMOPOLITAN_OBJECTS),$($(x)))))
-o/$(MODE)/cosmopolitan.a: $(filter-out o/libc/stubs/exit11.o,$(foreach x,$(COSMOPOLITAN_OBJECTS),$($(x)_A_OBJS)))
+o/$(MODE)/cosmopolitan.a:	\
+		$(foreach x,$(COSMOPOLITAN_OBJECTS),$($(x)_A_OBJS))
+
 o/cosmopolitan.h:				\
 		o/$(MODE)/tool/build/rollup.com	\
 		libc/integral/normalize.inc	\
 		$(foreach x,$(COSMOPOLITAN_HEADERS),$($(x)_HDRS))
-	@$(COMPILE) -AROLLUP -T$@ $^ >$@
+	$(file >$@.args,libc/integral/normalize.inc $(foreach x,$(COSMOPOLITAN_HEADERS),$($(x)_HDRS)))
+	@$(COMPILE) -AROLLUP -T$@ o/$(MODE)/tool/build/rollup.com @$@.args >$@
 
 o/cosmopolitan.html:							\
 		o/$(MODE)/third_party/chibicc/chibicc.com.dbg		\

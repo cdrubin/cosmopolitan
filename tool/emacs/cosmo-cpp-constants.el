@@ -54,7 +54,8 @@
     "__SSE4_2__"
     "__XSAVE__"
     "__CLFLUSHOPT__"
-    "__RDPID__"))
+    "__RDPID__"
+    "FLT_ROUNDS"))
 
 (defconst cosmo-cpp-constants-gcc-92
  '("__x86_64__"
@@ -128,7 +129,10 @@
    "__SIZEOF_WCHAR_T__"
    "__SIZEOF_WINT_T__"
    "__SIZEOF_PTRDIFF_T__"
-   "__TIMESTAMP__"))
+   "__TIMESTAMP__"
+   "_GNU_SOURCE"
+   "_BSD_SOURCE"
+   "_XOPEN_SOURCE"))
 
 (defconst cosmo-cpp-constants-cosmopolitan
  '("__SAUCE__"
@@ -156,8 +160,10 @@
    "__MNO_VZEROUPPER__"
    "__FSANITIZE_ADDRESS__"
    "__FSANITIZE_UNDEFINED__"
+   "__MNO_RED_ZONE__"
    "__MNOP_MCOUNT__"
-   "__MRECORD_MCOUNT__"))
+   "__MRECORD_MCOUNT__"
+   "__FNO_OMIT_FRAME_POINTER__"))
 
 (defconst cosmo-cpp-constants
   (append cosmo-cpp-constants-c11

@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/bits/bits.h"
 #include "libc/time/time.h"
+#include "libc/str/str.h"
 #include "net/http/http.h"
 
 static unsigned ParseMonth(const char *p) {
@@ -36,10 +37,12 @@ static unsigned ParseMonth(const char *p) {
  *   Sun, 04 Oct 2020 19:50:10 GMT
  *
  * @return seconds from unix epoch
+ * @param n if -1 implies strlen
  * @see FormatHttpDateTime()
  */
 int64_t ParseHttpDateTime(const char *p, size_t n) {
   unsigned weekday, year, month, day, hour, minute, second, yday, leap;
+  if (n == -1) n = p ? strlen(p) : 0;
   if (n != 29) return 0;
   day = (p[5] - '0') * 10 + (p[6] - '0') - 1;
   month = ParseMonth(p + 8);

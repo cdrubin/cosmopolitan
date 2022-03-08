@@ -136,11 +136,12 @@ ctrl-c  interrupt                  -t       tui mode\n\
 s       step                       -r       real mode\n\
 n       next                       -s       statistics\n\
 c       continue                   -b ADDR  push breakpoint\n\
-q       quit                       -L PATH  log file location\n\
-f       finish                     -R       reactive tui mode\n\
-R       restart                    -H       disable highlighting\n\
-x       hex                        -v       increase verbosity\n\
-?       help                       -?       help\n\
+C       continue harder            -L PATH  log file location\n\
+q       quit                       -R       reactive tui mode\n\
+f       finish                     -H       disable highlighting\n\
+R       restart                    -v       increase verbosity\n\
+x       hex                        -?       help\n\
+?       help\n\
 t       sse type\n\
 w       sse width\n\
 B       pop breakpoint\n\
@@ -148,6 +149,7 @@ ctrl-t  turbo\n\
 alt-t   slowmo"
 
 #define MAXZOOM    16
+#define DISWIDTH   40
 #define DUMPWIDTH  64
 #define DISPWIDTH  80
 #define WHEELDELTA 1
@@ -184,6 +186,12 @@ alt-t   slowmo"
 #define kMouseCtrlWheelDown 81
 
 #define CTRL(C) ((C) ^ 0100)
+
+struct Mouse {
+  short y;
+  short x;
+  int e;
+};
 
 struct MemoryView {
   int64_t start;
@@ -236,11 +244,16 @@ struct Panels {
 
 static const signed char kThePerfectKernel[8] = {-1, -3, 3, 17, 17, 3, -3, -1};
 
-static const char kRegisterNames[16][4] = {
-    "RAX", "RCX", "RDX", "RBX", "RSP", "RBP", "RSI", "RDI",
-    "R8",  "R9",  "R10", "R11", "R12", "R13", "R14", "R15",
+static const char kRipName[3][4] = {"IP", "EIP", "RIP"};
+
+static const char kRegisterNames[3][16][4] = {
+    {"AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI"},
+    {"EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI"},
+    {"RAX", "RCX", "RDX", "RBX", "RSP", "RBP", "RSI", "RDI", "R8", "R9", "R10",
+     "R11", "R12", "R13", "R14", "R15"},
 };
 
+static bool belay;
 static bool react;
 static bool tuimode;
 static bool alarmed;
@@ -303,6 +316,7 @@ static struct sigaction oldsig[4];
 
 static void SetupDraw(void);
 static void Redraw(void);
+static void HandleKeyboard(const char *);
 
 static char *FormatDouble(char buf[32], long double x) {
   g_xfmt_p(buf, &x, 15, 32, 0);
@@ -531,6 +545,10 @@ static void ShowCursor(void) {
   TtyWriteString("\e[?25h");
 }
 
+static void DisableSafePaste(void) {
+  TtyWriteString("\e[?2004l");
+}
+
 static void EnableMouseTracking(void) {
   mousemode = true;
   TtyWriteString("\e[?1000;1002;1015;1006h");
@@ -578,10 +596,11 @@ static void TuiRejuvinate(void) {
   CHECK_NE(-1, ioctl(ttyout, TCSETS, &term));
   xsigaction(SIGBUS, OnSigBusted, SA_NODEFER, 0, NULL);
   EnableMouseTracking();
+  DisableSafePaste();
 }
 
 static void OnQ(void) {
-  LOGF("OnQ");
+  INFOF("OnQ");
   action |= EXIT;
 }
 
@@ -649,7 +668,7 @@ static void ResolveBreakpoints(void) {
 
 static void BreakAtNextInstruction(void) {
   struct Breakpoint b;
-  memset(&b, 0, sizeof(b));
+  bzero(&b, sizeof(b));
   b.addr = GetIp() + m->xedd->length;
   b.oneshot = true;
   PushBreakpoint(&breakpoints, &b);
@@ -716,7 +735,7 @@ void TuiSetup(void) {
   static bool once;
   report = false;
   if (!once) {
-    LOGF("loaded program %s\n%s", codepath, gc(FormatPml4t(m)));
+    INFOF("loaded program %s\n%s", codepath, gc(FormatPml4t(m)));
     CommonSetup();
     ioctl(ttyout, TCGETS, &oldterm);
     xsigaction(SIGINT, OnSigInt, 0, 0, oldsig + 3);
@@ -754,7 +773,7 @@ static bool IsXmmNonZero(long start, long end) {
   long i;
   uint8_t v1[16], vz[16];
   for (i = start; i < end; ++i) {
-    memset(vz, 0, 16);
+    bzero(vz, 16);
     memcpy(v1, m->xmm[i], 16);
     pcmpeqb(v1, v1, vz);
     if (pmovmskb(v1) != 0xffff) {
@@ -788,18 +807,56 @@ static int PickNumberOfXmmRegistersToShow(void) {
   }
 }
 
+static int GetRegHexWidth(void) {
+  switch (m->mode & 3) {
+    case XED_MODE_LONG:
+      return 16;
+    case XED_MODE_LEGACY:
+      return 8;
+    case XED_MODE_REAL:
+      if ((Read64(m->ax) >> 16) || (Read64(m->cx) >> 16) ||
+          (Read64(m->dx) >> 16) || (Read64(m->bx) >> 16) ||
+          (Read64(m->sp) >> 16) || (Read64(m->bp) >> 16) ||
+          (Read64(m->si) >> 16) || (Read64(m->di) >> 16)) {
+        return 8;
+      } else {
+        return 4;
+      }
+    default:
+      unreachable;
+  }
+}
+
+static int GetAddrHexWidth(void) {
+  switch (m->mode & 3) {
+    case XED_MODE_LONG:
+      return 12;
+    case XED_MODE_LEGACY:
+      return 8;
+    case XED_MODE_REAL:
+      if (Read64(m->fs) >= 0x10fff0 || Read64(m->gs) >= 0x10fff0) {
+        return 8;
+      } else {
+        return 6;
+      }
+    default:
+      unreachable;
+  }
+}
+
 void SetupDraw(void) {
-  int i, j, n, a, b, yn, cpuy, ssey, dx[2], c2y[3], c3y[5];
+  int i, j, n, a, b, c, yn, cpuy, ssey, dx[2], c2y[3], c3y[5];
 
   cpuy = 9;
   if (IsSegNonZero()) cpuy += 2;
   ssey = PickNumberOfXmmRegistersToShow();
   if (ssey) ++ssey;
 
-  a = 12 + 1 + DUMPWIDTH;
+  a = GetAddrHexWidth() + 1 + DUMPWIDTH;
   b = DISPWIDTH + 1;
+  c = GetAddrHexWidth() + 1 + DISWIDTH;
   dx[1] = txn >= a + b ? txn - a : txn;
-  dx[0] = txn >= a + b + b ? txn - a - b : dx[1];
+  dx[0] = txn >= c + b + a ? txn - a - b : dx[1];
 
   yn = tyn - 1;
   a = 1 / 8. * yn;
@@ -1063,10 +1120,10 @@ static void DrawRegister(struct Panel *p, long i, long r) {
   value = Read64(m->reg[r]);
   previous = Read64(laststate.reg[r]);
   if (value != previous) AppendPanel(p, i, "\e[7m");
-  snprintf(buf, sizeof(buf), "%-3s", kRegisterNames[r]);
+  snprintf(buf, sizeof(buf), "%-3s", kRegisterNames[m->mode & 3][r]);
   AppendPanel(p, i, buf);
   AppendPanel(p, i, " ");
-  snprintf(buf, sizeof(buf), "0x%016lx", value);
+  snprintf(buf, sizeof(buf), "%0*lx", GetRegHexWidth(), value);
   AppendPanel(p, i, buf);
   if (value != previous) AppendPanel(p, i, "\e[27m");
   AppendPanel(p, i, "  ");
@@ -1082,7 +1139,11 @@ static void DrawSegment(struct Panel *p, long i, const uint8_t seg[8],
   snprintf(buf, sizeof(buf), "%-3s", name);
   AppendPanel(p, i, buf);
   AppendPanel(p, i, " ");
-  snprintf(buf, sizeof(buf), "0x%016lx", value);
+  if ((m->mode & 3) == XED_MODE_REAL) {
+    snprintf(buf, sizeof(buf), "%0*lx", GetRegHexWidth(), value >> 4);
+  } else {
+    snprintf(buf, sizeof(buf), "%0*lx", GetRegHexWidth(), value);
+  }
   AppendPanel(p, i, buf);
   if (value != previous) AppendPanel(p, i, "\e[27m");
   AppendPanel(p, i, "  ");
@@ -1116,7 +1177,8 @@ static void DrawCpu(struct Panel *p) {
   DrawRegister(p, 5, 9), DrawRegister(p, 5, 13), DrawSt(p, 5, 5);
   DrawRegister(p, 6, 10), DrawRegister(p, 6, 14), DrawSt(p, 6, 6);
   DrawRegister(p, 7, 11), DrawRegister(p, 7, 15), DrawSt(p, 7, 7);
-  snprintf(buf, sizeof(buf), "RIP 0x%016x  FLG", m->ip);
+  snprintf(buf, sizeof(buf), "%-3s %0*x  FLG", kRipName[m->mode & 3],
+           GetRegHexWidth(), m->ip);
   AppendPanel(p, 8, buf);
   DrawFlag(p, 8, 'C', GetFlag(m->flags, FLAGS_CF));
   DrawFlag(p, 8, 'P', GetFlag(m->flags, FLAGS_PF));
@@ -1268,7 +1330,7 @@ static void DrawMemoryZoomed(struct Panel *p, struct MemoryView *view,
   size = (p->bottom - p->top) * DUMPWIDTH;
   canvas = xcalloc(1, size);
   invalid = xcalloc(1, size);
-  memset(&ranges, 0, sizeof(ranges));
+  bzero(&ranges, sizeof(ranges));
   FindContiguousMemoryRanges(m, &ranges);
   for (k = i = 0; i < ranges.i; ++i) {
     if ((a >= ranges.p[i].a && a < ranges.p[i].b) ||
@@ -1279,7 +1341,7 @@ static void DrawMemoryZoomed(struct Panel *p, struct MemoryView *view,
       n = ROUNDUP(ROUNDUP(d - c, 16), 1ull << view->zoom);
       chunk = xmalloc(n);
       VirtualSend(m, chunk, c, d - c);
-      memset(chunk + (d - c), 0, n - (d - c));
+      bzero(chunk + (d - c), n - (d - c));
       for (j = 0; j < view->zoom; ++j) {
         cDecimate2xUint8x8(ROUNDUP(n, 16), chunk, kThePerfectKernel);
         n >>= 1;
@@ -1295,8 +1357,9 @@ static void DrawMemoryZoomed(struct Panel *p, struct MemoryView *view,
   free(ranges.p);
   high = false;
   for (c = i = 0; i < p->bottom - p->top; ++i) {
-    AppendFmt(&p->lines[i], "%012lx ",
-              (view->start + i) * DUMPWIDTH * (1ull << view->zoom));
+    AppendFmt(&p->lines[i], "%0*lx ", GetAddrHexWidth(),
+              ((view->start + i) * DUMPWIDTH * (1ull << view->zoom)) &
+                  0x0000ffffffffffff);
     for (j = 0; j < DUMPWIDTH; ++j, ++c) {
       a = ((view->start + i) * DUMPWIDTH + j + 0) * (1ull << view->zoom);
       b = ((view->start + i) * DUMPWIDTH + j + 1) * (1ull << view->zoom);
@@ -1331,7 +1394,8 @@ static void DrawMemoryUnzoomed(struct Panel *p, struct MemoryView *view,
   bool high, changed;
   high = false;
   for (i = 0; i < p->bottom - p->top; ++i) {
-    AppendFmt(&p->lines[i], "%012lx ", (view->start + i) * DUMPWIDTH);
+    AppendFmt(&p->lines[i], "%0*lx ", GetAddrHexWidth(),
+              ((view->start + i) * DUMPWIDTH) & 0x0000ffffffffffff);
     for (j = 0; j < DUMPWIDTH; ++j) {
       k = (view->start + i) * DUMPWIDTH + j;
       c = VirtualBing(k);
@@ -1346,7 +1410,7 @@ static void DrawMemoryUnzoomed(struct Panel *p, struct MemoryView *view,
             x = 129; /* PURPLE: shadow corruption */
           } else if (sc == kAsanHeapFree) {
             x = 20; /* BLUE: heap freed */
-          } else if (sc == kAsanRelocated) {
+          } else if (sc == kAsanHeapRelocated) {
             x = 16; /* BLACK: heap relocated */
           } else if (sc == kAsanHeapUnderrun || sc == kAsanAllocaUnderrun) {
             x = 53; /* RED+PURPLETINGE: heap underrun */
@@ -1421,7 +1485,7 @@ static void DrawBreakpoints(struct Panel *p) {
       sym = DisFindSym(dis, addr);
       name = sym != -1 ? dis->syms.stab + dis->syms.p[sym].name : "UNKNOWN";
       s = buf;
-      s += sprintf(s, "%012lx ", addr);
+      s += sprintf(s, "%0*lx ", GetAddrHexWidth(), addr & 0x0000ffffffffffff);
       CHECK_LT(Demangle(s, name, DIS_MAX_SYMBOL_LENGTH), buf + ARRAYLEN(buf));
       AppendPanel(p, line - breakpointsstart, buf);
       if (sym != -1 && addr != dis->syms.p[sym].addr) {
@@ -1461,7 +1525,9 @@ static void DrawFrames(struct Panel *p) {
     sym = DisFindSym(dis, rp);
     name = sym != -1 ? dis->syms.stab + dis->syms.p[sym].name : "UNKNOWN";
     s = line;
-    s += sprintf(s, "%012lx %012lx ", Read64(m->ss) + bp, rp);
+    s += sprintf(s, "%0*lx %0*lx ", GetAddrHexWidth(),
+                 (Read64(m->ss) + bp) & 0x0000ffffffffffff, GetAddrHexWidth(),
+                 rp & 0x0000ffffffffffff);
     s = Demangle(s, name, DIS_MAX_SYMBOL_LENGTH);
     AppendPanel(p, i - framesstart, line);
     if (sym != -1 && rp != dis->syms.p[sym].addr) {
@@ -1501,15 +1567,16 @@ static void CheckFramePointerImpl(void) {
   sp = Read64(m->sp);
   while (bp) {
     if (!(r = FindReal(m, Read64(m->ss) + bp))) {
-      LOGF("corrupt frame: %012lx", bp);
+      INFOF("corrupt frame: %0*lx", GetAddrHexWidth(), bp & 0x0000ffffffffffff);
       ThrowProtectionFault(m);
     }
     sp = bp;
     bp = Read64(r + 0) - 0;
     rp = Read64(r + 8) - 1;
     if (!bp && !(m->bofram[0] <= rp && rp <= m->bofram[1])) {
-      LOGF("bad frame !(%012lx <= %012lx <= %012lx)", m->bofram[0], rp,
-           m->bofram[1]);
+      INFOF("bad frame !(%0*lx <= %0*lx <= %0*lx)", GetAddrHexWidth(),
+            m->bofram[0], GetAddrHexWidth(), rp, GetAddrHexWidth(),
+            m->bofram[1]);
       ThrowProtectionFault(m);
     }
   }
@@ -1546,7 +1613,7 @@ static void DrawStatus(struct Panel *p) {
   a = &m->memstat;
   b = &lastmemstat;
   s = xmalloc(sizeof(struct Buffer));
-  memset(s, 0, sizeof(*s));
+  bzero(s, sizeof(*s));
   if (ips > 0) rw += AppendStat(s, "ips", ips, false);
   rw += AppendStat(s, "kb", m->real.n / 1024, false);
   rw += AppendStat(s, "reserve", a->reserved, a->reserved != b->reserved);
@@ -1576,6 +1643,7 @@ static void PreventBufferbloat(void) {
 
 static void Redraw(void) {
   int i, j;
+  if (belay) return;
   oldlen = m->xedd->length;
   if (!IsShadow(m->readaddr) && !IsShadow(m->readaddr + m->readsize)) {
     readaddr = m->readaddr;
@@ -1617,7 +1685,7 @@ static void Redraw(void) {
   DrawStatus(&pan.status);
   PreventBufferbloat();
   if (PrintPanels(ttyout, ARRAYLEN(pan.p), pan.p, tyn, txn) == -1) {
-    LOGF("PrintPanels Interrupted");
+    INFOF("PrintPanels Interrupted");
     CHECK_EQ(EINTR, errno);
   }
   last_opcount = opcount;
@@ -1676,27 +1744,60 @@ static bool HasPendingInput(int fd) {
   return fds[0].revents & (POLLIN | POLLERR);
 }
 
+static struct Panel *LocatePanel(int y, int x) {
+  int i;
+  for (i = 0; i < ARRAYLEN(pan.p); ++i) {
+    if ((pan.p[i].left <= x && x < pan.p[i].right) &&
+        (pan.p[i].top <= y && y < pan.p[i].bottom)) {
+      return &pan.p[i];
+    }
+  }
+  return NULL;
+}
+
+static struct Mouse ParseMouse(char *p) {
+  int e, x, y;
+  struct Mouse m;
+  e = strtol(p, &p, 10);
+  if (*p == ';') ++p;
+  x = min(txn, max(1, strtol(p, &p, 10))) - 1;
+  if (*p == ';') ++p;
+  y = min(tyn, max(1, strtol(p, &p, 10))) - 1;
+  e |= (*p == 'm') << 2;
+  m.y = y;
+  m.x = x;
+  m.e = e;
+  return m;
+}
+
 static ssize_t ReadPtyFdDirect(int fd, void *data, size_t size) {
-  char *buf;
   ssize_t rc;
+  char buf[32];
+  struct Mouse m;
   DEBUGF("ReadPtyFdDirect");
-  buf = malloc(PAGESIZE);
   pty->conf |= kPtyBlinkcursor;
-  if (tuimode) DisableMouseTracking();
   for (;;) {
     ReactiveDraw();
-    if ((rc = read(fd, buf, PAGESIZE)) != -1) break;
+    if ((rc = readansi(fd, buf, sizeof(buf))) != -1) {
+      if (tuimode && rc > 3 &&
+          (buf[0] == '\e' && buf[1] == '[' && buf[2] == '<')) {
+        m = ParseMouse(buf + 3);
+        if (LocatePanel(m.y, m.x) != &pan.display) {
+          HandleKeyboard(buf);
+          continue;
+        }
+      }
+      break;
+    }
     CHECK_EQ(EINTR, errno);
     HandleAppReadInterrupt();
   }
-  if (tuimode) EnableMouseTracking();
   pty->conf &= ~kPtyBlinkcursor;
   if (rc > 0) {
     PtyWriteInput(pty, buf, rc);
     ReactiveDraw();
     rc = PtyRead(pty, data, size);
   }
-  free(buf);
   return rc;
 }
 
@@ -1731,7 +1832,7 @@ static void DrawDisplayOnly(struct Panel *p) {
     p->lines[i].i = 0;
   }
   DrawDisplay(p);
-  memset(&b, 0, sizeof(b));
+  bzero(&b, sizeof(b));
   tly = tyn / 2 - yn / 2;
   tlx = txn / 2 - xn / 2;
   AppendStr(&b, "\e[0m\e[H");
@@ -1766,7 +1867,7 @@ static int OnPtyFdTiocgwinsz(int fd, struct winsize *ws) {
 }
 
 static int OnPtyFdTcgets(int fd, struct termios *c) {
-  memset(c, 0, sizeof(*c));
+  bzero(c, sizeof(*c));
   if (!(pty->conf & kPtyNocanon)) c->c_iflag |= ICANON;
   if (!(pty->conf & kPtyNoecho)) c->c_iflag |= ECHO;
   if (!(pty->conf & kPtyNoopost)) c->c_oflag |= OPOST;
@@ -1812,7 +1913,7 @@ static const struct MachineFdCb kMachineFdCbPty = {
 };
 
 static void LaunchDebuggerReactively(void) {
-  LOGF("%s", systemfailure);
+  INFOF("%s", systemfailure);
   if (tuimode) {
     action |= FAILURE;
   } else {
@@ -1832,8 +1933,8 @@ static void OnDebug(void) {
 }
 
 static void OnSegmentationFault(void) {
-  snprintf(systemfailure, sizeof(systemfailure), "SEGMENTATION FAULT %012lx",
-           m->faultaddr);
+  snprintf(systemfailure, sizeof(systemfailure), "SEGMENTATION FAULT %0*lx",
+           GetAddrHexWidth(), m->faultaddr & 0x0000ffffffffffff);
   LaunchDebuggerReactively();
 }
 
@@ -1989,7 +2090,16 @@ static void OnVidyaServiceGetCursorPosition(void) {
 
 static int GetVidyaByte(unsigned char b) {
   if (0x20 <= b && b <= 0x7F) return b;
+#if 0
+  /*
+   * The original hardware displayed 0x00, 0x20, and 0xff as space. It
+   * made sense for viewing sparse binary data that 0x00 be blank. But
+   * it doesn't make sense for dense data too, and we don't need three
+   * space characters. So we diverge in our implementation and display
+   * 0xff as lambda.
+   */
   if (b == 0xFF) b = 0x00;
+#endif
   return kCp437[b];
 }
 
@@ -2061,17 +2171,66 @@ static void OnVidyaService(void) {
 }
 
 static void OnKeyboardServiceReadKeyPress(void) {
+  wint_t x;
   uint8_t b;
   ssize_t rc;
+  size_t i, n;
+  struct Mouse mo;
+  static char buf[32];
+  static size_t pending;
+  static const char *fun;
+  static const char *prog /* = "(CONS (QUOTE A) (QUOTE B))" */;
   pty->conf |= kPtyBlinkcursor;
-  if (tuimode) DisableMouseTracking();
-  for (;;) {
-    ReactiveDraw();
-    if ((rc = read(0, &b, 1)) != -1) break;
-    CHECK_EQ(EINTR, errno);
-    HandleAppReadInterrupt();
+  if (!fun && prog) {
+    fun = prog;
+    belay = 1;
   }
-  if (tuimode) EnableMouseTracking();
+  if (fun && *fun) {
+    b = *fun++;
+    if (!*fun) {
+      ReactiveDraw();
+      belay = 0;
+    }
+  } else {
+    if (!pending) {
+      for (;;) {
+        ReactiveDraw();
+        if ((rc = readansi(0, buf, sizeof(buf))) != -1) {
+          if (!rc) {
+            exitcode = 0;
+            action |= EXIT;
+            return;
+          }
+          if (!memcmp(buf, "\e[200~", 6) || !memcmp(buf, "\e[201~", 6)) {
+            continue;
+          }
+          if ((x = buf[0] & 0377) >= 0300) {
+            n = ThomPikeLen(x);
+            x = ThomPikeByte(x);
+            for (i = 1; i < n; ++i) {
+              x = ThomPikeMerge(x, buf[i] & 0377);
+            }
+            buf[0] = unbing(x);
+            rc = 1;
+          } else if (tuimode && rc > 3 &&
+                     (buf[0] == '\e' && buf[1] == '[' && buf[2] == '<')) {
+            mo = ParseMouse(buf + 3);
+            if (LocatePanel(mo.y, mo.x) != &pan.display) {
+              HandleKeyboard(buf);
+              continue;
+            }
+          }
+          pending = rc;
+          break;
+        }
+        CHECK_EQ(EINTR, errno);
+        HandleAppReadInterrupt();
+      }
+    }
+    b = buf[0];
+    memmove(buf, buf + 1, pending - 1);
+    --pending;
+  }
   pty->conf &= ~kPtyBlinkcursor;
   ReactiveDraw();
   if (b == 0x7F) b = '\b';
@@ -2096,7 +2255,7 @@ static void OnApmService(void) {
   } else if (Read16(m->ax) == 0x5301 && Read16(m->bx) == 0x0000) {
     SetCarry(false);
   } else if (Read16(m->ax) == 0x5307 && m->bx[0] == 1 && m->cx[0] == 3) {
-    LOGF("APM SHUTDOWN");
+    INFOF("APM SHUTDOWN");
     exit(0);
   } else {
     SetCarry(true);
@@ -2190,7 +2349,8 @@ static void OnBinbase(struct Machine *m) {
   unsigned i;
   int64_t skew;
   skew = m->xedd->op.disp * 512;
-  LOGF("skew binbase %,ld @ %012lx", skew, GetIp());
+  INFOF("skew binbase %,ld @ %0*lx", skew, GetAddrHexWidth(),
+        GetIp() & 0x0000ffffffffffff);
   for (i = 0; i < dis->syms.i; ++i) dis->syms.p[i].addr += skew;
   for (i = 0; i < dis->loads.i; ++i) dis->loads.p[i].addr += skew;
   for (i = 0; i < breakpoints.i; ++i) breakpoints.p[i].addr += skew;
@@ -2412,34 +2572,19 @@ static void OnMouseCtrlWheelDown(struct Panel *p, int y, int x) {
   ZoomMemoryViews(p, y, x, +1);
 }
 
-static struct Panel *LocatePanel(int y, int x) {
-  int i;
-  for (i = 0; i < ARRAYLEN(pan.p); ++i) {
-    if ((pan.p[i].left <= x && x < pan.p[i].right) &&
-        (pan.p[i].top <= y && y < pan.p[i].bottom)) {
-      return &pan.p[i];
-    }
-  }
-  return NULL;
-}
-
 static void OnMouse(char *p) {
   int e, x, y;
+  struct Mouse m;
   struct Panel *ep;
-  e = strtol(p, &p, 10);
-  if (*p == ';') ++p;
-  x = min(txn, max(1, strtol(p, &p, 10))) - 1;
-  if (*p == ';') ++p;
-  y = min(tyn, max(1, strtol(p, &p, 10))) - 1;
-  e |= (*p == 'm') << 2;
-  if ((ep = LocatePanel(y, x))) {
-    y -= ep->top;
-    x -= ep->left;
-    switch (e) {
-      CASE(kMouseWheelUp, OnMouseWheelUp(ep, y, x));
-      CASE(kMouseWheelDown, OnMouseWheelDown(ep, y, x));
-      CASE(kMouseCtrlWheelUp, OnMouseCtrlWheelUp(ep, y, x));
-      CASE(kMouseCtrlWheelDown, OnMouseCtrlWheelDown(ep, y, x));
+  m = ParseMouse(p);
+  if ((ep = LocatePanel(m.y, m.x))) {
+    m.y -= ep->top;
+    m.x -= ep->left;
+    switch (m.e) {
+      CASE(kMouseWheelUp, OnMouseWheelUp(ep, m.y, m.x));
+      CASE(kMouseWheelDown, OnMouseWheelDown(ep, m.y, m.x));
+      CASE(kMouseCtrlWheelUp, OnMouseCtrlWheelUp(ep, m.y, m.x));
+      CASE(kMouseCtrlWheelDown, OnMouseCtrlWheelDown(ep, m.y, m.x));
       default:
         break;
     }
@@ -2451,17 +2596,7 @@ static void OnHelp(void) {
   dialog = HELP;
 }
 
-static void ReadKeyboard(void) {
-  char buf[64], *p = buf;
-  memset(buf, 0, sizeof(buf));
-  dialog = NULL;
-  if (readansi(ttyin, buf, sizeof(buf)) == -1) {
-    if (errno == EINTR) {
-      LOGF("ReadKeyboard interrupted");
-      return;
-    }
-    FATALF("ReadKeyboard failed: %s", strerror(errno));
-  }
+static void HandleKeyboard(const char *p) {
   switch (*p++) {
     CASE('q', OnQ());
     CASE('v', OnV());
@@ -2526,6 +2661,20 @@ static void ReadKeyboard(void) {
   }
 }
 
+static void ReadKeyboard(void) {
+  char buf[64];
+  bzero(buf, sizeof(buf));
+  dialog = NULL;
+  if (readansi(ttyin, buf, sizeof(buf)) == -1) {
+    if (errno == EINTR) {
+      INFOF("ReadKeyboard interrupted");
+      return;
+    }
+    FATALF("ReadKeyboard failed: %s", strerror(errno));
+  }
+  HandleKeyboard(buf);
+}
+
 static int64_t ParseHexValue(const char *s) {
   char *ep;
   int64_t x;
@@ -2541,7 +2690,7 @@ static int64_t ParseHexValue(const char *s) {
 
 static void HandleBreakpointFlag(const char *s) {
   struct Breakpoint b;
-  memset(&b, 0, sizeof(b));
+  bzero(&b, sizeof(b));
   if (isdigit(*s)) {
     b.addr = ParseHexValue(s);
   } else {
@@ -2563,7 +2712,8 @@ static void Exec(void) {
   if (!(interrupt = setjmp(m->onhalt))) {
     if (!(action & CONTINUE) &&
         (bp = IsAtBreakpoint(&breakpoints, GetIp())) != -1) {
-      LOGF("BREAK1 %012lx", breakpoints.p[bp].addr);
+      INFOF("BREAK1 %0*lx", GetAddrHexWidth(),
+            breakpoints.p[bp].addr & 0x0000ffffffffffff);
       tuimode = true;
       LoadInstruction(m);
       ExecuteInstruction(m);
@@ -2574,7 +2724,8 @@ static void Exec(void) {
       for (;;) {
         LoadInstruction(m);
         if ((bp = IsAtBreakpoint(&breakpoints, GetIp())) != -1) {
-          LOGF("BREAK2 %012lx", breakpoints.p[bp].addr);
+          INFOF("BREAK2 %0*lx", GetAddrHexWidth(),
+                breakpoints.p[bp].addr & 0x0000ffffffffffff);
           action &= ~(FINISH | NEXT | CONTINUE);
           tuimode = true;
           break;
@@ -2589,13 +2740,13 @@ static void Exec(void) {
           action &= ~ALARM;
         }
         if (action & EXIT) {
-          LOGF("EXEC EXIT");
+          INFOF("EXEC EXIT");
           break;
         }
         if (action & INT) {
-          LOGF("EXEC INT");
+          INFOF("EXEC INT");
           if (react) {
-            LOGF("REACT");
+            INFOF("REACT");
             action &= ~(INT | STEP | FINISH | NEXT);
             tuimode = true;
           }
@@ -2615,7 +2766,7 @@ static void Tui(void) {
   ssize_t bp;
   int interrupt;
   bool interactive;
-  LOGF("TUI");
+  INFOF("TUI");
   TuiSetup();
   SetupDraw();
   ScrollOp(&pan.disassembly, GetDisIndex());
@@ -2626,7 +2777,8 @@ static void Tui(void) {
         if ((action & (FINISH | NEXT | CONTINUE)) &&
             (bp = IsAtBreakpoint(&breakpoints, GetIp())) != -1) {
           action &= ~(FINISH | NEXT | CONTINUE);
-          LOGF("BREAK %012lx", breakpoints.p[bp].addr);
+          INFOF("BREAK %0*lx", GetAddrHexWidth(),
+                breakpoints.p[bp].addr & 0x0000ffffffffffff);
         }
       } else {
         m->xedd = (struct XedDecodedInst *)m->icache[0];
@@ -2656,11 +2808,11 @@ static void Tui(void) {
         PrintMessageBox(ttyout, dialog, tyn, txn);
       }
       if (action & FAILURE) {
-        LOGF("TUI FAILURE");
+        INFOF("TUI FAILURE");
         PrintMessageBox(ttyout, systemfailure, tyn, txn);
         ReadKeyboard();
         if (action & INT) {
-          LOGF("TUI INT");
+          INFOF("TUI INT");
           LeaveScreen();
           exit(1);
         }
@@ -2670,7 +2822,7 @@ static void Tui(void) {
         ReadKeyboard();
       }
       if (action & INT) {
-        LOGF("TUI INT");
+        INFOF("TUI INT");
         action &= ~INT;
         if (action & (CONTINUE | NEXT | FINISH)) {
           action &= ~(CONTINUE | NEXT | FINISH);
@@ -2680,17 +2832,17 @@ static void Tui(void) {
         }
       }
       if (action & EXIT) {
-        LOGF("TUI EXIT");
+        INFOF("TUI EXIT");
         break;
       }
       if (action & QUIT) {
-        LOGF("TUI QUIT");
+        INFOF("TUI QUIT");
         action &= ~QUIT;
         raise(SIGQUIT);
         continue;
       }
       if (action & RESTART) {
-        LOGF("TUI RESTART");
+        INFOF("TUI RESTART");
         break;
       }
       if (IsExecuting()) {
@@ -2761,6 +2913,7 @@ static void GetOpts(int argc, char *argv[]) {
         react = true;
         break;
       case 'r':
+        m->ismetal = true;
         m->mode = XED_MACHINE_MODE_REAL;
         g_disisprog_disable = true;
         break;
@@ -2771,7 +2924,7 @@ static void GetOpts(int argc, char *argv[]) {
         HandleBreakpointFlag(optarg);
         break;
       case 'H':
-        memset(&g_high, 0, sizeof(g_high));
+        bzero(&g_high, sizeof(g_high));
         break;
       case 'v':
         ++__log_level;

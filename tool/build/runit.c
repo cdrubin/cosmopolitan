@@ -16,63 +16,59 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/alg.h"
+#include "libc/assert.h"
 #include "libc/bits/bits.h"
 #include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/sigbits.h"
 #include "libc/calls/struct/flock.h"
-#include "libc/calls/struct/itimerval.h"
-#include "libc/calls/struct/sigaction.h"
-#include "libc/calls/struct/stat.h"
-#include "libc/calls/struct/timeval.h"
-#include "libc/dce.h"
 #include "libc/dns/dns.h"
-#include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/fmt/fmt.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/mem/mem.h"
+#include "libc/macros.internal.h"
+#include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/gc.internal.h"
-#include "libc/runtime/runtime.h"
 #include "libc/sock/ipclassify.internal.h"
-#include "libc/sock/sock.h"
 #include "libc/stdio/stdio.h"
-#include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/ex.h"
-#include "libc/sysv/consts/exit.h"
-#include "libc/sysv/consts/f.h"
-#include "libc/sysv/consts/fd.h"
 #include "libc/sysv/consts/fileno.h"
 #include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/itimer.h"
 #include "libc/sysv/consts/lock.h"
+#include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
-#include "libc/sysv/consts/pr.h"
-#include "libc/sysv/consts/shut.h"
-#include "libc/sysv/consts/sig.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sock.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
+#include "net/https/https.h"
+#include "third_party/mbedtls/ssl.h"
+#include "tool/build/lib/eztls.h"
+#include "tool/build/lib/psk.h"
 #include "tool/build/runit.h"
 
 /**
  * @fileoverview Remote test runner.
  *
- * This is able to upload and run test binaries on remote operating
- * systems with about 30 milliseconds of latency. It requires zero ops
- * work too, since it deploys the ephemeral runit daemon via SSH upon
- * ECONNREFUSED. That takes 10x longer (300 milliseconds). Further note
- * there's no make -j race conditions here, thanks to SO_REUSEPORT.
+ * We want to scp .com binaries to remote machines and run them. The
+ * problem is that SSH is the slowest thing imaginable, taking about
+ * 300ms to connect to a host that's merely half a millisecond away.
+ *
+ * This program takes 17ms using elliptic curve diffie hellman exchange
+ * where we favor a 32-byte binary preshared key (~/.runit.psk) instead
+ * of certificates. It's how long it takes to connect, copy the binary,
+ * and run it. The remote daemon is deployed via SSH if it's not there.
  *
  *     o/default/tool/build/runit.com             \
  *         o/default/tool/build/runitd.com        \
  *         o/default/test/libc/alg/qsort_test.com \
  *         freebsd.test.:31337:22
  *
+ * APE binaries are hermetic and embed dependent files within their zip
+ * structure, which is why all we need is this simple test runner tool.
  * The only thing that needs to be configured is /etc/hosts or Bind, to
  * assign numbers to the officially reserved canned names. For example:
  *
@@ -97,12 +93,7 @@
  *     iptables -I INPUT 1 -s 10.0.0.0/8 -p tcp --dport 31337 -j ACCEPT
  *     iptables -I INPUT 1 -s 192.168.0.0/16 -p tcp --dport 31337 -j ACCEPT
  *
- * If your system administrator blocks all ICMP, you'll likely encounter
- * difficulties. Consider offering feedback to his/her manager and grand
- * manager.
- *
- * Finally note this tool isn't designed for untrustworthy environments.
- * It also isn't designed to process untrustworthy inputs.
+ * This tool may be used in zero trust environments.
  */
 
 static const struct addrinfo kResolvHints = {.ai_family = AF_INET,
@@ -146,7 +137,6 @@ nodiscard char *MakeDeployScript(struct addrinfo *remotenic, size_t combytes) {
   const char *ip4 = (const char *)&remotenic->ai_addr4->sin_addr;
   return xasprintf("mkdir -p o/ && "
                    "dd bs=%zu count=%zu of=o/runitd.$$.com 2>/dev/null && "
-                   "exec <&- && "
                    "chmod +x o/runitd.$$.com && "
                    "o/runitd.$$.com -rdl%hhu.%hhu.%hhu.%hhu -p %hu && "
                    "rm -f o/runitd.$$.com",
@@ -301,92 +291,88 @@ TryAgain:
 
 void SendRequest(void) {
   int fd;
-  int64_t off;
+  char *p;
+  size_t i;
+  ssize_t rc;
+  uint32_t crc;
   struct stat st;
   const char *name;
-  unsigned char *hdr;
+  unsigned char *hdr, *q;
   size_t progsize, namesize, hdrsize;
   DEBUGF("running %s on %s", g_prog, g_hostname);
   CHECK_NE(-1, (fd = open(g_prog, O_RDONLY)));
   CHECK_NE(-1, fstat(fd, &st));
+  CHECK_NE(MAP_FAILED, (p = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0)));
   CHECK_LE((namesize = strlen((name = basename(g_prog)))), PATH_MAX);
   CHECK_LE((progsize = st.st_size), INT_MAX);
-  CHECK_NOTNULL((hdr = gc(calloc(1, (hdrsize = 4 + 1 + 4 + 4 + namesize)))));
-  hdr[0 + 0] = (unsigned char)((unsigned)RUNITD_MAGIC >> 030);
-  hdr[0 + 1] = (unsigned char)((unsigned)RUNITD_MAGIC >> 020);
-  hdr[0 + 2] = (unsigned char)((unsigned)RUNITD_MAGIC >> 010);
-  hdr[0 + 3] = (unsigned char)((unsigned)RUNITD_MAGIC >> 000);
-  hdr[4 + 0] = kRunitExecute;
-  hdr[5 + 0] = (unsigned char)((unsigned)namesize >> 030);
-  hdr[5 + 1] = (unsigned char)((unsigned)namesize >> 020);
-  hdr[5 + 2] = (unsigned char)((unsigned)namesize >> 010);
-  hdr[5 + 3] = (unsigned char)((unsigned)namesize >> 000);
-  hdr[9 + 0] = (unsigned char)((unsigned)progsize >> 030);
-  hdr[9 + 1] = (unsigned char)((unsigned)progsize >> 020);
-  hdr[9 + 2] = (unsigned char)((unsigned)progsize >> 010);
-  hdr[9 + 3] = (unsigned char)((unsigned)progsize >> 000);
-  memcpy(&hdr[4 + 1 + 4 + 4], name, namesize);
-  CHECK_EQ(hdrsize, write(g_sock, hdr, hdrsize));
-  for (off = 0; off < progsize;) {
-    CHECK_GT(sendfile(g_sock, fd, &off, progsize - off), 0);
+  CHECK_NOTNULL((hdr = gc(calloc(1, (hdrsize = 17 + namesize)))));
+  crc = crc32_z(0, p, st.st_size);
+  q = hdr;
+  q = WRITE32BE(q, RUNITD_MAGIC);
+  *q++ = kRunitExecute;
+  q = WRITE32BE(q, namesize);
+  q = WRITE32BE(q, progsize);
+  q = WRITE32BE(q, crc);
+  q = mempcpy(q, name, namesize);
+  assert(hdrsize == q - hdr);
+  CHECK_EQ(hdrsize, mbedtls_ssl_write(&ezssl, hdr, hdrsize));
+  for (i = 0; i < progsize; i += rc) {
+    CHECK_GT((rc = mbedtls_ssl_write(&ezssl, p + i, progsize - i)), 0);
   }
-  CHECK_NE(-1, shutdown(g_sock, SHUT_WR));
+  CHECK_EQ(0, EzTlsFlush(&ezbio, 0, 0));
+  CHECK_NE(-1, munmap(p, st.st_size));
+  CHECK_NE(-1, close(fd));
+}
+
+bool Recv(unsigned char *p, size_t n) {
+  size_t i, rc;
+  static long backoff;
+  for (i = 0; i < n; i += rc) {
+    do {
+      rc = mbedtls_ssl_read(&ezssl, p + i, n - i);
+    } while (rc == MBEDTLS_ERR_SSL_WANT_READ);
+    if (!rc || rc == MBEDTLS_ERR_NET_CONN_RESET) {
+      usleep((backoff = (backoff + 1000) * 2));
+      return false;
+    } else if (rc < 0) {
+      TlsDie("read response failed", rc);
+    }
+  }
+  return true;
 }
 
 int ReadResponse(void) {
   int res;
-  uint32_t size;
   ssize_t rc;
   size_t n, m;
-  unsigned char *p;
-  enum RunitCommand cmd;
-  static long backoff;
-  static unsigned char msg[512];
-  res = -1;
-  for (;;) {
-    if ((rc = recv(g_sock, msg, sizeof(msg), 0)) == -1) {
-      CHECK_EQ(ECONNRESET, errno);
-      usleep((backoff = (backoff + 1000) * 2));
-      break;
+  uint32_t size;
+  unsigned char b[512];
+  for (res = -1; res == -1;) {
+    if (!Recv(b, 5)) break;
+    CHECK_EQ(RUNITD_MAGIC, READ32BE(b), "%#.5s", b);
+    switch (b[4]) {
+      case kRunitExit:
+        if (!Recv(b, 1)) break;
+        if ((res = *b)) {
+          WARNF("%s on %s exited with %d", g_prog, g_hostname, res);
+        }
+        break;
+      case kRunitStderr:
+        if (!Recv(b, 4)) break;
+        size = READ32BE(b);
+        for (; size; size -= n) {
+          n = MIN(size, sizeof(b));
+          if (!Recv(b, n)) goto drop;
+          CHECK_EQ(n, write(2, b, n));
+        }
+        break;
+      default:
+        fprintf(stderr, "error: received invalid runit command\n");
+        _exit(1);
     }
-    p = &msg[0];
-    n = (size_t)rc;
-    if (!n) break;
-    do {
-      CHECK_GE(n, 4 + 1);
-      CHECK_EQ(RUNITD_MAGIC, READ32BE(p));
-      p += 4, n -= 4;
-      cmd = *p++, n--;
-      switch (cmd) {
-        case kRunitExit:
-          CHECK_GE(n, 1);
-          if ((res = *p & 0xff)) {
-            WARNF("%s on %s exited with %d", g_prog, g_hostname, res);
-          }
-          goto drop;
-        case kRunitStderr:
-          CHECK_GE(n, 4);
-          size = READ32BE(p), p += 4, n -= 4;
-          while (size) {
-            if (n) {
-              CHECK_NE(-1, (rc = write(STDERR_FILENO, p, min(n, size))));
-              CHECK_NE(0, (m = (size_t)rc));
-              p += m, n -= m, size -= m;
-            } else {
-              CHECK_NE(-1, (rc = recv(g_sock, msg, sizeof(msg), 0)));
-              p = &msg[0];
-              n = (size_t)rc;
-              if (!n) goto drop;
-            }
-          }
-          break;
-        default:
-          __die();
-      }
-    } while (n);
   }
 drop:
-  CHECK_NE(-1, close(g_sock));
+  close(g_sock);
   return res;
 }
 
@@ -401,6 +387,8 @@ int RunOnHost(char *spec) {
   if (!strchr(g_hostname, '.')) strcat(g_hostname, ".test.");
   do {
     Connect();
+    EzFd(g_sock);
+    EzHandshake(); /* TODO(jart): Backoff on MBEDTLS_ERR_NET_CONN_RESET */
     SendRequest();
   } while ((rc = ReadResponse()) == -1);
   return rc;
@@ -463,7 +451,8 @@ int RunRemoteTestsInParallel(char *hosts[], int count) {
 }
 
 int main(int argc, char *argv[]) {
-  showcrashreports();
+  ShowCrashReports();
+  SetupPresharedKeySsl(MBEDTLS_SSL_IS_CLIENT, GetRunitPsk());
   /* __log_level = kLogDebug; */
   if (argc > 1 &&
       (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)) {

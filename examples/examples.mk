@@ -50,6 +50,7 @@ EXAMPLES_DIRECTDEPS =						\
 	LIBC_NT_NTDLL						\
 	LIBC_NT_USER32						\
 	LIBC_NT_WS2_32						\
+	LIBC_NT_ADVAPI32					\
 	LIBC_OHMYPLUS						\
 	LIBC_RAND						\
 	LIBC_RUNTIME						\
@@ -60,6 +61,7 @@ EXAMPLES_DIRECTDEPS =						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\
+	LIBC_THREAD						\
 	LIBC_TIME						\
 	LIBC_TINYMATH						\
 	LIBC_UNICODE						\
@@ -71,9 +73,11 @@ EXAMPLES_DIRECTDEPS =						\
 	THIRD_PARTY_DLMALLOC					\
 	THIRD_PARTY_GDTOA					\
 	THIRD_PARTY_GETOPT					\
+	THIRD_PARTY_LINENOISE					\
 	THIRD_PARTY_LUA						\
 	THIRD_PARTY_MBEDTLS					\
 	THIRD_PARTY_MUSL					\
+	THIRD_PARTY_QUICKJS					\
 	THIRD_PARTY_STB						\
 	THIRD_PARTY_XED						\
 	THIRD_PARTY_ZLIB					\
@@ -127,6 +131,16 @@ o/$(MODE)/examples/nesemu1.com.dbg:				\
 		$(CRT)						\
 		$(APE)
 	@$(APELINK)
+
+o/$(MODE)/examples/hello.com.dbg:				\
+		$(EXAMPLES_DEPS)				\
+		o/$(MODE)/examples/hello.o			\
+		o/$(MODE)/examples/examples.pkg			\
+		$(CRT)						\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/examples/nesemu1.o: QUOTA += -M512m
 
 $(EXAMPLES_OBJS): examples/examples.mk
 

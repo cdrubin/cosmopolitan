@@ -14,7 +14,8 @@ THIRD_PARTY_LUA_OBJS =					\
 	$(THIRD_PARTY_LUA_SRCS:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_LUA_COMS =					\
-	o/$(MODE)/third_party/lua/lua.com
+	o/$(MODE)/third_party/lua/lua.com		\
+	o/$(MODE)/third_party/lua/luac.com
 
 THIRD_PARTY_LUA_CHECKS =				\
 	$(THIRD_PARTY_LUA_A).pkg			\
@@ -31,8 +32,10 @@ THIRD_PARTY_LUA_DIRECTDEPS =				\
 	LIBC_STR					\
 	LIBC_SYSV					\
 	LIBC_TIME					\
+	LIBC_X						\
 	LIBC_TINYMATH					\
 	LIBC_UNICODE					\
+	THIRD_PARTY_LINENOISE				\
 	THIRD_PARTY_GDTOA
 
 THIRD_PARTY_LUA_DEPS :=					\
@@ -41,7 +44,7 @@ THIRD_PARTY_LUA_DEPS :=					\
 $(THIRD_PARTY_LUA_A):					\
 		third_party/lua/			\
 		$(THIRD_PARTY_LUA_A).pkg		\
-		$(filter-out %/lua.o,$(THIRD_PARTY_LUA_OBJS))
+		$(filter-out %.main.o,$(THIRD_PARTY_LUA_OBJS))
 
 $(THIRD_PARTY_LUA_A).pkg:				\
 		$(THIRD_PARTY_LUA_OBJS)			\
@@ -51,14 +54,28 @@ o/$(MODE)/third_party/lua/lua.com.dbg:			\
 		$(THIRD_PARTY_LUA_DEPS)			\
 		$(THIRD_PARTY_LUA_A)			\
 		$(THIRD_PARTY_LUA_A).pkg		\
-		o/$(MODE)/third_party/lua/lua.o		\
+		o/$(MODE)/third_party/lua/lua.main.o	\
 		$(CRT)					\
 		$(APE)
-	-@$(APELINK)
+	@$(APELINK)
+
+o/$(MODE)/third_party/lua/luac.com.dbg:			\
+		$(THIRD_PARTY_LUA_DEPS)			\
+		$(THIRD_PARTY_LUA_A)			\
+		$(THIRD_PARTY_LUA_A).pkg		\
+		o/$(MODE)/third_party/lua/luac.main.o	\
+		$(CRT)					\
+		$(APE)
+	@$(APELINK)
 
 o/$(MODE)/third_party/lua/lauxlib.o:			\
 		OVERRIDE_CFLAGS +=			\
 			-DSTACK_FRAME_UNLIMITED
+
+$(THIRD_PARTY_LUA_OBJS):				\
+		OVERRIDE_CFLAGS +=			\
+			-ffunction-sections		\
+			-fdata-sections
 
 .PHONY: o/$(MODE)/third_party/lua
 o/$(MODE)/third_party/lua:				\

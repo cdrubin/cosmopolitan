@@ -68,9 +68,11 @@
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-#define NAN      __builtin_nanf("")
-#define INFINITY __builtin_inff()
-#define HUGE_VAL __builtin_inff()
+#define NAN       __builtin_nanf("")
+#define INFINITY  __builtin_inff()
+#define HUGE_VAL  __builtin_inf()
+#define HUGE_VALF __builtin_inff()
+#define HUGE_VALL __builtin_infl()
 
 #if __FLT_EVAL_METHOD__ + 0 == 2
 typedef long double float_t;
@@ -147,8 +149,10 @@ double sqrt(double);
 double tan(double);
 double tanh(double);
 double trunc(double);
+double tgamma(double);
 double lgamma(double);
 double lgamma_r(double, int *);
+int finite(double);
 
 float acosf(float);
 float acoshf(float);
@@ -202,6 +206,8 @@ float sqrtf(float);
 float tanf(float);
 float tanhf(float);
 float truncf(float);
+float tgammaf(float);
+int finitef(float);
 
 long double acoshl(long double);
 long double acosl(long double);
@@ -255,6 +261,7 @@ long double sqrtl(long double);
 long double tanhl(long double);
 long double tanl(long double);
 long double truncl(long double);
+int finitel(long double);
 
 long lrint(double);
 long lrintf(float);

@@ -23,38 +23,64 @@
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/rand/rand.h"
-#include "libc/runtime/memtrack.h"
+#include "libc/runtime/cxaatexit.internal.h"
+#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
 #define N 1024
 #define M 20
 
+TEST(malloc, zeroMeansOne) {
+  ASSERT_GE(malloc_usable_size(gc(malloc(0))), 1);
+}
+
+TEST(calloc, zerosMeansOne) {
+  ASSERT_GE(malloc_usable_size(gc(calloc(0, 0))), 1);
+}
+
+void AppendStuff(char **p, size_t *n) {
+  char buf[512];
+  ASSERT_NE(NULL, (*p = realloc(*p, (*n += 512))));
+  rngset(buf, sizeof(buf), 0, 0);
+  memcpy(*p + *n - sizeof(buf), buf, sizeof(buf));
+}
+
 TEST(malloc, test) {
+  char *big = 0;
+  size_t n, bigsize = 0;
   static struct stat st;
   static volatile int i, j, k, *A[4096], fds[M], *maps[M], mapsizes[M];
   memset(fds, -1, sizeof(fds));
   memset(maps, -1, sizeof(maps));
   for (i = 0; i < N * M; ++i) {
+    /* AppendStuff(&big, &bigsize); */
     j = rand() % ARRAYLEN(A);
     if (A[j]) {
       ASSERT_EQ(j, A[j][0]);
-      A[j] = realloc(A[j], max(sizeof(int), rand() % N));
+      n = rand() % N;
+      n = MAX(n, 1);
+      n = ROUNDUP(n, sizeof(int));
+      A[j] = realloc(A[j], n);
       ASSERT_NE(NULL, A[j]);
       ASSERT_EQ(j, A[j][0]);
       free(A[j]);
       A[j] = NULL;
     } else {
-      A[j] = malloc(max(sizeof(int), rand() % N));
+      n = rand() % N;
+      n = MAX(n, 1);
+      n = ROUNDUP(n, sizeof(int));
+      A[j] = malloc(n);
       ASSERT_NE(NULL, A[j]);
       A[j][0] = j;
     }
-    if (i % M == 0) {
+    if (!(i % M)) {
       k = rand() % M;
       if (fds[k] == -1) {
         ASSERT_NE(-1, (fds[k] = open(program_invocation_name, O_RDONLY)));
@@ -69,8 +95,30 @@ TEST(malloc, test) {
       }
     }
   }
+  free(big);
   for (i = 0; i < ARRAYLEN(A); ++i) free(A[i]);
   for (i = 0; i < ARRAYLEN(maps); ++i) munmap(maps[i], mapsizes[i]);
   for (i = 0; i < ARRAYLEN(fds); ++i) close(fds[i]);
-  malloc_trim(0);
+}
+
+void *bulk[1024];
+
+void BulkFreeBenchSetup(void) {
+  size_t i;
+  for (i = 0; i < ARRAYLEN(bulk); ++i) {
+    bulk[i] = malloc(rand() % 64);
+  }
+}
+
+void FreeBulk(void) {
+  size_t i;
+  for (i = 0; i < ARRAYLEN(bulk); ++i) {
+    free(bulk[i]);
+  }
+}
+
+BENCH(bulk_free, bench) {
+  EZBENCH2("free() bulk", BulkFreeBenchSetup(), FreeBulk());
+  EZBENCH2("bulk_free()", BulkFreeBenchSetup(),
+           bulk_free(bulk, ARRAYLEN(bulk)));
 }

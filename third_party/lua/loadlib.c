@@ -16,6 +16,8 @@
 #include "third_party/lua/lua.h"
 #include "third_party/lua/lualib.h"
 
+const char *g_lua_path_default = LUA_PATH_DEFAULT;
+
 /* clang-format off */
 
 /*
@@ -125,14 +127,16 @@ static void lsys_unloadlib (void *lib) {
 
 static void *lsys_load (lua_State *L, const char *path, int seeglb) {
   void *lib = dlopen(path, RTLD_NOW | (seeglb ? RTLD_GLOBAL : RTLD_LOCAL));
-  if (lib == NULL) lua_pushstring(L, dlerror());
+  if (l_unlikely(lib == NULL))
+    lua_pushstring(L, dlerror());
   return lib;
 }
 
 
 static lua_CFunction lsys_sym (lua_State *L, void *lib, const char *sym) {
   lua_CFunction f = cast_func(dlsym(lib, sym));
-  if (f == NULL) lua_pushstring(L, dlerror());
+  if (l_unlikely(f == NULL))
+    lua_pushstring(L, dlerror());
   return f;
 }
 
@@ -402,7 +406,7 @@ static int ll_loadlib (lua_State *L) {
   const char *path = luaL_checkstring(L, 1);
   const char *init = luaL_checkstring(L, 2);
   int stat = lookforfunc(L, path, init);
-  if (stat == 0)  /* no errors? */
+  if (l_likely(stat == 0))  /* no errors? */
     return 1;  /* return the loaded function */
   else {  /* error; error message is on stack top */
     luaL_pushfail(L);
@@ -515,14 +519,14 @@ static const char *findfile (lua_State *L, const char *name,
   const char *path;
   lua_getfield(L, lua_upvalueindex(1), pname);
   path = lua_tostring(L, -1);
-  if (path == NULL)
+  if (l_unlikely(path == NULL))
     luaL_error(L, "'package.%s' must be a string", pname);
   return searchpath(L, name, path, ".", dirsep);
 }
 
 
 static int checkload (lua_State *L, int stat, const char *filename) {
-  if (stat) {  /* module loaded successfully? */
+  if (l_likely(stat)) {  /* module loaded successfully? */
     lua_pushstring(L, filename);  /* will be 2nd argument to module */
     return 2;  /* return open function and file name */
   }
@@ -615,13 +619,14 @@ static void findloader (lua_State *L, const char *name) {
   int i;
   luaL_Buffer msg;  /* to build error message */
   /* push 'package.searchers' to index 3 in the stack */
-  if (lua_getfield(L, lua_upvalueindex(1), "searchers") != LUA_TTABLE)
+  if (l_unlikely(lua_getfield(L, lua_upvalueindex(1), "searchers")
+                 != LUA_TTABLE))
     luaL_error(L, "'package.searchers' must be a table");
   luaL_buffinit(L, &msg);
   /*  iterate over available searchers to find a loader */
   for (i = 1; ; i++) {
     luaL_addstring(&msg, "\n\t");  /* error-message prefix */
-    if (lua_rawgeti(L, 3, i) == LUA_TNIL) {  /* no more searchers? */
+    if (l_unlikely(lua_rawgeti(L, 3, i) == LUA_TNIL)) {  /* no more searchers? */
       lua_pop(L, 1);  /* remove nil */
       luaL_buffsub(&msg, 2);  /* remove prefix */
       luaL_pushresult(&msg);  /* create error message */
@@ -725,12 +730,17 @@ static void createclibstable (lua_State *L) {
 }
 
 
+static const char *GetLuaPathDefault(void) {
+  return g_lua_path_default;
+}
+
+
 LUAMOD_API int luaopen_package (lua_State *L) {
   createclibstable(L);
   luaL_newlib(L, pk_funcs);  /* create 'package' table */
   createsearcherstable(L);
   /* set paths */
-  setpath(L, "path", LUA_PATH_VAR, LUA_PATH_DEFAULT);
+  setpath(L, "path", LUA_PATH_VAR, g_lua_path_default);
   setpath(L, "cpath", LUA_CPATH_VAR, LUA_CPATH_DEFAULT);
   /* store config information */
   lua_pushliteral(L, LUA_DIRSEP "\n" LUA_PATH_SEP "\n" LUA_PATH_MARK "\n"

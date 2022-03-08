@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
 #include "libc/calls/ntmagicpaths.internal.h"
+#include "libc/calls/sysdebug.internal.h"
 #include "libc/nt/systeminfo.h"
 #include "libc/str/oldutf16.internal.h"
 #include "libc/str/str.h"
@@ -25,11 +26,15 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
 
+static inline bool IsSlash(char c) {
+  return c == '/' || c == '\\';
+}
+
 textwindows static const char *FixNtMagicPath(const char *path,
                                               unsigned flags) {
   const struct NtMagicPaths *mp = &kNtMagicPaths;
   asm("" : "+r"(mp));
-  if (path[0] != '/') return path;
+  if (!IsSlash(path[0])) return path;
   if (strcmp(path, mp->devtty) == 0) {
     if ((flags & O_ACCMODE) == O_RDONLY) {
       return mp->conin;
@@ -79,8 +84,8 @@ textwindows int __mkntpath2(const char *path,
   p = path16;
   q = path;
   z = PATH_MAX - 16;
-  if (q[0] == '/' && q[1] == 't' && q[2] == 'm' && q[3] == 'p' &&
-      (q[4] == '/' || !q[4])) {
+  if (IsSlash(q[0]) && q[1] == 't' && q[2] == 'm' && q[3] == 'p' &&
+      (IsSlash(q[4]) || !q[4])) {
     m = GetTempPath(z, p);
     if (!q[4]) return m;
     q += 5;
@@ -90,7 +95,10 @@ textwindows int __mkntpath2(const char *path,
     m = 0;
   }
   n = tprecode8to16(p, z, q).ax;
-  if (n == z - 1) return enametoolong();
+  if (n == z - 1) {
+    SYSDEBUG("path too long for windows: %s", path);
+    return enametoolong();
+  }
   for (i = 0; i < n; ++i) {
     if (p[i] == '/') {
       p[i] = '\\';

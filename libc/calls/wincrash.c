@@ -17,6 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
+#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/typedef/sigaction_f.h"
 #include "libc/calls/ucontext.h"
 #include "libc/nt/enum/exceptionhandleractions.h"
 #include "libc/nt/enum/signal.h"
@@ -29,6 +31,7 @@ textwindows unsigned __wincrash(struct NtExceptionPointers *ep) {
     ucontext_t ctx;
     struct siginfo si;
   } g;
+  SYSDEBUG("__wincrash");
   switch (ep->ExceptionRecord->ExceptionCode) {
     case kNtSignalBreakpoint:
       sig = SIGTRAP;
@@ -68,7 +71,7 @@ textwindows unsigned __wincrash(struct NtExceptionPointers *ep) {
     default:
       return kNtExceptionContinueSearch;
   }
-  memset(&g, 0, sizeof(g));
+  bzero(&g, sizeof(g));
   rva = __sighandrvas[sig];
   if (rva >= kSigactionMinRva) {
     ntcontext2linux(&g.ctx, ep->ContextRecord);

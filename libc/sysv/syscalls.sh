@@ -47,7 +47,7 @@ scall	sys_lseek		0x0c70c71de20c7008	globl hidden # netbsd+openbsd:evilpad
 scall	__sys_mmap		0x0c50c51dd20c5009	globl hidden # netbsd+openbsd:pad
 scall	sys_msync		0x115100041204101a	globl hidden
 scall	sys_mprotect		0x04a04a04a204a00a	globl hidden
-scall	sys_munmap		0x049049049204900b	globl hidden
+scall	__sys_munmap		0x049049049204900b	globl hidden
 scall	sys_sigaction		0x15402e1a0202e00d	globl hidden # rt_sigaction on Lunix; it's complicated on NetBSD
 scall	sys_sigprocmask		0x125030154203000e	globl hidden # a.k.a. rt_sigprocmask, openbsd:byvalue
 scall	sys_ioctl		0x0360360362036010	globl hidden
@@ -128,7 +128,7 @@ scall	sys_creat		0xffffff008ffff055	globl hidden
 scall	sys_link		0x0090090092009056	globl hidden
 scall	sys_unlink		0x00a00a00a200a057	globl hidden
 scall	sys_symlink		0x0390390392039058	globl hidden
-scall	readlink		0x03a03a03a203a059	globl        # usually an anti-pattern
+scall	sys_readlink		0x03a03a03a203a059	globl hidden # usually an anti-pattern
 scall	sys_chmod		0x00f00f00f200f05a	globl hidden
 scall	sys_fchmod		0x07c07c07c207c05b	globl hidden
 scall	sys_chown		0x010010010201005c	globl hidden # impl. w/ fchownat() @asyncsignalsafe
@@ -148,7 +148,7 @@ scall	sys_getppid		0xfff027027202706e	globl hidden # see sys_getpid()→edx for 
 scall	getpgrp			0x051051051205106f	globl
 scall	sys_setsid		0x0930930932093070	globl hidden
 scall	sys_getsid		0x11e0ff136213607c	globl hidden
-scall	getpgid			0x0cf0cf0cf2097079	globl
+scall	sys_getpgid		0x0cf0cf0cf2097079	globl hidden
 scall	setpgid			0x052052052205206d	globl
 scall	geteuid			0xfff019019201906b	globl
 scall	getegid			0xfff02b02b202b06c	globl
@@ -162,9 +162,9 @@ scall	sys_setresuid		0xfff11a137ffff075	globl hidden # polyfilled for xnu
 scall	sys_setresgid		0xfff11c138ffff077	globl hidden # polyfilled for xnu
 scall	getresuid		0xfff119168ffff076	globl # semantics aren't well-defined
 scall	getresgid		0xfff11b169ffff078	globl # semantics aren't well-defined
-scall	sigpending		0x124034034203407f	globl
+scall	sigpending		0x124034034203407f	globl # rt_sigpending on linux
 scall	sys_sigsuspend		0x12606f155206f082	globl hidden # openbsd:byvalue
-scall	sigaltstack		0x1191200352035083	globl
+scall	sys_sigaltstack		0x1191200352035083	globl hidden
 scall	sys_mknod		0x1c200e00e200e085	globl hidden
 scall	mknodat			0x1cc14022fffff103	globl # FreeBSD 12+
 scall	sys_mkfifo		0x0840840842084fff	globl hidden
@@ -182,8 +182,10 @@ scall	chroot			0x03d03d03d203d0a1	globl
 scall	sys_sync		0xfff02402420240a2	globl hidden
 scall	acct			0x03303303320330a3	globl
 scall	settimeofday		0x1a304407a207a0a4	globl
-scall	mount			0x19a01501520a70a5	globl
-scall	reboot			0x0d003703720370a9	globl
+scall	sys_mount		0x19a01501520a70a5	globl
+scall	sys_unmount		0x016016016209f0a6	globl hidden # umount2() on linux
+scall	umount2			0x016016016209f0a6	globl hidden # unmount() on bsd
+scall	sys_reboot		0x0d003703720370a9	globl hidden # two arguments b/c netbsd/sparc lool
 scall	quotactl		0xfff09409420a50b3	globl
 scall	setfsuid		0xfffffffffffff07a	globl
 scall	setfsgid		0xfffffffffffff07b	globl
@@ -209,7 +211,6 @@ scall	_sysctl			0xfffffffffffff09c	globl
 scall	prctl			0xfffffffffffff09d	globl
 scall	sys_arch_prctl		0xfff0a50a5ffff09e	globl hidden # sysarch() on bsd
 scall	adjtimex		0xfffffffffffff09f	globl
-scall	umount2			0xfffffffffffff0a6	globl
 scall	swapon			0xffffff05520550a7	globl
 scall	swapoff			0xffffff1a8ffff0a8	globl
 scall	sethostname		0xffffff058ffff0aa	globl
@@ -233,7 +234,7 @@ scall	lgetxattr		0x17bffffffffff0c0	globl
 scall	llistxattr		0x17effffffffff0c3	globl
 scall	lremovexattr		0x181ffffffffff0c6	globl
 scall	sys_sched_setaffinity	0xfffffffffffff0cb	globl hidden
-scall	sched_getaffinity	0xfffffffffffff0cc	globl
+scall	sched_getaffinity	0xfffffffffffff0cc	globl # returns bytes written on success. we polyfill bad posix designs like nice() returning 0, but we won't polyfill a bad unilateral redesign that's just glibc
 scall	cpuset_getaffinity	0xffffff1e7fffffff	globl
 scall	cpuset_setaffinity	0xffffff1e8fffffff	globl
 scall	io_setup		0xfffffffffffff0ce	globl
@@ -398,7 +399,6 @@ scall	__bsd_seteuid		0xfff0b70b720b7fff	globl hidden # wrapped via setreuid()
 scall	__bsd_setegid		0xfff0b60b620b6fff	globl hidden # wrapped via setregid()
 scall	fpathconf		0x0c00c00c020c0fff	globl
 scall	fhopen			0x18c10812a20f8fff	globl
-scall	unmount			0x016016016209ffff	globl
 scall	issetugid		0xfff0fd0fd2147fff	globl
 scall	minherit		0x1110fa0fa20fafff	globl
 scall	pathconf		0x0bf0bf0bf20bffff	globl
@@ -700,7 +700,7 @@ scall	lchflags		0x130fff187fffffff	globl
 scall	lchmod			0x112fff112fffffff	globl
 scall	lgetfh			0xffffff0a0fffffff	globl
 scall	lpathconf		0x1f3fff201fffffff	globl
-scall	lutimes			0x1a8fff114fffffff	globl
+scall	sys_lutimes		0x1a8fff114fffffff	globl hidden
 scall	mac_syscall		0xffffff18afffffff	globl
 scall	modfind			0xffffff12ffffffff	globl
 scall	modfnext		0xffffff12efffffff	globl

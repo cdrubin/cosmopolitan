@@ -114,6 +114,7 @@
            "__builtin_mul_overflow_p"
            "__builtin_object_size"
            "__builtin___memcpy_chk"
+           "__builtin___memmove_chk"
            "__builtin___sprintf_chk"
            "__builtin___snprintf_chk"
            "__builtin___vsprintf_chk"
@@ -262,6 +263,8 @@
            "__builtin_mempcpy"
            "__builtin_memmove"
            "__builtin_memcmp"
+           "__builtin_bcmp"
+           "__builtin_bzero"
            "__builtin_memset"
            "__builtin_strlen"))
 
@@ -1290,6 +1293,11 @@
            "YOINK"
            "STATIC_YOINK"
            "STATIC_YOINK_SOURCE"
+           "STATIC_STACK_ADDR"
+           "STATIC_STACK_SIZE"
+           "STATIC_SYMBOL"
+           "PYTHON_YOINK"
+           "PYTHON_PROVIDE"
            "STRINGIFY"))
 
 )

@@ -20,9 +20,9 @@
 #include "libc/macros.internal.h"
 #include "libc/nt/files.h"
 #include "libc/nt/memory.h"
-#include "libc/runtime/memtrack.h"
+#include "libc/runtime/memtrack.internal.h"
 
-textwindows int sys_msync_nt(void *addr, size_t size, int flags) {
+noasan textwindows int sys_msync_nt(void *addr, size_t size, int flags) {
   int x, y, l, r, i;
   x = ROUNDDOWN((intptr_t)addr, FRAMESIZE) >> 16;
   y = ROUNDDOWN((intptr_t)addr + size - 1, FRAMESIZE) >> 16;

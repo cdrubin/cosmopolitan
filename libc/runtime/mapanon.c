@@ -16,10 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
+#include "libc/errno.h"
+#include "libc/nexgen32e/bsr.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Helper function for allocating anonymous mapping.
@@ -29,9 +33,32 @@
  *     mmap(NULL, mapsize, PROT_READ | PROT_WRITE,
  *          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
  *
- * Except it offers a small saving on code size.
+ * If mmap() fails, possibly because the parent process did this:
+ *
+ *     if (!vfork()) {
+ *       setrlimit(RLIMIT_AS, &(struct rlimit){maxbytes, maxbytes});
+ *       execv(prog, (char *const[]){prog, 0});
+ *     }
+ *     wait(0);
+ *
+ * Then this function will call:
+ *
+ *     __oom_hook(size);
+ *
+ * If it's linked. The LIBC_TESTLIB library provides an implementation,
+ * which can be installed as follows:
+ *
+ *     int main() {
+ *         InstallQuotaHandlers();
+ *         // ...
+ *     }
+ *
+ * That is performed automatically for unit test executables.
  */
-void *mapanon(size_t mapsize) {
-  return mmap(NULL, mapsize, PROT_READ | PROT_WRITE,
-              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+noasan void *mapanon(size_t size) {
+  /* asan runtime depends on this function */
+  void *m;
+  m = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (m == MAP_FAILED && weaken(__oom_hook)) weaken(__oom_hook)(size);
+  return m;
 }

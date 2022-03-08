@@ -41,13 +41,54 @@ $(LIBC_INTRIN_A).pkg:					\
 		$(LIBC_INTRIN_A_OBJS)			\
 		$(foreach x,$(LIBC_INTRIN_A_DIRECTDEPS),$($(x)_A).pkg)
 
+$(LIBC_INTRIN_A_OBJS):					\
+		OVERRIDE_CFLAGS +=			\
+			-foptimize-sibling-calls
+
 o/$(MODE)/libc/intrin/asan.o				\
 o/$(MODE)/libc/intrin/ubsan.o:				\
 		OVERRIDE_CFLAGS +=			\
 			-fno-sanitize=all		\
-			-fno-stack-protector		\
-			-mgeneral-regs-only		\
-			-O2
+			-fno-stack-protector
+
+o/$(MODE)/libc/intrin/asan.o:				\
+		OVERRIDE_CFLAGS +=			\
+			-O2				\
+			-finline			\
+			-finline-functions
+
+o/$(MODE)/libc/intrin/asan.o				\
+o/$(MODE)/libc/intrin/ubsan.o:				\
+		OVERRIDE_CFLAGS +=			\
+			-fno-sanitize=all		\
+			-fno-stack-protector
+
+o/$(MODE)/libc/intrin/memcmp.o:				\
+		OVERRIDE_CFLAGS +=			\
+			-Os
+
+o//libc/intrin/memmove.o:				\
+		OVERRIDE_CFLAGS +=			\
+			-fno-toplevel-reorder
+
+o//libc/intrin/bzero.o					\
+o//libc/intrin/memcmp.o					\
+o//libc/intrin/memset.o					\
+o//libc/intrin/memmove.o:				\
+		OVERRIDE_CFLAGS +=			\
+			-O3
+
+o/$(MODE)/libc/intrin/bzero.o				\
+o/$(MODE)/libc/intrin/memcmp.o				\
+o/$(MODE)/libc/intrin/memmove.o:			\
+		OVERRIDE_CFLAGS +=			\
+			-fpie
+
+o/$(MODE)/libc/intrin/printf.o:				\
+		OVERRIDE_CFLAGS +=			\
+			-Os				\
+			-fpie				\
+			-mgeneral-regs-only
 
 LIBC_INTRIN_LIBS = $(foreach x,$(LIBC_INTRIN_ARTIFACTS),$($(x)))
 LIBC_INTRIN_HDRS = $(foreach x,$(LIBC_INTRIN_ARTIFACTS),$($(x)_HDRS))

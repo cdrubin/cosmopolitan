@@ -49,7 +49,14 @@ $(THIRD_PARTY_DLMALLOC_A).pkg:					\
 
 $(THIRD_PARTY_DLMALLOC_A_OBJS):					\
 		OVERRIDE_CFLAGS +=				\
-			$(NO_MAGIC)
+			$(NO_MAGIC)				\
+			-fno-sanitize=address
+
+ifneq ($(MODE),dbg)
+$(THIRD_PARTY_DLMALLOC_A_OBJS):					\
+		OVERRIDE_CFLAGS +=				\
+			-DNDEBUG
+endif
 
 THIRD_PARTY_DLMALLOC_LIBS = $(foreach x,$(THIRD_PARTY_DLMALLOC_ARTIFACTS),$($(x)))
 THIRD_PARTY_DLMALLOC_SRCS = $(foreach x,$(THIRD_PARTY_DLMALLOC_ARTIFACTS),$($(x)_SRCS))

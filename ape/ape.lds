@@ -201,6 +201,8 @@ SECTIONS {
 
     /* Real Mode */
     KEEP(*(.head))
+    KEEP(*(.apesh))
+    KEEP(*(.head2))
     KEEP(*(.text.head))
 
     /* Executable & Linkable Format */
@@ -235,6 +237,7 @@ SECTIONS {
 /*BEGIN: nt addressability guarantee */
 
   .text . : {
+    BYTE(0x90) /* TODO: fix blinkenlights symbol __map_phdrs */
     /* Code that needs to be addressable in Real Mode */
     *(.text.real)
     KEEP(*(SORT_BY_NAME(.sort.text.real.*)))
@@ -287,6 +290,9 @@ SECTIONS {
 /*BEGIN: Read Only Data */
 
     KEEP(*(.ape.pad.rodata));
+    KEEP(*(.rodata.pytab.0));
+    KEEP(*(.rodata.pytab.1));
+    KEEP(*(.rodata.pytab.2));
 
     *(.rodata .rodata.*)
     *(.ubsan.types)
@@ -336,6 +342,19 @@ SECTIONS {
 /*END: Read Only Data (only needed for initialization) */
 /*END: Read Only Data */
   } :Rom
+  
+  .tdata . : {
+    _tdata_start = .;
+    *(SORT_BY_ALIGNMENT(.tdata))
+    *(SORT_BY_ALIGNMENT(.tdata.*))
+    _tdata_end = .;
+  }
+  .tbss . : {
+    _tbss_start = .;
+    *(SORT_BY_ALIGNMENT(.tbss))
+    *(SORT_BY_ALIGNMENT(.tbss.*))
+    _tbss_end = .;
+  }
 
   .data . : {
 /*BEGIN: Read/Write Data */
@@ -365,6 +384,15 @@ SECTIONS {
   } :Ram
 
 /*END:   file content that's loaded by o/s */
+/*BEGIN: payload (for now, only the APE loader) */
+  .payload ALIGN(64) : {
+    /* Loader */
+    HIDDEN(ape_loader = .);
+    KEEP(*(.ape.loader))
+    . = ALIGN(64);
+    HIDDEN(ape_loader_end = .);
+  }
+/*END: payload */
 /*BEGIN: bss memory void */
 
   .zip . : {
@@ -470,10 +498,10 @@ HIDDEN(ape_ram_align = PAGESIZE);
 HIDDEN(ape_ram_rva = RVA(ape_ram_vaddr));
 
 HIDDEN(ape_stack_offset = ape_ram_offset + ape_ram_filesz);
-HIDDEN(ape_stack_vaddr = 0x700000000000 - STACKSIZE);
+HIDDEN(ape_stack_vaddr = DEFINED(ape_stack_vaddr) ? ape_stack_vaddr : 0x700000000000 - STACKSIZE);
 HIDDEN(ape_stack_paddr = ape_ram_paddr + ape_ram_filesz);
 HIDDEN(ape_stack_filesz = 0);
-HIDDEN(ape_stack_memsz = STACKSIZE);
+HIDDEN(ape_stack_memsz = DEFINED(ape_stack_memsz) ? ape_stack_memsz : STACKSIZE);
 HIDDEN(ape_stack_align = 16);
 
 HIDDEN(ape_note_offset = ape_rom_offset + (ape_note - ape_rom_vaddr));
@@ -505,6 +533,9 @@ HIDDEN(ape_bss_vaddr = ADDR(.bss));
 HIDDEN(ape_bss_filesz = 0);
 HIDDEN(ape_bss_memsz = SIZEOF(.bss));
 HIDDEN(ape_bss_align = PAGESIZE);
+
+SHSTUB2(ape_loader_dd_skip, RVA(ape_loader) / 64);
+SHSTUB2(ape_loader_dd_count, (ape_loader_end - ape_loader) / 64);
 
 #if SupportsXnu()
 SHSTUB2(ape_macho_dd_skip, RVA(ape_macho) / 8);

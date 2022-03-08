@@ -1,4 +1,23 @@
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:4;coding:utf-8 -*-│
+│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+╞══════════════════════════════════════════════════════════════════════════════╡
+│ Copyright The Mbed TLS Contributors                                          │
+│                                                                              │
+│ Licensed under the Apache License, Version 2.0 (the "License");              │
+│ you may not use this file except in compliance with the License.             │
+│ You may obtain a copy of the License at                                      │
+│                                                                              │
+│     http://www.apache.org/licenses/LICENSE-2.0                               │
+│                                                                              │
+│ Unless required by applicable law or agreed to in writing, software          │
+│ distributed under the License is distributed on an "AS IS" BASIS,            │
+│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
+│ See the License for the specific language governing permissions and          │
+│ limitations under the License.                                               │
+╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/limits.h"
+#include "libc/log/check.h"
+#include "libc/log/log.h"
 #include "third_party/mbedtls/common.h"
 #include "third_party/mbedtls/debug.h"
 #include "third_party/mbedtls/error.h"
@@ -235,7 +254,7 @@ static int ssl_get_remaining_space_in_datagram( mbedtls_ssl_context const *ssl )
 
 static int ssl_get_remaining_payload_in_datagram( mbedtls_ssl_context const *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     size_t remaining, expansion;
     size_t max_len = MBEDTLS_SSL_OUT_CONTENT_LEN;
 
@@ -400,7 +419,7 @@ static int ssl_build_inner_plaintext( unsigned char *content,
 
     if( remaining < pad )
         return( -1 );
-    memset( content + len, 0, pad );
+    mbedtls_platform_zeroize( content + len, pad );
     len += pad;
     remaining -= pad;
 
@@ -588,7 +607,7 @@ static void ssl_build_record_nonce( unsigned char *dst_iv,
     size_t i;
 
     /* Start with Fixed IV || 0 */
-    memset( dst_iv, 0, dst_iv_len );
+    mbedtls_platform_zeroize( dst_iv, dst_iv_len );
     memcpy( dst_iv, fixed_iv, fixed_iv_len );
 
     dst_iv += dst_iv_len - dynamic_iv_len;
@@ -793,7 +812,7 @@ int mbedtls_ssl_encrypt_buf( mbedtls_ssl_context *ssl,
 #if defined(MBEDTLS_ARC4_C) || defined(MBEDTLS_CIPHER_NULL_CIPHER)
     if( mode == MBEDTLS_MODE_STREAM )
     {
-        int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+        int ret = MBEDTLS_ERR_THIS_CORRUPTION;
         size_t olen;
         MBEDTLS_SSL_DEBUG_MSG( 3, ( "before encrypt: msglen = %" MBEDTLS_PRINTF_SIZET ", "
                                     "including %d bytes of padding",
@@ -824,7 +843,7 @@ int mbedtls_ssl_encrypt_buf( mbedtls_ssl_context *ssl,
         mode == MBEDTLS_MODE_CCM ||
         mode == MBEDTLS_MODE_CHACHAPOLY )
     {
-        int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+        int ret = MBEDTLS_ERR_THIS_CORRUPTION;
         unsigned char iv[12];
         unsigned char *dynamic_iv;
         size_t dynamic_iv_len;
@@ -921,7 +940,7 @@ int mbedtls_ssl_encrypt_buf( mbedtls_ssl_context *ssl,
 #if defined(MBEDTLS_SSL_SOME_SUITES_USE_CBC)
     if( mode == MBEDTLS_MODE_CBC )
     {
-        int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+        int ret = MBEDTLS_ERR_THIS_CORRUPTION;
         size_t padlen, i;
         size_t olen;
 
@@ -1088,7 +1107,7 @@ int mbedtls_ssl_encrypt_buf( mbedtls_ssl_context *ssl,
  * This function is implemented without using comparison operators, as those
  * might be translated to branches by some compilers on some platforms.
  */
-static size_t mbedtls_ssl_cf_mask_from_bit( size_t bit )
+static inline size_t mbedtls_ssl_cf_mask_from_bit( size_t bit )
 {
     /* MSVC has a warning about unary minus on unsigned integer types,
      * but this is well-defined and precisely what we want to do here. */
@@ -1113,17 +1132,14 @@ static size_t mbedtls_ssl_cf_mask_from_bit( size_t bit )
  * This function is implemented without using comparison operators, as those
  * might be translated to branches by some compilers on some platforms.
  */
-static size_t mbedtls_ssl_cf_mask_lt( size_t x, size_t y )
+static inline size_t mbedtls_ssl_cf_mask_lt( size_t x, size_t y )
 {
     /* This has the most significant bit set if and only if x < y */
     const size_t sub = x - y;
-
     /* sub1 = (x < y) ? 1 : 0 */
     const size_t sub1 = sub >> ( sizeof( sub ) * 8 - 1 );
-
     /* mask = (x < y) ? 0xff... : 0x00... */
     const size_t mask = mbedtls_ssl_cf_mask_from_bit( sub1 );
-
     return( mask );
 }
 
@@ -1138,7 +1154,7 @@ static size_t mbedtls_ssl_cf_mask_lt( size_t x, size_t y )
  * This function is implemented without using comparison operators, as those
  * might be translated to branches by some compilers on some platforms.
  */
-static size_t mbedtls_ssl_cf_mask_ge( size_t x, size_t y )
+static inline size_t mbedtls_ssl_cf_mask_ge( size_t x, size_t y )
 {
     return( ~mbedtls_ssl_cf_mask_lt( x, y ) );
 }
@@ -1154,28 +1170,23 @@ static size_t mbedtls_ssl_cf_mask_ge( size_t x, size_t y )
  * This function is implemented without using comparison operators, as those
  * might be translated to branches by some compilers on some platforms.
  */
-static size_t mbedtls_ssl_cf_bool_eq( size_t x, size_t y )
+static inline size_t mbedtls_ssl_cf_bool_eq( size_t x, size_t y )
 {
     /* diff = 0 if x == y, non-zero otherwise */
     const size_t diff = x ^ y;
-
     /* MSVC has a warning about unary minus on unsigned integer types,
      * but this is well-defined and precisely what we want to do here. */
 #if defined(_MSC_VER)
 #pragma warning( push )
 #pragma warning( disable : 4146 )
 #endif
-
     /* diff_msb's most significant bit is equal to x != y */
     const size_t diff_msb = ( diff | -diff );
-
 #if defined(_MSC_VER)
 #pragma warning( pop )
 #endif
-
     /* diff1 = (x != y) ? 1 : 0 */
     const size_t diff1 = diff_msb >> ( sizeof( diff_msb ) * 8 - 1 );
-
     return( 1 ^ diff1 );
 }
 
@@ -1193,12 +1204,17 @@ static void mbedtls_ssl_cf_memcpy_if_eq( unsigned char *dst,
                                          size_t len,
                                          size_t c1, size_t c2 )
 {
-    /* mask = c1 == c2 ? 0xff : 0x00 */
+    size_t i;
+    uint64_t x, y;
     const size_t equal = mbedtls_ssl_cf_bool_eq( c1, c2 );
     const unsigned char mask = (unsigned char) mbedtls_ssl_cf_mask_from_bit( equal );
-
-    /* dst[i] = c1 == c2 ? src[i] : dst[i] */
-    for( size_t i = 0; i < len; i++ )
+    for (i = 0; i + 8 <= len; i += 8) {
+        __builtin_memcpy( &x, dst + i, 8 );
+        __builtin_memcpy( &y, src + i, 8 );
+        x = ( x & ~-equal ) | ( y & -equal );
+        __builtin_memcpy( dst + i, &x, 8 );
+    }
+    for( ; i < len; i++ )
         dst[i] = ( src[i] & mask ) | ( dst[i] & ~mask );
 }
 
@@ -1238,11 +1254,8 @@ MBEDTLS_STATIC_TESTABLE int mbedtls_ssl_cf_hmac(
     const size_t hash_size = mbedtls_md_get_size( ctx->md_info );
 
     unsigned char aux_out[MBEDTLS_MD_MAX_SIZE];
-    mbedtls_md_context_t aux;
     size_t offset;
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
-
-    mbedtls_md_init( &aux );
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
 
 #define MD_CHK( func_call ) \
     do {                    \
@@ -1251,13 +1264,22 @@ MBEDTLS_STATIC_TESTABLE int mbedtls_ssl_cf_hmac(
             goto cleanup;   \
     } while( 0 )
 
-    MD_CHK( mbedtls_md_setup( &aux, ctx->md_info, 0 ) );
-
     /* After hmac_start() of hmac_reset(), ikey has already been hashed,
      * so we can start directly with the message */
     MD_CHK( mbedtls_md_update( ctx, add_data, add_data_len ) );
     MD_CHK( mbedtls_md_update( ctx, data, min_data_len ) );
 
+#if 1
+    /*
+     * This code path strengthens the server against DOS attacks by
+     * weakening Internet Explorer sessions against Lucky Thirteen.
+     */
+    MD_CHK( mbedtls_md_update( ctx, data + min_data_len, data_len_secret - min_data_len ) );
+    MD_CHK( mbedtls_md_finish( ctx, output ) );
+#else
+    mbedtls_md_context_t aux;
+    mbedtls_md_init( &aux );
+    MD_CHK( mbedtls_md_setup( &aux, ctx->md_info, 0 ) );
     /* For each possible length, compute the hash up to that point */
     for( offset = min_data_len; offset <= max_data_len; offset++ )
     {
@@ -1266,10 +1288,11 @@ MBEDTLS_STATIC_TESTABLE int mbedtls_ssl_cf_hmac(
         /* Keep only the correct inner_hash in the output buffer */
         mbedtls_ssl_cf_memcpy_if_eq( output, aux_out, hash_size,
                                      offset, data_len_secret );
-
         if( offset < max_data_len )
             MD_CHK( mbedtls_md_update( ctx, data + offset, 1 ) );
     }
+    mbedtls_md_free( &aux );
+#endif
 
     /* Now compute HASH(okey + inner_hash) */
     MD_CHK( mbedtls_md_starts( ctx ) );
@@ -1283,7 +1306,6 @@ MBEDTLS_STATIC_TESTABLE int mbedtls_ssl_cf_hmac(
 #undef MD_CHK
 
 cleanup:
-    mbedtls_md_free( &aux );
     return( ret );
 }
 
@@ -1300,7 +1322,6 @@ MBEDTLS_STATIC_TESTABLE void mbedtls_ssl_cf_memcpy_offset(
                                    size_t len )
 {
     size_t offset;
-
     for( offset = offset_min; offset <= offset_max; offset++ )
     {
         mbedtls_ssl_cf_memcpy_if_eq( dst, src_base + offset, len,
@@ -1346,7 +1367,7 @@ int mbedtls_ssl_decrypt_buf( mbedtls_ssl_context const *ssl,
      * Match record's CID with incoming CID.
      */
     if( rec->cid_len != transform->in_cid_len ||
-        memcmp( rec->cid, transform->in_cid, rec->cid_len ) != 0 )
+        timingsafe_bcmp( rec->cid, transform->in_cid, rec->cid_len ) != 0 )
     {
         return( MBEDTLS_ERR_SSL_UNEXPECTED_CID );
     }
@@ -1548,7 +1569,7 @@ int mbedtls_ssl_decrypt_buf( mbedtls_ssl_context const *ssl,
              *
              * Afterwards, we know that data + data_len is followed by at
              * least maclen Bytes, which justifies the call to
-             * mbedtls_ssl_safer_memcmp() below.
+             * timingsafe_bcmp() below.
              *
              * Further, we still know that data_len > minlen */
             rec->data_len -= transform->maclen;
@@ -1571,8 +1592,8 @@ int mbedtls_ssl_decrypt_buf( mbedtls_ssl_context const *ssl,
                                    transform->maclen );
 
             /* Compare expected MAC with MAC at the end of the record. */
-            if( mbedtls_ssl_safer_memcmp( data + rec->data_len, mac_expect,
-                                          transform->maclen ) != 0 )
+            if( timingsafe_bcmp( data + rec->data_len, mac_expect,
+                                 transform->maclen ) != 0 )
             {
                 MBEDTLS_SSL_DEBUG_MSG( 1, ( "message mac does not match" ) );
                 return( MBEDTLS_ERR_SSL_INVALID_MAC );
@@ -1849,8 +1870,8 @@ int mbedtls_ssl_decrypt_buf( mbedtls_ssl_context const *ssl,
         MBEDTLS_SSL_DEBUG_BUF( 4, "message  mac", mac_peer, transform->maclen );
 #endif
 
-        if( mbedtls_ssl_safer_memcmp( mac_peer, mac_expect,
-                                      transform->maclen ) != 0 )
+        if( timingsafe_bcmp( mac_peer, mac_expect,
+                             transform->maclen ) != 0 )
         {
 #if defined(MBEDTLS_SSL_DEBUG_ALL)
             MBEDTLS_SSL_DEBUG_MSG( 1, ( "message mac does not match" ) );
@@ -1911,7 +1932,7 @@ int mbedtls_ssl_decrypt_buf( mbedtls_ssl_context const *ssl,
  */
 static int ssl_compress_buf( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     unsigned char *msg_post = ssl->out_msg;
     ptrdiff_t bytes_written = ssl->out_msg - ssl->out_buf;
     size_t len_pre = ssl->out_msglen;
@@ -1963,7 +1984,7 @@ static int ssl_compress_buf( mbedtls_ssl_context *ssl )
 
 static int ssl_decompress_buf( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     unsigned char *msg_post = ssl->in_msg;
     ptrdiff_t header_bytes = ssl->in_msg - ssl->in_buf;
     size_t len_pre = ssl->in_msglen;
@@ -2031,7 +2052,7 @@ static int ssl_decompress_buf( mbedtls_ssl_context *ssl )
  */
 int mbedtls_ssl_fetch_input( mbedtls_ssl_context *ssl, size_t nb_want )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     size_t len;
 #if defined(MBEDTLS_SSL_VARIABLE_BUFFER_LENGTH)
     size_t in_buf_len = ssl->in_buf_len;
@@ -2252,7 +2273,7 @@ int mbedtls_ssl_fetch_input( mbedtls_ssl_context *ssl, size_t nb_want )
  */
 int mbedtls_ssl_flush_output( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     unsigned char *buf;
 
     MBEDTLS_SSL_DEBUG_MSG( 2, ( "=> flush output" ) );
@@ -2452,7 +2473,7 @@ int mbedtls_ssl_resend( mbedtls_ssl_context *ssl )
  */
 int mbedtls_ssl_flight_transmit( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     MBEDTLS_SSL_DEBUG_MSG( 2, ( "=> mbedtls_ssl_flight_transmit" ) );
 
     if( ssl->handshake->retransmit_state != MBEDTLS_SSL_RETRANS_SENDING )
@@ -2689,7 +2710,7 @@ void mbedtls_ssl_send_flight_completed( mbedtls_ssl_context *ssl )
  */
 int mbedtls_ssl_write_handshake_msg( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     const size_t hs_len = ssl->out_msglen - 4;
     const unsigned char hs_type = ssl->out_msg[0];
 
@@ -2798,7 +2819,7 @@ int mbedtls_ssl_write_handshake_msg( mbedtls_ssl_context *ssl )
 
             /* Handshake hashes are computed without fragmentation,
              * so set frag_offset = 0 and frag_len = hs_len for now */
-            memset( ssl->out_msg + 6, 0x00, 3 );
+            mbedtls_platform_zeroize( ssl->out_msg + 6, 3 );
             memcpy( ssl->out_msg + 9, ssl->out_msg + 1, 3 );
         }
 #endif /* MBEDTLS_SSL_PROTO_DTLS */
@@ -3034,8 +3055,8 @@ int mbedtls_ssl_write_record( mbedtls_ssl_context *ssl, uint8_t force_flush )
 static int ssl_hs_is_proper_fragment( mbedtls_ssl_context *ssl )
 {
     if( ssl->in_msglen < ssl->in_hslen ||
-        memcmp( ssl->in_msg + 6, "\0\0\0",        3 ) != 0 ||
-        memcmp( ssl->in_msg + 9, ssl->in_msg + 1, 3 ) != 0 )
+        timingsafe_bcmp( ssl->in_msg + 6, "\0\0\0",        3 ) != 0 ||
+        timingsafe_bcmp( ssl->in_msg + 9, ssl->in_msg + 1, 3 ) != 0 )
     {
         return( 1 );
     }
@@ -3179,7 +3200,7 @@ int mbedtls_ssl_prepare_handshake_record( mbedtls_ssl_context *ssl )
 #if defined(MBEDTLS_SSL_PROTO_DTLS)
     if( ssl->conf->transport == MBEDTLS_SSL_TRANSPORT_DATAGRAM )
     {
-        int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+        int ret = MBEDTLS_ERR_THIS_CORRUPTION;
         unsigned int recv_msg_seq = ( ssl->in_msg[4] << 8 ) | ssl->in_msg[5];
 
         if( ssl_check_hs_header( ssl ) != 0 )
@@ -3289,7 +3310,7 @@ void mbedtls_ssl_update_handshake_status( mbedtls_ssl_context *ssl )
         }
 
         /* Create a fresh last entry */
-        memset( hs_buf, 0, sizeof( mbedtls_ssl_hs_buffer ) );
+        mbedtls_platform_zeroize( hs_buf, sizeof( mbedtls_ssl_hs_buffer ) );
     }
 #endif
 }
@@ -3323,7 +3344,7 @@ static inline uint64_t ssl_load_six_bytes( unsigned char *buf )
 
 static int mbedtls_ssl_dtls_record_replay_check( mbedtls_ssl_context *ssl, uint8_t *record_in_ctr )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     unsigned char *original_in_ctr;
 
     // save original in_ctr
@@ -3547,7 +3568,7 @@ static int ssl_check_dtls_clihlo_cookie(
  */
 static int ssl_handle_possible_reconnect( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     size_t len;
 
     if( ssl->conf->f_cookie_write == NULL ||
@@ -4051,10 +4072,85 @@ static int ssl_consume_current_message( mbedtls_ssl_context *ssl );
 static int ssl_get_next_record( mbedtls_ssl_context *ssl );
 static int ssl_record_is_in_progress( mbedtls_ssl_context *ssl );
 
+/**
+ * \brief       Update record layer
+ *
+ *              This function roughly separates the implementation
+ *              of the logic of (D)TLS from the implementation
+ *              of the secure transport.
+ *
+ * \param  ssl              The SSL context to use.
+ * \param  update_hs_digest This indicates if the handshake digest
+ *                          should be automatically updated in case
+ *                          a handshake message is found.
+ *
+ * \return      0 or non-zero error code.
+ *
+ * \note        A clarification on what is called 'record layer' here
+ *              is in order, as many sensible definitions are possible:
+ *
+ *              The record layer takes as input an untrusted underlying
+ *              transport (stream or datagram) and transforms it into
+ *              a serially multiplexed, secure transport, which
+ *              conceptually provides the following:
+ *
+ *              (1) Three datagram based, content-agnostic transports
+ *                  for handshake, alert and CCS messages.
+ *              (2) One stream- or datagram-based transport
+ *                  for application data.
+ *              (3) Functionality for changing the underlying transform
+ *                  securing the contents.
+ *
+ *              The interface to this functionality is given as follows:
+ *
+ *              a Updating
+ *                [Currently implemented by mbedtls_ssl_read_record]
+ *
+ *                Check if and on which of the four 'ports' data is pending:
+ *                Nothing, a controlling datagram of type (1), or application
+ *                data (2). In any case data is present, internal buffers
+ *                provide access to the data for the user to process it.
+ *                Consumption of type (1) datagrams is done automatically
+ *                on the next update, invalidating that the internal buffers
+ *                for previous datagrams, while consumption of application
+ *                data (2) is user-controlled.
+ *
+ *              b Reading of application data
+ *                [Currently manual adaption of ssl->in_offt pointer]
+ *
+ *                As mentioned in the last paragraph, consumption of data
+ *                is different from the automatic consumption of control
+ *                datagrams (1) because application data is treated as a stream.
+ *
+ *              c Tracking availability of application data
+ *                [Currently manually through decreasing ssl->in_msglen]
+ *
+ *                For efficiency and to retain datagram semantics for
+ *                application data in case of DTLS, the record layer
+ *                provides functionality for checking how much application
+ *                data is still available in the internal buffer.
+ *
+ *              d Changing the transformation securing the communication.
+ *
+ *              Given an opaque implementation of the record layer in the
+ *              above sense, it should be possible to implement the logic
+ *              of (D)TLS on top of it without the need to know anything
+ *              about the record layer's internals. This is done e.g.
+ *              in all the handshake handling functions, and in the
+ *              application data reading function mbedtls_ssl_read.
+ *
+ * \note        The above tries to give a conceptual picture of the
+ *              record layer, but the current implementation deviates
+ *              from it in some places. For example, our implementation of
+ *              the update functionality through mbedtls_ssl_read_record
+ *              discards datagrams depending on the current state, which
+ *              wouldn't fall under the record layer's responsibility
+ *              following the above definition.
+ */
 int mbedtls_ssl_read_record( mbedtls_ssl_context *ssl,
                              unsigned update_hs_digest )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
 
     MBEDTLS_SSL_DEBUG_MSG( 2, ( "=> read record" ) );
 
@@ -4419,7 +4515,7 @@ static int ssl_buffer_message( mbedtls_ssl_context *ssl )
                 /* Prepare final header: copy msg_type, length and message_seq,
                  * then add standardised fragment_offset and fragment_length */
                 memcpy( hs_buf->data, ssl->in_msg, 6 );
-                memset( hs_buf->data + 6, 0, 3 );
+                mbedtls_platform_zeroize( hs_buf->data + 6, 3 );
                 memcpy( hs_buf->data + 9, hs_buf->data + 1, 3 );
 
                 hs_buf->is_valid = 1;
@@ -4429,7 +4525,7 @@ static int ssl_buffer_message( mbedtls_ssl_context *ssl )
             else
             {
                 /* Make sure msg_type and length are consistent */
-                if( memcmp( hs_buf->data, ssl->in_msg, 4 ) != 0 )
+                if( timingsafe_bcmp( hs_buf->data, ssl->in_msg, 4 ) != 0 )
                 {
                     MBEDTLS_SSL_DEBUG_MSG( 1, ( "Fragment header mismatch - ignore" ) );
                     /* Ignore */
@@ -4717,7 +4813,7 @@ static int ssl_buffer_future_record( mbedtls_ssl_context *ssl,
 
 static int ssl_get_next_record( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     mbedtls_record rec;
 
 #if defined(MBEDTLS_SSL_PROTO_DTLS)
@@ -4946,7 +5042,7 @@ static int ssl_get_next_record( mbedtls_ssl_context *ssl )
 
 int mbedtls_ssl_handle_message_type( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
 
     /*
      * Handle particular types of records
@@ -5106,7 +5202,7 @@ int mbedtls_ssl_send_alert_message( mbedtls_ssl_context *ssl,
                                     unsigned char level,
                                     unsigned char message )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
 
     if( ssl == NULL || ssl->conf == NULL )
         return( MBEDTLS_ERR_SSL_BAD_INPUT_DATA );
@@ -5131,7 +5227,7 @@ int mbedtls_ssl_send_alert_message( mbedtls_ssl_context *ssl,
 
 int mbedtls_ssl_write_change_cipher_spec( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
 
     MBEDTLS_SSL_DEBUG_MSG( 2, ( "=> write change cipher spec" ) );
 
@@ -5154,7 +5250,7 @@ int mbedtls_ssl_write_change_cipher_spec( mbedtls_ssl_context *ssl )
 
 int mbedtls_ssl_parse_change_cipher_spec( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
 
     MBEDTLS_SSL_DEBUG_MSG( 2, ( "=> parse change cipher spec" ) );
 
@@ -5201,7 +5297,7 @@ int mbedtls_ssl_parse_change_cipher_spec( mbedtls_ssl_context *ssl )
     }
     else
 #endif /* MBEDTLS_SSL_PROTO_DTLS */
-    memset( ssl->in_ctr, 0, 8 );
+    mbedtls_platform_zeroize( ssl->in_ctr, 8 );
 
     mbedtls_ssl_update_in_pointers( ssl );
 
@@ -5524,10 +5620,12 @@ static int ssl_check_ctr_renegotiate( mbedtls_ssl_context *ssl )
     {
         return( 0 );
     }
-    in_ctr_cmp = memcmp( ssl->in_ctr + ep_len,
-                        ssl->conf->renego_period + ep_len, 8 - ep_len );
-    out_ctr_cmp = memcmp( ssl->cur_out_ctr + ep_len,
-                          ssl->conf->renego_period + ep_len, 8 - ep_len );
+    in_ctr_cmp = timingsafe_memcmp( ssl->in_ctr + ep_len,
+                                    ssl->conf->renego_period + ep_len,
+                                    8 - ep_len );
+    out_ctr_cmp = timingsafe_memcmp( ssl->cur_out_ctr + ep_len,
+                                     ssl->conf->renego_period + ep_len,
+                                     8 - ep_len );
     if( in_ctr_cmp <= 0 && out_ctr_cmp <= 0 )
     {
         return( 0 );
@@ -5616,7 +5714,7 @@ static int ssl_check_ctr_renegotiate( mbedtls_ssl_context *ssl )
  */
 int mbedtls_ssl_read( mbedtls_ssl_context *ssl, void *buf, size_t len )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     size_t n;
     if( ssl == NULL || ssl->conf == NULL )
         return( MBEDTLS_ERR_SSL_BAD_INPUT_DATA );
@@ -5968,7 +6066,7 @@ static int ssl_write_real( mbedtls_ssl_context *ssl,
 static int ssl_write_split( mbedtls_ssl_context *ssl,
                             const unsigned char *buf, size_t len )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     if( ssl->conf->cbc_record_splitting ==
             MBEDTLS_SSL_CBC_RECORD_SPLITTING_DISABLED ||
         len <= 1 ||
@@ -6053,7 +6151,7 @@ static int ssl_write_split( mbedtls_ssl_context *ssl,
  */
 int mbedtls_ssl_write( mbedtls_ssl_context *ssl, const void *buf, size_t len )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     MBEDTLS_SSL_DEBUG_MSG( 2, ( "=> write" ) );
     if( ssl == NULL || ssl->conf == NULL )
         return( MBEDTLS_ERR_SSL_BAD_INPUT_DATA );
@@ -6096,7 +6194,7 @@ int mbedtls_ssl_write( mbedtls_ssl_context *ssl, const void *buf, size_t len )
  */
 int mbedtls_ssl_close_notify( mbedtls_ssl_context *ssl )
 {
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret = MBEDTLS_ERR_THIS_CORRUPTION;
     if( ssl == NULL || ssl->conf == NULL )
         return( MBEDTLS_ERR_SSL_BAD_INPUT_DATA );
     MBEDTLS_SSL_DEBUG_MSG( 2, ( "=> write close notify" ) );
@@ -6116,6 +6214,12 @@ int mbedtls_ssl_close_notify( mbedtls_ssl_context *ssl )
     return( 0 );
 }
 
+/**
+ * \brief           Free referenced items in an SSL transform context and clear
+ *                  memory
+ *
+ * \param transform SSL transform context
+ */
 void mbedtls_ssl_transform_free( mbedtls_ssl_transform *transform )
 {
     if( transform == NULL )
@@ -6163,7 +6267,7 @@ static void ssl_buffering_free_slot( mbedtls_ssl_context *ssl,
         hs->buffering.total_bytes_buffered -= hs_buf->data_len;
         mbedtls_platform_zeroize( hs_buf->data, hs_buf->data_len );
         mbedtls_free( hs_buf->data );
-        memset( hs_buf, 0, sizeof( mbedtls_ssl_hs_buffer ) );
+        mbedtls_platform_zeroize( hs_buf, sizeof( mbedtls_ssl_hs_buffer ) );
     }
 }
 

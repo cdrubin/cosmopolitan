@@ -9,9 +9,11 @@ extern const long SIGALRM;
 extern const long SIGBUS;
 extern const long SIGCHLD;
 extern const long SIGCONT;
+extern const long SIGEMT;
 extern const long SIGFPE;
 extern const long SIGHUP;
 extern const long SIGILL;
+extern const long SIGINFO;
 extern const long SIGINT;
 extern const long SIGIO;
 extern const long SIGIOT;
@@ -25,7 +27,6 @@ extern const long SIGRTMAX;
 extern const long SIGRTMIN;
 extern const long SIGSEGV;
 extern const long SIGSTKFLT;
-extern const long SIGSTKSZ;
 extern const long SIGSTOP;
 extern const long SIGSYS;
 extern const long SIGTERM;
@@ -41,7 +42,6 @@ extern const long SIGVTALRM;
 extern const long SIGWINCH;
 extern const long SIGXCPU;
 extern const long SIGXFSZ;
-extern const long SIGEMT;
 
 extern const long SIG_ATOMIC_MIN;
 extern const long SIG_BLOCK;
@@ -56,9 +56,11 @@ COSMOPOLITAN_C_END_
 #define SIGBUS    SYMBOLIC(SIGBUS)
 #define SIGCHLD   SYMBOLIC(SIGCHLD)
 #define SIGCONT   SYMBOLIC(SIGCONT)
+#define SIGEMT    SYMBOLIC(SIGEMT)
 #define SIGFPE    LITERALLY(8)
 #define SIGHUP    LITERALLY(1)
 #define SIGILL    LITERALLY(4)
+#define SIGINFO   SYMBOLIC(SIGINFO)
 #define SIGINT    LITERALLY(2)
 #define SIGIO     SYMBOLIC(SIGIO)
 #define SIGIOT    LITERALLY(6)
@@ -72,7 +74,6 @@ COSMOPOLITAN_C_END_
 #define SIGRTMIN  SYMBOLIC(SIGRTMIN)
 #define SIGSEGV   LITERALLY(11)
 #define SIGSTKFLT SYMBOLIC(SIGSTKFLT)
-#define SIGSTKSZ  SYMBOLIC(SIGSTKSZ)
 #define SIGSTOP   SYMBOLIC(SIGSTOP)
 #define SIGSYS    SYMBOLIC(SIGSYS)
 #define SIGTERM   LITERALLY(15)
@@ -88,7 +89,6 @@ COSMOPOLITAN_C_END_
 #define SIGWINCH  LITERALLY(28)
 #define SIGXCPU   LITERALLY(24)
 #define SIGXFSZ   LITERALLY(25)
-#define SIGEMT    SYMBOLIC(SIGEMT)
 
 #define SIG_ATOMIC_MIN SYMBOLIC(SIG_ATOMIC_MIN)
 #define SIG_BLOCK      SYMBOLIC(SIG_BLOCK)

@@ -32,6 +32,8 @@
 #include "libc/str/str.h"
 #include "libc/log/log.h"
 #include "libc/dce.h"
+#include "libc/calls/struct/sigaction.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/errno.h"
 #ifdef VMS
 #  include <stsdef.h>
@@ -2487,8 +2489,6 @@ char **argv;            /* command line tokens */
   mesg = (FILE *) stdout; /* cannot be made at link time for VMS */
   comment_stream = (FILE *)stdin;
 
-  init_upper();           /* build case map table */
-
 #ifdef LARGE_FILE_SUPPORT
   /* test if we can support large files - 9/29/04 */
   if (sizeof(zoff_t) < 8) {
@@ -4750,7 +4750,9 @@ char **argv;            /* command line tokens */
 #if CRYPT
   /* Initialize the crc_32_tab pointer, when encryption was requested. */
   if (key != NULL) {
+#ifndef USE_ZLIB
     crc_32_tab = get_crc_table();
+#endif
 #ifdef EBCDIC
     /* convert encryption key to ASCII (ISO variant for 8-bit ASCII chars) */
     strtoasc(key, key);

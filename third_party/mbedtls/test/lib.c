@@ -15,17 +15,31 @@
  *  limitations under the License.
  */
 #include "libc/assert.h"
+#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
+#include "libc/dce.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/log/backtrace.internal.h"
+#include "libc/log/check.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
+#include "libc/mem/mem.h"
+#include "libc/nexgen32e/vendor.internal.h"
+#include "libc/nt/runtime.h"
 #include "libc/rand/rand.h"
 #include "libc/runtime/internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/symbols.internal.h"
+#include "libc/stdio/append.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
+#include "libc/sysv/consts/nr.h"
+#include "libc/x/x.h"
 #include "third_party/mbedtls/config.h"
 #include "third_party/mbedtls/endian.h"
+#include "third_party/mbedtls/error.h"
 #include "third_party/mbedtls/platform.h"
 #include "third_party/mbedtls/test/lib.h"
 
@@ -34,6 +48,8 @@ Mbed TLS (Apache 2.0)\\n\
 Copyright ARM Limited\\n\
 Copyright Mbed TLS Contributors\"");
 asm(".include \"libc/disclaimer.inc\"");
+
+STATIC_YOINK("zip_uri_support");
 
 #if defined(MBEDTLS_PLATFORM_C)
 static mbedtls_platform_context platform_ctx;
@@ -49,14 +65,31 @@ typedef struct {
 static param_failed_ctx_t param_failed_ctx;
 #endif
 
+struct Buffer {
+  size_t i, n;
+  char *p;
+};
+
+char *output;
 jmp_buf jmp_tmp;
-int option_verbose;
-struct Buffer output;
+int option_verbose = 1;
 mbedtls_test_info_t mbedtls_test_info;
 
+static uint64_t Rando(void) {
+  static uint64_t x = 0x18abac12f3191aed;
+  uint64_t z = (x += 0x9e3779b97f4a7c15);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+  return z ^ (z >> 31);
+}
+
 int mbedtls_test_platform_setup(void) {
+  char *p;
   int ret = 0;
+  static char mybuf[2][BUFSIZ];
   showcrashreports();
+  setvbuf(stdout, mybuf[0], _IOLBF, BUFSIZ);
+  setvbuf(stderr, mybuf[1], _IOLBF, BUFSIZ);
 #if defined(MBEDTLS_PLATFORM_C)
   ret = mbedtls_platform_setup(&platform_ctx);
 #endif /* MBEDTLS_PLATFORM_C */
@@ -70,36 +103,47 @@ void mbedtls_test_platform_teardown(void) {
 }
 
 wontreturn void exit(int rc) {
-  if (rc != EXIT_SUCCESS) {
-    fwrite(output.p, 1, output.i, stderr);
-  }
+  if (rc) xwrite(1, output, appendz(output).i);
+  free(output);
+  output = 0;
   __cxa_finalize(0);
   _Exit(rc);
 }
 
-int AppendFmt(struct Buffer *b, const char *fmt, ...) {
-  char *p;
+char *GetTlsError(long r) {
+  char s[128];
+  if (-0x10000 < r && r < 0) {
+    mbedtls_strerror(r, s, sizeof(s));
+    return xasprintf("-0x%04lx %s", -r, s);
+  } else {
+    return xasprintf("%#lx", r);
+  }
+}
+
+int mbedtls_hardware_poll(void *wut, unsigned char *p, size_t n, size_t *olen) {
+  uint64_t x;
+  size_t i, j;
+  unsigned char b[8];
+  for (i = 0; i < n; ++i) {
+    x = Rando();
+    WRITE64LE(b, x);
+    for (j = 0; j < 8 && i + j < n; ++j) {
+      p[i + j] = b[j];
+    }
+  }
+  *olen = n;
+  return 0;
+}
+
+int mbedtls_test_write(const char *fmt, ...) {
   int i, n;
-  va_list va, vb;
+  char *p;
+  va_list va;
   va_start(va, fmt);
   if (option_verbose) {
     n = vfprintf(stderr, fmt, va);
   } else {
-    va_copy(vb, va);
-    n = vsnprintf(b->p + b->i, b->n - b->i, fmt, va);
-    if (n >= b->n - b->i) {
-      do {
-        if (b->n) {
-          b->n += b->n >> 1;
-        } else {
-          b->n = 16;
-        }
-      } while (b->i + n > b->n);
-      b->p = realloc(b->p, b->n);
-      vsnprintf(b->p + b->i, b->n - b->i, fmt, vb);
-    }
-    va_end(vb);
-    b->i += n;
+    n = vappendf(&output, fmt, va);
   }
   va_end(va);
   return n;
@@ -264,14 +308,16 @@ void mbedtls_test_hexify(unsigned char *obuf, const unsigned char *ibuf,
   while (len != 0) {
     h = *ibuf / 16;
     l = *ibuf % 16;
-    if (h < 10)
+    if (h < 10) {
       *obuf++ = '0' + h;
-    else
+    } else {
       *obuf++ = 'a' + h - 10;
-    if (l < 10)
+    }
+    if (l < 10) {
       *obuf++ = '0' + l;
-    else
+    } else {
       *obuf++ = 'a' + l - 10;
+    }
     ++ibuf;
     len--;
   }
@@ -748,7 +794,7 @@ static int convert_params(size_t cnt, char **params, int *int_params_store) {
  *
  * \return      0 for success else 1
  */
-static noinline int test_snprintf(size_t n, const char *ref_buf, int ref_ret) {
+static dontinline int test_snprintf(size_t n, const char *ref_buf, int ref_ret) {
   int ret;
   char buf[10] = "xxxxxxxxx";
   const char ref[10] = "xxxxxxxxx";
@@ -963,7 +1009,9 @@ int execute_tests(int argc, const char **argv, const char *default_filename) {
     test_filename = test_files[testfile_index];
     file = fopen(test_filename, "r");
     if (file == NULL) {
-      WRITE("Failed to open test file: %s\n", test_filename);
+      WRITE("%s (%s) failed to open test file: %s %m\n",
+            program_invocation_short_name, program_executable_name,
+            test_filename);
       if (outcome_file != NULL) fclose(outcome_file);
       return 1;
     }
@@ -1037,7 +1085,7 @@ int execute_tests(int argc, const char **argv, const char *default_filename) {
         if (mbedtls_test_info.result == MBEDTLS_TEST_RESULT_SUCCESS) {
           WRITE("PASS (%,ldus)\n", (int64_t)((t2 - t1) * 1e6));
         } else if (mbedtls_test_info.result == MBEDTLS_TEST_RESULT_SKIPPED) {
-          WRITE("----\n");
+          WRITE("----");
           total_skipped++;
         } else {
           total_errors++;

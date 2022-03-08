@@ -8,13 +8,16 @@ COSMOPOLITAN_C_START_
 
 typedef long jmp_buf[8] forcealign(CACHELINE);
 
-extern int __argc;                                  /* CRT */
-extern char **__argv;                               /* CRT */
 extern char **environ;                              /* CRT */
-extern unsigned long *__auxv;                       /* CRT */
+extern const int __argc;                            /* CRT */
+extern char **const __argv;                         /* CRT */
+extern char **const __envp;                         /* CRT */
+extern unsigned long *const __auxv;                 /* CRT */
+extern intptr_t __oldstack;                         /* CRT */
+extern char program_executable_name[];              /* RII */
 extern char *program_invocation_name;               /* RII */
 extern char *program_invocation_short_name;         /* RII */
-extern int ftrace;                                  /* CRT */
+extern int g_ftrace;                                /* CRT */
 extern uint64_t g_syscount;                         /* RII */
 extern const uint64_t kStartTsc;                    /* RII */
 extern const char kTmpPath[];                       /* RII */
@@ -33,6 +36,7 @@ extern unsigned char *__relo_start[];               /* αpε */
 extern unsigned char *__relo_end[];                 /* αpε */
 extern uint8_t __zip_start[];                       /* αpε */
 extern uint8_t __zip_end[];                         /* αpε */
+extern bool ftrace_enabled;
 
 void mcount(void);
 unsigned long getauxval(unsigned long);
@@ -44,6 +48,7 @@ void _longjmp(jmp_buf, int) libcesque wontreturn paramsnonnull();
 void exit(int) wontreturn;
 void _exit(int) libcesque wontreturn;
 void _Exit(int) libcesque wontreturn;
+void quick_exit(int) wontreturn;
 void abort(void) wontreturn noinstrument;
 int __cxa_atexit(void *, void *, void *) libcesque;
 int atfork(void *, void *) libcesque;
@@ -76,12 +81,12 @@ int vhangup(void);
 int getdtablesize(void);
 int sethostname(const char *, size_t);
 int acct(const char *);
+void longsort(long *, size_t);
 
 bool _isheap(void *);
-int NtGetVersion(void);
+int NtGetVersion(void) pureconst;
 long missingno();
-void __print(const void *, size_t);
-void __print_string(const char *);
+void __oom_hook(size_t);
 void _loadxmm(void *);
 void _peekall(void);
 void _savexmm(void *);
@@ -90,6 +95,8 @@ void free_s(void *) paramsnonnull() libcesque;
 int close_s(int *) paramsnonnull() libcesque;
 int OpenExecutable(void);
 void ftrace_install(void);
+long GetResourceLimit(int);
+long GetMaxFd(void);
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

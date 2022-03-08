@@ -16,7 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/bits/weaken.h"
+#include "libc/dce.h"
+#include "libc/mem/internal.h"
 #include "libc/runtime/runtime.h"
+
+#define ToUpper(c) \
+  (IsWindows() && (c) >= 'a' && (c) <= 'z' ? (c) - 'a' + 'A' : (c))
 
 /**
  * Removes environment variable.
@@ -29,6 +35,9 @@ int unsetenv(const char *s) {
       for (j = 0;; ++j) {
         if (!s[j]) {
           if (p[i][j] == '=') {
+            if (weaken(__freeenv)) {
+              weaken(__freeenv)(p[i]);
+            }
             k = i + 1;
             do {
               p[k - 1] = p[k];
@@ -37,7 +46,7 @@ int unsetenv(const char *s) {
           }
           break;
         }
-        if (s[j] != p[i][j]) {
+        if (ToUpper(s[j]) != ToUpper(p[i][j])) {
           break;
         }
       }

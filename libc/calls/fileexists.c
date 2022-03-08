@@ -16,35 +16,63 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/metastat.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/nt/files.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/at.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/zipos/zipos.internal.h"
 
 /**
  * Returns true if file exists at path.
+ *
+ * This function is equivalent to:
+ *
+ *     struct stat st;
+ *     return stat(path, &st) != -1;
  *
  * Please note that things which aren't strictly files, e.g. directories
  * or sockets, could be considered files for the purposes of this
  * function. The stat() function may be used to differentiate them.
  */
 bool fileexists(const char *path) {
-  int rc, olderr;
-  struct stat st;
+  int e;
+  bool res;
+  union metastat st;
+  struct ZiposUri zipname;
   uint16_t path16[PATH_MAX];
-  if (!IsWindows()) {
-    olderr = errno;
-    rc = stat(path, &st);
-    if (rc == -1 && (errno == ENOENT || errno == ENOTDIR)) {
-      errno = olderr;
+  e = errno;
+  if (IsAsan() && !__asan_is_valid(path, 1)) return efault();
+  if (weaken(__zipos_open) && weaken(__zipos_parseuri)(path, &zipname) != -1) {
+    if (weaken(__zipos_stat)(&zipname, &st.cosmo) != -1) {
+      res = true;
+    } else {
+      res = false;
     }
-    return rc != -1;
+  } else if (IsMetal()) {
+    res = false;
+  } else if (!IsWindows()) {
+    if (__sys_fstatat(AT_FDCWD, path, &st, 0) != -1) {
+      res = true;
+    } else {
+      res = false;
+    }
+  } else if (__mkntpath(path, path16) != -1) {
+    res = GetFileAttributes(path16) != -1u;
   } else {
-    if (__mkntpath(path, path16) == -1) return -1;
-    return GetFileAttributes(path16) != -1u;
+    res = false;
   }
+  SYSDEBUG("fileexists(%s) -> %s %s", path, res ? "true" : "false",
+           res ? "" : strerror(errno));
+  if (!res && (errno == ENOENT || errno == ENOTDIR)) {
+    errno = e;
+  }
+  return res;
 }

@@ -19,17 +19,16 @@
 #include "libc/str/str.h"
 #include "libc/zipos/zipos.internal.h"
 
-const char kZiposSchemePrefix[4] hidden = "zip:";
-
 /**
  * Extracts information about ZIP URI if it is one.
  */
 ssize_t __zipos_parseuri(const char *uri, struct ZiposUri *out) {
   size_t len;
-  if ((len = strlen(uri)) >= sizeof(kZiposSchemePrefix) && len < PATH_MAX &&
-      memcmp(uri, kZiposSchemePrefix, sizeof(kZiposSchemePrefix)) == 0) {
-    out->path = uri + sizeof(kZiposSchemePrefix);
-    return (out->len = len - sizeof(kZiposSchemePrefix));
+  if ((uri[0] == '/' && uri[1] == 'z' && uri[2] == 'i' && uri[3] == 'p' &&
+       (!uri[4] || uri[4] == '/')) &&
+      (len = strlen(uri)) < PATH_MAX) {
+    out->path = uri + 4 + !!uri[4];
+    return (out->len = len - 4 - !!uri[4]);
   } else {
     return -1;
   }

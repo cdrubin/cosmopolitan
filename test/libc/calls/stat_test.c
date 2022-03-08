@@ -18,25 +18,74 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/nt/files.h"
 #include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
+#include "libc/sysv/consts/nr.h"
+#include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
-char *pathname;
-struct stat st;
+STATIC_YOINK("zip_uri_support");
 
-TEST(stat_000, setupFiles) {
-  mkdir("o", 0755);
-  mkdir("o/tmp", 0755);
-}
+char testlib_enable_tmp_setup_teardown;
 
 TEST(stat_010, testEmptyFile_sizeIsZero) {
-  pathname = defer(
-      unlink,
-      gc(xasprintf("o/tmp/%s.%d", program_invocation_short_name, getpid())));
-  ASSERT_NE(-1, touch(pathname, 0755));
-  EXPECT_NE(-1, stat(pathname, &st));
+  struct stat st;
+  memset(&st, -1, sizeof(st));
+  ASSERT_SYS(0, 0, close(creat("hi", 0644)));
+  EXPECT_SYS(0, 0, stat("hi", &st));
   EXPECT_EQ(0, st.st_size);
+}
+
+TEST(stat, enoent) {
+  ASSERT_SYS(ENOENT, -1, stat("hi", 0));
+}
+
+TEST(stat, enotdir) {
+  ASSERT_SYS(0, 0, close(creat("yo", 0644)));
+  ASSERT_SYS(ENOTDIR, -1, stat("yo/there", 0));
+}
+
+TEST(stat, zipos) {
+  struct stat st;
+  EXPECT_SYS(0, 0,
+             stat("/zip/.python/test/"
+                  "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",
+                  &st));
+}
+
+static long Stat(const char *path, struct stat *st) {
+  long ax, di, si, dx;
+  asm volatile("syscall"
+               : "=a"(ax), "=D"(di), "=S"(si), "=d"(dx)
+               : "0"(__NR_stat), "1"(path), "2"(st)
+               : "rcx", "r8", "r9", "r10", "r11", "memory", "cc");
+  return ax;
+}
+
+BENCH(stat, bench) {
+  struct stat st;
+  EXPECT_SYS(0, 0, makedirs(".python/test", 0755));
+  EXPECT_SYS(0, 0,
+             touch(".python/test/"
+                   "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",
+                   0644));
+  if (!IsWindows()) {
+    EZBENCH2("stat syscall", donothing,
+             Stat(".python/test/"
+                  "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",
+                  &st));
+  }
+  EZBENCH2("stat() fs", donothing,
+           stat(".python/test/"
+                "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",
+                &st));
+  EZBENCH2("stat() zipos", donothing,
+           stat("/zip/.python/test/"
+                "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",
+                &st));
 }

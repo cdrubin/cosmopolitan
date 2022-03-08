@@ -17,9 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
+#include "libc/rand/rand.h"
 #include "libc/runtime/gc.internal.h"
+#include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
+
+double acos_(double) asm("acos");
+#define acos acos_
 
 TEST(acos, test) {
   EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", acos(0.))));
@@ -30,10 +35,19 @@ TEST(acos, test) {
   EXPECT_STREQ("3.14159265358979", gc(xasprintf("%.15g", acos(-1.))));
   EXPECT_TRUE(isnan(acos(1.5)));
   EXPECT_TRUE(isnan(acos(-1.5)));
+  EXPECT_TRUE(isnan(acos(2.)));
   EXPECT_TRUE(isnan(acos(NAN)));
   EXPECT_TRUE(isnan(acos(-NAN)));
   EXPECT_TRUE(isnan(acos(INFINITY)));
   EXPECT_TRUE(isnan(acos(-INFINITY)));
   EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", acos(__DBL_MIN__))));
-  EXPECT_TRUE(isnan(acos(__LDBL_MAX__)));
+  EXPECT_TRUE(isnan(acos(__DBL_MAX__)));
+}
+
+BENCH(acos, bench) {
+  EZBENCH2("acos(+0)", donothing, acos(0));
+  EZBENCH2("acos(-0)", donothing, acos(-0.));
+  EZBENCH2("acos(NAN)", donothing, acos(NAN));
+  EZBENCH2("acos(INFINITY)", donothing, acos(INFINITY));
+  EZBENCH_C("acos", _real1(vigna()), acos(_real1(vigna())));
 }

@@ -66,7 +66,7 @@ static void **ialloc(mstate m, size_t n_elements, size_t *sizes, int opts,
   assert(!is_mmapped(p));
 
   if (opts & 0x2) { /* optionally clear the elements */
-    memset((size_t *)mem, 0, remainder_size - SIZE_T_SIZE - array_size);
+    bzero((size_t *)mem, remainder_size - SIZE_T_SIZE - array_size);
   }
 
   /* If not provided, allocate the pointer array as final part of chunk */
@@ -96,7 +96,7 @@ static void **ialloc(mstate m, size_t n_elements, size_t *sizes, int opts,
     }
   }
 
-#if DEBUG + MODE_DBG + 0
+#ifdef DEBUG
   if (marray != chunks) {
     /* final element must have exactly exhausted chunk */
     if (element_size != 0) {
@@ -106,9 +106,10 @@ static void **ialloc(mstate m, size_t n_elements, size_t *sizes, int opts,
     }
     check_inuse_chunk(m, mem2chunk(marray));
   }
-  for (i = 0; i != n_elements; ++i) check_inuse_chunk(m, mem2chunk(marray[i]));
-
-#endif /* DEBUG */
+  for (i = 0; i != n_elements; ++i) {
+    check_inuse_chunk(m, mem2chunk(marray[i]));
+  }
+#endif /* IsModeDbg() */
 
   POSTACTION(m);
   return marray;

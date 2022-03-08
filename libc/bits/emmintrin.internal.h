@@ -218,6 +218,20 @@ struct thatispacked mayalias __usi128ma {
 #define _mm_cmpunord_sd(M128D_0, M128D_1) \
   __builtin_ia32_cmpunordsd((__v2df)(M128D_0), (__v2df)(M128D_1))
 
+#define _mm_SSE2(op, A, B)	\
+  ({				\
+      __m128i R = A;		\
+      asm(#op " %1, %0"		\
+          : "+x"(R) : "xm"(B));	\
+      R;			\
+  })
+#define _mm_mul_epu32(A, B)		_mm_SSE2(pmuludq, A, B)
+#define _mm_add_epi64(A, B)		_mm_SSE2(paddq, A, B)
+#define _mm_srli_epi64(A, B)		_mm_SSE2(psrlq, A, B)
+#define _mm_slli_epi64(A, B)		_mm_SSE2(psllq, A, B)
+#define _mm_unpacklo_epi64(A, B)	_mm_SSE2(punpcklqdq, A, B)
+#define _mm_unpackhi_epi64(A, B)	_mm_SSE2(punpckhqdq, A, B)
+
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § it's a trap! » sse2 » miscellaneous                       ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/

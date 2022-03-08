@@ -16,17 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/pushpop.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/siginfo.h"
-#include "libc/nt/enum/ctrlevent.h"
+#include "libc/calls/typedef/sigaction_f.h"
+#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
 
 textwindows wontreturn void sys_abort_nt(void) {
   int rva;
   siginfo_t info;
-  memset(&info, 0, sizeof(info));
+  bzero(&info, sizeof(info));
   info.si_signo = SIGABRT;
   rva = __sighandrvas[SIGABRT];
   if (rva >= kSigactionMinRva) {

@@ -16,35 +16,77 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
-#include "libc/errno.h"
+#include "libc/bits/safemacros.internal.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/internal.h"
-#include "libc/log/log.h"
-#include "libc/math.h"
-#include "libc/nt/runtime.h"
-#include "libc/runtime/runtime.h"
-#include "libc/stdio/stdio.h"
-#include "libc/str/str.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/testlib/testlib.h"
+
+const char *testlib_showerror_errno;
+const char *testlib_showerror_file;
+const char *testlib_showerror_func;
+const char *testlib_showerror_isfatal;
+const char *testlib_showerror_macro;
+const char *testlib_showerror_symbol;
 
 testonly void testlib_showerror(const char *file, int line, const char *func,
                                 const char *method, const char *symbol,
                                 const char *code, char *v1, char *v2) {
+  char *p;
   /* TODO(jart): Pay off tech debt re duplication */
-  sys_getpid(); /* make strace easier to read */
-  sys_getpid();
-  fprintf(stderr,
-          "%s%s%s%s:%s:%d%s: %s() %s %s(%s)\n"
-          "\t%s\n"
-          "\t\t%s %s %s\n"
-          "\t\t%s %s\n"
-          "\t%s%s\n"
-          "\t%s%s\n",
-          RED2, "error", UNBOLD, BLUE1, file, line, RESET, method, "in", func,
-          g_fixturename, code, "need", v1, symbol, " got", v2, SUBTLE,
-          strerror(errno), program_invocation_name, RESET);
+  __getpid(); /* make strace easier to read */
+  __getpid();
+  __printf("%serror%s%s:%s:%d%s: %s() in %s(%s)\n"
+           "\t%s\n"
+           "\t\tneed %s %s\n"
+           "\t\t got %s\n"
+           "\t%s%s\n"
+           "\t%s%s\n",
+           RED2, UNBOLD, BLUE1, file, (long)line, RESET, method, func,
+           g_fixturename, code, v1, symbol, v2, SUBTLE, strerror(errno),
+           program_executable_name, RESET);
   free_s(&v1);
   free_s(&v2);
+}
+
+/* TODO(jart): Pay off tech debt re duplication */
+testonly void testlib_showerror_(int line, const char *wantcode,
+                                 const char *gotcode, char *FREED_want,
+                                 char *FREED_got, const char *fmt, ...) {
+  int e;
+  va_list va;
+  char hostname[32];
+  e = errno;
+  __getpid();
+  __getpid();
+  __printf("%serror%s:%s%s:%d%s: %s(%s)\n"
+           "\t%s(%s, %s)\n",
+           RED2, UNBOLD, BLUE1, testlib_showerror_file, line, RESET,
+           testlib_showerror_func, g_fixturename, testlib_showerror_macro,
+           wantcode, gotcode);
+  if (wantcode) {
+    __printf("\t\tneed %s %s\n"
+             "\t\t got %s\n",
+             FREED_want, testlib_showerror_symbol, FREED_got);
+  } else {
+    __printf("\t\t→ %s%s\n", testlib_showerror_symbol, FREED_want);
+  }
+  if (!isempty(fmt)) {
+    __printf("\t");
+    va_start(va, fmt);
+    __vprintf(fmt, va);
+    va_end(va);
+    __printf("\n");
+  }
+  __stpcpy(hostname, "unknown");
+  gethostname(hostname, sizeof(hostname));
+  __printf("\t%s%s%s\n"
+           "\t%s%s @ %s%s\n",
+           SUBTLE, strerror(e), RESET, SUBTLE, program_invocation_name,
+           hostname, RESET);
+  free_s(&FREED_want);
+  free_s(&FREED_got);
+  ++g_testlib_failed;
+  if (testlib_showerror_isfatal) testlib_abort();
 }

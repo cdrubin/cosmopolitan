@@ -1,5 +1,12 @@
 #ifndef MBEDTLS_CONFIG_H_
 #define MBEDTLS_CONFIG_H_
+#include "libc/dce.h"
+
+/* /\* uncomment for testing old cpu code paths *\/ */
+/* #include "libc/nexgen32e/x86feature.h" */
+/* #undef X86_HAVE */
+/* #define X86_HAVE(x) 0 */
+/* #undef __x86_64__ */
 
 /* protocols */
 #define MBEDTLS_SSL_PROTO_TLS1_2
@@ -9,16 +16,13 @@
 /*#define MBEDTLS_SSL_PROTO_TLS1_3_EXPERIMENTAL*/
 /*#define MBEDTLS_SSL_PROTO_DTLS*/
 /*#define MBEDTLS_SSL_PROTO_SSL3*/
-/*#define MBEDTLS_ZLIB_SUPPORT*/
 #endif
 
 /* hash functions */
+#define MBEDTLS_MD5_C
 #define MBEDTLS_SHA1_C
 #define MBEDTLS_SHA256_C
 #define MBEDTLS_SHA512_C
-#ifdef MBEDTLS_SSL_PROTO_TLS1
-#define MBEDTLS_MD5_C
-#endif
 
 /* random numbers */
 #define ENTROPY_HAVE_STRONG
@@ -46,8 +50,8 @@
 /* block modes */
 #define MBEDTLS_GCM_C
 #ifndef TINY
-/*#define MBEDTLS_CCM_C*/
 #define MBEDTLS_CIPHER_MODE_CBC
+/*#define MBEDTLS_CCM_C*/
 /*#define MBEDTLS_CIPHER_MODE_CFB*/
 /*#define MBEDTLS_CIPHER_MODE_CTR*/
 /*#define MBEDTLS_CIPHER_MODE_OFB*/
@@ -57,39 +61,39 @@
 /* key exchange */
 #define MBEDTLS_RSA_C
 #define MBEDTLS_KEY_EXCHANGE_RSA_ENABLED
+#define MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
 #ifndef TINY
 #define MBEDTLS_ECP_C
 #define MBEDTLS_ECDH_C
-#define MBEDTLS_ECDH_VARIANT_EVEREST_ENABLED
 #define MBEDTLS_ECDSA_C
 #define MBEDTLS_ECDSA_DETERMINISTIC
+#define MBEDTLS_ECDH_VARIANT_EVEREST_ENABLED
 #define MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 #define MBEDTLS_KEY_EXCHANGE_ECDHE_RSA_ENABLED
-/*#define MBEDTLS_DHM_C*/
-/*#define MBEDTLS_KEY_EXCHANGE_DHE_RSA_ENABLED*/
+#define MBEDTLS_KEY_EXCHANGE_ECDHE_PSK_ENABLED
+#define MBEDTLS_DHM_C
+#define MBEDTLS_KEY_EXCHANGE_DHE_RSA_ENABLED
 /*#define MBEDTLS_KEY_EXCHANGE_ECDH_RSA_ENABLED*/
 /*#define MBEDTLS_KEY_EXCHANGE_ECDH_ECDSA_ENABLED*/
-/*#define MBEDTLS_KEY_EXCHANGE_PSK_ENABLED*/
 /*#define MBEDTLS_KEY_EXCHANGE_RSA_PSK_ENABLED*/
-/*#define MBEDTLS_KEY_EXCHANGE_ECDHE_PSK_ENABLED*/
 /*#define MBEDTLS_KEY_EXCHANGE_DHE_PSK_ENABLED*/
 #endif
 
 /* eliptic curves */
 #ifndef TINY
-#define MBEDTLS_ECP_DP_SECP256R1_ENABLED
 #define MBEDTLS_ECP_DP_SECP384R1_ENABLED
+#define MBEDTLS_ECP_DP_SECP256R1_ENABLED
+#define MBEDTLS_ECP_DP_CURVE448_ENABLED
 #define MBEDTLS_ECP_DP_CURVE25519_ENABLED
+/*#define MBEDTLS_ECP_DP_SECP521R1_ENABLED*/
+/*#define MBEDTLS_ECP_DP_BP384R1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_SECP192R1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_SECP224R1_ENABLED*/
-/*#define MBEDTLS_ECP_DP_SECP521R1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_SECP192K1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_SECP224K1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_SECP256K1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_BP256R1_ENABLED*/
-/*#define MBEDTLS_ECP_DP_BP384R1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_BP512R1_ENABLED*/
-/*#define MBEDTLS_ECP_DP_CURVE448_ENABLED*/
 #endif
 
 #define MBEDTLS_X509_CHECK_KEY_USAGE
@@ -103,17 +107,46 @@
 #define MBEDTLS_ENTROPY_MAX_SOURCES       4
 #define MBEDTLS_X509_MAX_INTERMEDIATE_CA  8
 
-/* boosts performance from 230k qps to 330k */
+/*
+ * Boosts performance from 230k qps to 330k
+ * Hardens against against sbox side channels
+ */
+#define MBEDTLS_AESNI_C
 #ifndef TINY
-#ifndef __FSANITIZE_ADDRESS__
-#define MBEDTLS_HAVE_ASM
 #define MBEDTLS_HAVE_X86_64
 #define MBEDTLS_HAVE_SSE2
-#define MBEDTLS_AESNI_C
-#endif
 #endif
 
-#ifndef NDEBUG
+#ifndef TINY
+/*
+ * TODO(jart): RHEL5 sends SSLv2 hello even though it supports TLS. Is
+ *             DROWN really a problem if we turn this on? Since Google
+ *             supports it on their website. SSLLabs says we're OK.
+ */
+#define MBEDTLS_SSL_SRV_SUPPORT_SSLV2_CLIENT_HELLO
+#endif
+
+#ifndef TINY
+/*
+ * The CIA says "messages should be compressed prior to encryption"
+ * because "compression reduces the amount of information to be
+ * encrypted, thereby decreasing the amount of material available for
+ * cryptanalysis. Additionally, compression is designed to eliminate
+ * redundancies in the message, further complicating cryptanalysis."
+ *
+ * Google says that if you (1) have the ability to record encrypted
+ * communications made by a machine and (2) have the ability to run code
+ * on that machine which injects plaintext repeatedly into the encrypted
+ * messages, then you can extract other small parts of the mesasge which
+ * the code execution sandbox doesn't allow you to see, and that the
+ * only solution to stop using compression.
+ *
+ * Since we pay $0.12/gb for GCP bandwidth we choose to believe the CIA.
+ */
+#define MBEDTLS_ZLIB_SUPPORT
+#endif
+
+#if IsModeDbg()
 #define MBEDTLS_CHECK_PARAMS
 #endif
 
@@ -121,11 +154,10 @@
 #define MBEDTLS_SHA1_SMALLER
 #define MBEDTLS_SHA256_SMALLER
 #define MBEDTLS_SHA512_SMALLER
+#define MBEDTLS_ECP_NIST_OPTIM
 #ifdef TINY
 #define MBEDTLS_AES_ROM_TABLES
 #define MBEDTLS_AES_FEWER_TABLES
-#else
-#define MBEDTLS_ECP_NIST_OPTIM
 #endif
 
 #define MBEDTLS_PLATFORM_C
@@ -168,6 +200,11 @@
  * Uncomment to use your own hardware entropy collector.
  */
 #define MBEDTLS_ENTROPY_HARDWARE_ALT
+
+/**
+ * Enables PKCS#5 functions, e.g. PBKDF2.
+ */
+#define MBEDTLS_PKCS5_C
 
 /**
  * \def MBEDTLS_CIPHER_PADDING_PKCS7
@@ -793,7 +830,7 @@
  *
  * Comment this macro to disable support for server name indication in SSL
  */
-/*#define MBEDTLS_SSL_SERVER_NAME_INDICATION*/
+#define MBEDTLS_SSL_SERVER_NAME_INDICATION
 
 /**
  * \def MBEDTLS_SSL_VARIABLE_BUFFER_LENGTH
@@ -1205,7 +1242,6 @@
  * \warning   SHA-1 is considered a weak message digest and its use constitutes
  *            a security risk. If possible, we recommend avoiding dependencies
  *            on it, and considering stronger message digests instead.
- *
  */
 /*#define MBEDTLS_TLS_DEFAULT_ALLOW_SHA1_IN_CERTIFICATES*/
 
@@ -1223,7 +1259,11 @@
  *            a security risk. If possible, we recommend avoiding dependencies
  *            on it, and considering stronger message digests instead.
  */
-/*#define MBEDTLS_TLS_DEFAULT_ALLOW_SHA1_IN_KEY_EXCHANGE*/
+#define MBEDTLS_TLS_DEFAULT_ALLOW_SHA1_IN_KEY_EXCHANGE
 
-#include "third_party/mbedtls/check.h"
+#define mbedtls_t_udbl uint128_t
+#define MBEDTLS_HAVE_UDBL
+
+#include "libc/dce.h"
+#include "third_party/mbedtls/check.inc"
 #endif /* MBEDTLS_CONFIG_H_ */

@@ -31,7 +31,8 @@ LIBC_STR_A_DIRECTDEPS =						\
 	LIBC_INTRIN						\
 	LIBC_STUBS						\
 	LIBC_SYSV						\
-	LIBC_NEXGEN32E
+	LIBC_NEXGEN32E						\
+	THIRD_PARTY_COMPILER_RT
 
 LIBC_STR_A_DEPS :=						\
 	$(call uniq,$(foreach x,$(LIBC_STR_A_DIRECTDEPS),$($(x))))
@@ -48,6 +49,10 @@ o/$(MODE)/libc/str/memmem.o:					\
 		OVERRIDE_CPPFLAGS +=				\
 			-DSTACK_FRAME_UNLIMITED
 
+o/$(MODE)/libc/str/dosdatetimetounix.o:				\
+		OVERRIDE_CFLAGS +=				\
+			-O3
+
 o/$(MODE)/libc/str/getzipcdir.o					\
 o/$(MODE)/libc/str/getzipcdircomment.o				\
 o/$(MODE)/libc/str/getzipcdircommentsize.o			\
@@ -58,15 +63,27 @@ o/$(MODE)/libc/str/getzipcfilemode.o				\
 o/$(MODE)/libc/str/getzipcfileoffset.o				\
 o/$(MODE)/libc/str/getzipcfileuncompressedsize.o		\
 o/$(MODE)/libc/str/getziplfilecompressedsize.o			\
-o/$(MODE)/libc/str/getziplfileuncompressedsize.o:		\
+o/$(MODE)/libc/str/getziplfileuncompressedsize.o		\
+o/$(MODE)/libc/str/getzipcfiletimestamps.o:			\
 		OVERRIDE_CFLAGS +=				\
 			-Os
 
 o/$(MODE)/libc/str/iswpunct.o					\
 o/$(MODE)/libc/str/iswupper.o					\
-o/$(MODE)/libc/str/iswlower.o:					\
+o/$(MODE)/libc/str/iswlower.o					\
+o/$(MODE)/libc/str/iswseparator.o:				\
 		OVERRIDE_CFLAGS +=				\
 			-fno-jump-tables
+
+o/$(MODE)/libc/str/bcmp.o					\
+o/$(MODE)/libc/str/windowsdurationtotimeval.o			\
+o/$(MODE)/libc/str/windowsdurationtotimespec.o			\
+o/$(MODE)/libc/str/timevaltowindowstime.o			\
+o/$(MODE)/libc/str/timespectowindowstime.o			\
+o/$(MODE)/libc/str/windowstimetotimeval.o			\
+o/$(MODE)/libc/str/windowstimetotimespec.o:			\
+		OVERRIDE_CFLAGS +=				\
+			-O3
 
 LIBC_STR_LIBS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)))
 LIBC_STR_SRCS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)_SRCS))
@@ -76,7 +93,7 @@ LIBC_STR_BINS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)_BINS))
 LIBC_STR_CHECKS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)_CHECKS))
 LIBC_STR_OBJS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)_OBJS))
 LIBC_STR_TESTS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)_TESTS))
-$(LIBC_STR_OBJS): $(BUILD_FILES) libc/str/str.mk
+# $(LIBC_STR_OBJS): $(BUILD_FILES) libc/str/str.mk
 
 .PHONY: o/$(MODE)/libc/str
 o/$(MODE)/libc/str: $(LIBC_STR_CHECKS)

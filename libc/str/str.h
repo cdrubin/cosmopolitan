@@ -7,9 +7,10 @@ COSMOPOLITAN_C_START_
 ╚────────────────────────────────────────────────────────────────────────────│─╝
   fourth age telecommunications */
 
+extern const int8_t kHexToInt[256];
 extern const uint8_t gperf_downcase[256];
 extern const uint8_t kToLower[256];
-extern const uint16_t kToLower16[256];
+extern const uint8_t kToUpper[256];
 extern const uint8_t kBase36[256];
 extern const char16_t kCp437[256];
 
@@ -73,6 +74,7 @@ int iswupper(wint_t);
 int iswxdigit(wint_t);
 int iswpunct(wint_t);
 int iswprint(wint_t);
+int iswseparator(wint_t);
 wint_t towlower(wint_t);
 wint_t towupper(wint_t);
 
@@ -80,12 +82,19 @@ wint_t towupper(wint_t);
 │ cosmopolitan § strings                                                   ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
+void bzero(void *, size_t) memcpyesque;
 void *memset(void *, int, size_t) memcpyesque;
+void *memmove(void *, const void *, size_t) memcpyesque;
 void *memcpy(void *restrict, const void *restrict, size_t) memcpyesque;
 void *mempcpy(void *restrict, const void *restrict, size_t) memcpyesque;
 void *memccpy(void *restrict, const void *restrict, int, size_t) memcpyesque;
-void *memmove(void *, const void *, size_t) memcpyesque;
 void *memeqmask(void *, const void *, const void *, size_t) memcpyesque;
+void explicit_bzero(void *, size_t);
+
+int bcmp(const void *, const void *, size_t) strlenesque;
+int memcmp(const void *, const void *, size_t) strlenesque;
+int timingsafe_bcmp(const void *, const void *, size_t);
+int timingsafe_memcmp(const void *, const void *, size_t);
 
 size_t strlen(const char *) strlenesque;
 size_t strnlen(const char *, size_t) strlenesque;
@@ -95,8 +104,6 @@ char *index(const char *, int) strlenesque;
 void *memchr(const void *, int, size_t) strlenesque;
 char *strchrnul(const char *, int) strlenesque returnsnonnull;
 void *rawmemchr(const void *, int) strlenesque returnsnonnull;
-void bzero(void *, size_t) paramsnonnull() libcesque;
-void explicit_bzero(void *, size_t) paramsnonnull() libcesque;
 size_t strlen16(const char16_t *) strlenesque;
 size_t strnlen16(const char16_t *, size_t) strlenesque;
 size_t strnlen16_s(const char16_t *, size_t);
@@ -114,7 +121,6 @@ char *strstr(const char *, const char *) strlenesque;
 char16_t *strstr16(const char16_t *, const char16_t *) strlenesque;
 wchar_t *wcsstr(const wchar_t *, const wchar_t *) strlenesque;
 void *rawwmemchr(const void *, wchar_t) strlenesque returnsnonnull;
-int memcmp(const void *, const void *, size_t) strlenesque;
 int strcmp(const char *, const char *) strlenesque;
 int strncmp(const char *, const char *, size_t) strlenesque;
 int strcmp16(const char16_t *, const char16_t *) strlenesque;
@@ -161,6 +167,8 @@ char *strcpy(char *, const char *) memcpyesque;
 char16_t *strcpy16(char16_t *, const char16_t *) memcpyesque;
 wchar_t *wcscpy(wchar_t *, const wchar_t *) memcpyesque;
 char *strncat(char *, const char *, size_t) memcpyesque;
+char16_t *strncat16(char16_t *, const char16_t *, size_t) memcpyesque;
+wchar_t *wcsncat(wchar_t *, const wchar_t *, size_t) memcpyesque;
 char *strncpy(char *, const char *, size_t) memcpyesque;
 char *strtok(char *, const char *) paramsnonnull((2)) libcesque;
 char *strtok_r(char *, const char *, char **) paramsnonnull((2, 3));
@@ -169,6 +177,7 @@ wchar_t *wcstok(wchar_t *, const wchar_t *, wchar_t **) paramsnonnull((2, 3));
 char *wstrtrunc(uint16_t *) memcpyesque;
 char *wstrntrunc(uint16_t *, size_t) memcpyesque;
 bool startswith(const char *, const char *) strlenesque;
+bool startswithi(const char *, const char *) strlenesque;
 bool startswith16(const char16_t *, const char16_t *) strlenesque;
 bool wcsstartswith(const wchar_t *, const wchar_t *) strlenesque;
 bool endswith(const char *, const char *) strlenesque;
@@ -178,13 +187,11 @@ const char *IndexDoubleNulString(const char *, unsigned) strlenesque;
 int strverscmp(const char *, const char *);
 wchar_t *wmemset(wchar_t *, wchar_t, size_t) memcpyesque;
 char16_t *memset16(char16_t *, char16_t, size_t) memcpyesque;
-compatfn wchar_t *wmemcpy(wchar_t *, const wchar_t *, size_t) memcpyesque;
-compatfn wchar_t *wmempcpy(wchar_t *, const wchar_t *, size_t) memcpyesque;
-compatfn wchar_t *wmemmove(wchar_t *, const wchar_t *, size_t) memcpyesque;
-int timingsafe_memcmp(const void *, const void *, size_t);
+wchar_t *wmemcpy(wchar_t *, const wchar_t *, size_t) memcpyesque;
+wchar_t *wmempcpy(wchar_t *, const wchar_t *, size_t) memcpyesque;
+wchar_t *wmemmove(wchar_t *, const wchar_t *, size_t) memcpyesque;
 void *tinymemccpy(void *, const void *, int, size_t) memcpyesque;
-void *memmem(const void *, size_t, const void *, size_t)
-    paramsnonnull() nothrow nocallback nosideeffect;
+void *memmem(const void *, size_t, const void *, size_t) libcesque nosideeffect;
 char *strerror(int) returnsnonnull nothrow nocallback;
 long a64l(const char *);
 char *l64a(long);
@@ -196,14 +203,10 @@ char *strtoupper(char *) paramsnonnull();
 char *chomp(char *);
 char16_t *chomp16(char16_t *);
 wchar_t *wchomp(wchar_t *);
-
+bool IsText(const void *, size_t);
+bool IsUtf8(const void *, size_t);
+bool _isabspath(const char *) strlenesque;
 bool escapedos(char16_t *, unsigned, const char16_t *, unsigned);
-
-void *memset_pure(void *, int, size_t) memcpyesque;
-void *memmove_pure(void *, const void *, size_t) memcpyesque;
-void *mempcpy_pure(void *, const void *, size_t) memcpyesque;
-size_t strlen_pure(const char *) strlenesque;
-size_t strcspn_pure(const char *, const char *) strlenesque;
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § strings » multibyte                                       ─╬─│┼
@@ -258,144 +261,11 @@ int iswctype(wint_t, wctype_t) pureconst;
 char *strsignal(int) returnsnonnull libcesque;
 
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § strings » optimizations                                   ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-#define __memcpy_isgoodsize(SIZE)                                    \
-  (__builtin_constant_p(SIZE) && ((SIZE) <= __BIGGEST_ALIGNMENT__ && \
-                                  __builtin_popcountl((unsigned)(SIZE)) == 1))
-
-#define __memset_isgoodsize(SIZE)                   \
-  (__builtin_constant_p(SIZE) &&                    \
-   (((SIZE) <= __BIGGEST_ALIGNMENT__ &&             \
-     __builtin_popcountl((unsigned)(SIZE)) == 1) || \
-    ((SIZE) % __BIGGEST_ALIGNMENT__ == 0 &&         \
-     (SIZE) / __BIGGEST_ALIGNMENT__ <= 3)))
-
-#define memcpy(DEST, SRC, SIZE)                                  \
-  (__memcpy_isgoodsize(SIZE) ? __builtin_memcpy(DEST, SRC, SIZE) \
-                             : __memcpy("MemCpy", DEST, SRC, SIZE))
-
-#define memset(DEST, BYTE, SIZE)                                  \
-  (__memset_isgoodsize(SIZE) ? __builtin_memset(DEST, BYTE, SIZE) \
-                             : __memset(DEST, BYTE, SIZE))
-
-#if defined(__STDC_HOSTED__) && defined(__SSE2__)
-
-#define strlen(STR)                                       \
-  (__builtin_constant_p(STR) ? __builtin_strlen(STR) : ({ \
-    size_t LeN;                                           \
-    const char *StR = (STR);                              \
-    asm("call\tstrlen"                                    \
-        : "=a"(LeN)                                       \
-        : "D"(StR), "m"(*(char(*)[0x7fffffff])StR)        \
-        : "rcx", "rdx", "xmm3", "xmm4", "cc");            \
-    LeN;                                                  \
-  }))
-
-#define memmove(DEST, SRC, SIZE) __memcpy("MemMove", (DEST), (SRC), (SIZE))
-
-#define mempcpy(DEST, SRC, SIZE)                          \
-  ({                                                      \
-    size_t SIze = (SIZE);                                 \
-    (void *)((char *)memcpy((DEST), (SRC), SIze) + SIze); \
-  })
-
-#define __memcpy(FN, DEST, SRC, SIZE)                                      \
-  ({                                                                       \
-    void *DeSt = (DEST);                                                   \
-    const void *SrC = (SRC);                                               \
-    size_t SiZe = (SIZE);                                                  \
-    asm("call\t" FN                                                        \
-        : "=m"(*(char(*)[SiZe])(DeSt))                                     \
-        : "D"(DeSt), "S"(SrC), "d"(SiZe), "m"(*(const char(*)[SiZe])(SrC)) \
-        : "xmm3", "xmm4", "rcx", "cc");                                    \
-    DeSt;                                                                  \
-  })
-
-#define __memset(DEST, BYTE, SIZE)        \
-  ({                                      \
-    void *DeSt = (DEST);                  \
-    size_t SiZe = (SIZE);                 \
-    asm("call\tMemSet"                    \
-        : "=m"(*(char(*)[SiZe])(DeSt))    \
-        : "D"(DeSt), "S"(BYTE), "d"(SiZe) \
-        : "xmm3", "xmm4", "rcx", "cc");   \
-    DeSt;                                 \
-  })
-
-#define explicit_bzero(STR, BYTES)                                          \
-  do {                                                                      \
-    void *Str;                                                              \
-    size_t Bytes;                                                           \
-    asm volatile("call\texplicit_bzero"                                     \
-                 : "=D"(Str), "=S"(Bytes)                                   \
-                 : "0"(STR), "1"(BYTES)                                     \
-                 : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory", \
-                   "cc", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5");   \
-  } while (0)
-
-#else /* hosted+sse2 */
-
-#define mempcpy(DEST, SRC, SIZE)                                           \
-  ({                                                                       \
-    void *Rdi, *Dest = (DEST);                                             \
-    const void *Rsi, *Src = (SRC);                                         \
-    size_t SiZe = (SIZE);                                                  \
-    size_t Rcx;                                                            \
-    asm("rep movsb"                                                        \
-        : "=D"(Rdi), "=S"(Rsi), "=c"(Rcx), "=m"(*(char(*)[SiZe])(Dest))    \
-        : "0"(Dest), "1"(Src), "2"(SiZe), "m"(*(const char(*)[SiZe])(Src)) \
-        : "cc");                                                           \
-    Rdi;                                                                   \
-  })
-
-#define __memcpy(FN, DEST, SRC, SIZE)                                      \
-  ({                                                                       \
-    void *Rdi, *Dest = (DEST);                                             \
-    const void *Rsi, *Src = (SRC);                                         \
-    size_t SiZe = (SIZE);                                                  \
-    size_t Rcx;                                                            \
-    asm("rep movsb"                                                        \
-        : "=D"(Rdi), "=S"(Rsi), "=c"(Rcx), "=m"(*(char(*)[SiZe])(Dest))    \
-        : "0"(Dest), "1"(Src), "2"(SiZe), "m"(*(const char(*)[SiZe])(Src)) \
-        : "cc");                                                           \
-    Dest;                                                                  \
-  })
-
-#define __memset(DEST, BYTE, SIZE)                           \
-  ({                                                         \
-    void *Rdi, *Dest = (DEST);                               \
-    size_t SiZe = (SIZE);                                    \
-    size_t Rcx;                                              \
-    asm("rep stosb"                                          \
-        : "=D"(Rdi), "=c"(Rcx), "=m"(*(char(*)[SiZe])(Dest)) \
-        : "0"(Dest), "1"(SiZe), "a"(BYTE)                    \
-        : "cc");                                             \
-    Dest;                                                    \
-  })
-
-#endif /* hosted/sse2/unbloat */
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § strings » address sanitizer                               ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-#if defined(__FSANITIZE_ADDRESS__)
-
-#undef memcpy
-#undef memmove
-#undef mempcpy
-#undef memset
-#undef strlen
-
-#define memcpy  memmove_pure
-#define memmove memmove_pure
-#define mempcpy mempcpy_pure
-#define memset  memset_pure
-#define strcspn strcspn_pure
-#define strlen  strlen_pure
-
-#endif /* __FSANITIZE_ADDRESS__ */
+/* gcc rewrites to memset otherwise :'( */
+void __bzero(void *, size_t) asm("bzero") memcpyesque;
+#define bzero(DEST, SIZE)                                      \
+  ((void)((__builtin_constant_p(SIZE)) ? memset(DEST, 0, SIZE) \
+                                       : __bzero(DEST, SIZE)))
 #endif /* __GNUC__ && !__STRICT_ANSI__ */
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

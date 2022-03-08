@@ -7,6 +7,7 @@
 #ifndef lobject_h
 #define lobject_h
 
+#include "libc/nexgen32e/bsr.h"
 #include "third_party/lua/llimits.h"
 #include "third_party/lua/lua.h"
 
@@ -15,17 +16,14 @@
 /*
 ** Extra types for collectable non-values
 */
-#define LUA_TUPVAL	LUA_NUMTYPES  /* upvalues */
-#define LUA_TPROTO	(LUA_NUMTYPES+1)  /* function prototypes */
-#define LUA_TDEADKEY	(LUA_NUMTYPES+2)  /* removed keys in tables */
-
-
+#define LUA_TUPVAL   LUA_NUMTYPES       /* upvalues */
+#define LUA_TPROTO   (LUA_NUMTYPES + 1) /* function prototypes */
+#define LUA_TDEADKEY (LUA_NUMTYPES + 2) /* removed keys in tables */
 
 /*
 ** number of all possible types (including LUA_TNONE but excluding DEADKEY)
 */
-#define LUA_TOTALTYPES		(LUA_TPROTO + 2)
-
+#define LUA_TOTALTYPES (LUA_TPROTO + 2)
 
 /*
 ** tags for Tagged Values have the following use of bits:
@@ -135,13 +133,14 @@ typedef struct TValue {
 ** Entries in a Lua stack. Field 'tbclist' forms a list of all
 ** to-be-closed variables active in this stack. Dummy entries are
 ** used when the distance between two tbc variables does not fit
-** in an unsigned short.
+** in an unsigned short. They are represented by delta==0, and
+** their real delta is always the maximum value that fits in
+** that field.
 */
 typedef union StackValue {
   TValue val;
   struct {
     TValuefields;
-    lu_byte isdummy;
     unsigned short delta;
   } tbclist;
 } StackValue;
@@ -777,7 +776,6 @@ typedef struct Table {
 #define UTF8BUFFSZ	8
 
 LUAI_FUNC int luaO_utf8esc (char *buff, unsigned long x);
-LUAI_FUNC int luaO_ceillog2 (unsigned int x);
 LUAI_FUNC int luaO_rawarith (lua_State *L, int op, const TValue *p1,
                              const TValue *p2, TValue *res);
 LUAI_FUNC void luaO_arith (lua_State *L, int op, const TValue *p1,
@@ -790,6 +788,11 @@ LUAI_FUNC const char *luaO_pushvfstring (lua_State *L, const char *fmt,
 LUAI_FUNC const char *luaO_pushfstring (lua_State *L, const char *fmt, ...);
 LUAI_FUNC void luaO_chunkid (char *out, const char *source, size_t srclen);
 
+/*
+** Computes ceil(log2(x))
+*/
+static inline int luaO_ceillog2 (unsigned int x) {
+  return --x ? bsr(x) + 1 : 0;
+}
 
 #endif
-

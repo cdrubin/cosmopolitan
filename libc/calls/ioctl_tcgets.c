@@ -17,19 +17,44 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
+#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/metatermios.internal.h"
 #include "libc/calls/termios.internal.h"
+#include "libc/calls/ttydefaults.h"
+#include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/sysv/consts/termios.h"
+#include "libc/sysv/errfuns.h"
 
 int ioctl_tcgets_nt(int, struct termios *) hidden;
 
+static int ioctl_tcgets_metal(int fd, struct termios *tio) {
+  bzero(tio, sizeof(*tio));
+  tio->c_iflag = TTYDEF_IFLAG;
+  tio->c_oflag = TTYDEF_OFLAG;
+  tio->c_lflag = TTYDEF_LFLAG;
+  tio->c_cflag = TTYDEF_CFLAG;
+  return 0;
+}
+
 static int ioctl_tcgets_sysv(int fd, struct termios *tio) {
   int rc;
-  union metatermios t;
-  if ((rc = sys_ioctl(fd, TCGETS, &t)) != -1) {
-    __termios2linux(tio, &t);
+  union metatermios mt;
+  if (IsLinux()) {
+    if (IsAsan() && !__asan_is_valid(tio, sizeof(*tio))) return efault();
+    return sys_ioctl(fd, TCGETS, tio);
+  } else {
+    if ((rc = sys_ioctl(fd, TCGETS, &mt)) != -1) {
+      if (IsXnu()) {
+        COPY_TERMIOS(tio, &mt.xnu);
+      } else if (IsFreebsd() || IsOpenbsd() || IsNetbsd()) {
+        COPY_TERMIOS(tio, &mt.bsd);
+      } else {
+        unreachable;
+      }
+    }
+    return rc;
   }
-  return rc;
 }
 
 /**
@@ -39,10 +64,24 @@ static int ioctl_tcgets_sysv(int fd, struct termios *tio) {
  * @see ioctl(fd, TCGETS, tio) dispatches here
  * @see ioctl(fd, TIOCGETA, tio) dispatches here
  */
-int ioctl_tcgets(int fd, struct termios *tio) {
-  if (!IsWindows()) {
-    return ioctl_tcgets_sysv(fd, tio);
+int ioctl_tcgets(int fd, ...) {
+  va_list va;
+  struct termios *tio;
+  va_start(va, fd);
+  tio = va_arg(va, struct termios *);
+  va_end(va);
+  if (fd >= 0) {
+    if (!tio) return efault();
+    if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+      return enotty();
+    } else if (IsMetal()) {
+      return ioctl_tcgets_metal(fd, tio);
+    } else if (!IsWindows()) {
+      return ioctl_tcgets_sysv(fd, tio);
+    } else {
+      return ioctl_tcgets_nt(fd, tio);
+    }
   } else {
-    return ioctl_tcgets_nt(fd, tio);
+    return einval();
   }
 }

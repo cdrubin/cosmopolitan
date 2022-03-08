@@ -24,7 +24,9 @@ TEST_LIBC_CALLS_CHECKS =				\
 	$(TEST_LIBC_CALLS_SRCS_TEST:%.c=o/$(MODE)/%.com.runs)
 
 TEST_LIBC_CALLS_DIRECTDEPS =				\
+	DSP_CORE					\
 	LIBC_CALLS					\
+	LIBC_TINYMATH					\
 	LIBC_SOCK					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
@@ -38,9 +40,11 @@ TEST_LIBC_CALLS_DIRECTDEPS =				\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_SYSV					\
+	LIBC_TIME					\
 	LIBC_TESTLIB					\
 	LIBC_UNICODE					\
 	LIBC_X						\
+	LIBC_ZIPOS					\
 	THIRD_PARTY_XED
 
 TEST_LIBC_CALLS_DEPS :=					\
@@ -53,6 +57,7 @@ o/$(MODE)/test/libc/calls/calls.pkg:			\
 o/$(MODE)/test/libc/calls/%.com.dbg:			\
 		$(TEST_LIBC_CALLS_DEPS)			\
 		o/$(MODE)/test/libc/calls/%.o		\
+		o/$(MODE)/third_party/python/Lib/test/tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt.zip.o	\
 		o/$(MODE)/test/libc/calls/calls.pkg	\
 		$(LIBC_TESTMAIN)			\
 		$(CRT)					\

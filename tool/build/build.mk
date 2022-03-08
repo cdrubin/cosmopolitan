@@ -36,8 +36,8 @@ TOOL_BUILD_DIRECTDEPS =					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
 	LIBC_NT_KERNEL32				\
-	LIBC_NT_WS2_32					\
 	LIBC_NT_USER32					\
+	LIBC_NT_WS2_32					\
 	LIBC_RAND					\
 	LIBC_RUNTIME					\
 	LIBC_SOCK					\
@@ -50,9 +50,11 @@ TOOL_BUILD_DIRECTDEPS =					\
 	LIBC_TINYMATH					\
 	LIBC_UNICODE					\
 	LIBC_X						\
+	NET_HTTPS					\
 	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_GDTOA				\
 	THIRD_PARTY_GETOPT				\
+	THIRD_PARTY_MBEDTLS				\
 	THIRD_PARTY_STB					\
 	THIRD_PARTY_XED					\
 	THIRD_PARTY_ZLIB				\
@@ -74,6 +76,54 @@ o/$(MODE)/tool/build/%.com.dbg:				\
 		$(TOOL_BUILD_DEPS)			\
 		o/$(MODE)/tool/build/build.pkg		\
 		o/$(MODE)/tool/build/%.o		\
+		$(CRT)					\
+		$(APE)
+	-@$(APELINK)
+
+o/$(MODE)/tool/build/blinkenlights.com.dbg:		\
+		$(TOOL_BUILD_DEPS)			\
+		o/$(MODE)/tool/build/build.pkg		\
+		o/$(MODE)/tool/build/blinkenlights.o	\
+		$(CRT)					\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/tool/build/ar.com.dbg:			\
+		$(TOOL_BUILD_DEPS)			\
+		o/$(MODE)/tool/build/build.pkg		\
+		o/$(MODE)/tool/build/ar.o		\
+		$(CRT)					\
+		$(APE)
+	-@$(APELINK)
+
+o/$(MODE)/tool/build/package.com.dbg:			\
+		$(TOOL_BUILD_DEPS)			\
+		o/$(MODE)/tool/build/build.pkg		\
+		o/$(MODE)/tool/build/package.o		\
+		$(CRT)					\
+		$(APE)
+	-@$(APELINK)
+
+o/$(MODE)/tool/build/mkdeps.com.dbg:			\
+		$(TOOL_BUILD_DEPS)			\
+		o/$(MODE)/tool/build/build.pkg		\
+		o/$(MODE)/tool/build/mkdeps.o		\
+		$(CRT)					\
+		$(APE)
+	@$(APELINK)
+
+o/$(MODE)/tool/build/compile.com.dbg:			\
+		$(TOOL_BUILD_DEPS)			\
+		o/$(MODE)/tool/build/build.pkg		\
+		o/$(MODE)/tool/build/compile.o		\
+		$(CRT)					\
+		$(APE)
+	-@$(APELINK)
+
+o/$(MODE)/tool/build/zipobj.com.dbg:			\
+		$(TOOL_BUILD_DEPS)			\
+		o/$(MODE)/tool/build/build.pkg		\
+		o/$(MODE)/tool/build/zipobj.o		\
 		$(CRT)					\
 		$(APE)
 	-@$(APELINK)

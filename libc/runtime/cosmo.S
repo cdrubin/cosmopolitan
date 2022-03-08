@@ -59,8 +59,7 @@ cosmo:	push	%rbp
 	pop	%rax
 	add	$8,%rax
 	jmp	1b
-2:	nop
-	call	.Largs
+2:	call	.Largs
 	.weak	main
 	call	main
 	xchg	%eax,%edi
@@ -76,6 +75,11 @@ cosmo:	push	%rbp
 	.init.start 800,_init_ftrace
 	push	%rdi
 	push	%rsi
+	mov	%r12d,%edi
+	mov	%r13,%rsi
+	mov	%r14,%rdx
+	mov	%r15,%rcx
+	call	program_executable_name_init
 	mov	%r12d,%edi
 	mov	%r13,%rsi
 	call	ftrace_init

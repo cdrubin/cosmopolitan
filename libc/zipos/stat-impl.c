@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/struct/stat.h"
+#include "libc/fmt/conv.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/zip.h"
@@ -27,7 +27,7 @@
 int __zipos_stat_impl(struct Zipos *zipos, size_t cf, struct stat *st) {
   size_t lf;
   if (zipos && st) {
-    memset(st, 0, sizeof(*st));
+    bzero(st, sizeof(*st));
     if (ZIP_CFILE_FILEATTRCOMPAT(zipos->map + cf) == kZipOsUnix) {
       st->st_mode = ZIP_CFILE_EXTERNALATTRIBUTES(zipos->map + cf) >> 16;
     } else {
@@ -37,6 +37,9 @@ int __zipos_stat_impl(struct Zipos *zipos, size_t cf, struct stat *st) {
     st->st_size = GetZipLfileUncompressedSize(zipos->map + lf);
     st->st_blocks =
         roundup(GetZipLfileCompressedSize(zipos->map + lf), 512) / 512;
+    GetZipCfileTimestamps(zipos->map + cf, &st->st_mtim, &st->st_atim,
+                          &st->st_ctim, 0);
+    st->st_birthtim = st->st_ctim;
     return 0;
   } else {
     return einval();

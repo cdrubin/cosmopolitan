@@ -16,27 +16,67 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/sysdebug.internal.h"
 #include "libc/fmt/conv.h"
+#include "libc/macros.internal.h"
+#include "libc/nexgen32e/bsr.h"
 #include "libc/nt/enum/fileflagandattributes.h"
 #include "libc/nt/enum/fileinfobyhandleclass.h"
 #include "libc/nt/enum/filetype.h"
+#include "libc/nt/enum/fsctl.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/byhandlefileinformation.h"
 #include "libc/nt/struct/filecompressioninfo.h"
+#include "libc/nt/struct/reparsedatabuffer.h"
 #include "libc/str/str.h"
+#include "libc/str/tpenc.h"
+#include "libc/str/utf16.h"
 #include "libc/sysv/consts/s.h"
+#include "libc/sysv/errfuns.h"
+
+static textwindows uint32_t GetSizeOfReparsePoint(int64_t fh) {
+  wint_t x, y;
+  const char16_t *p;
+  uint32_t mem, i, n, z = 0;
+  struct NtReparseDataBuffer *rdb;
+  long buf[(sizeof(*rdb) + PATH_MAX * sizeof(char16_t)) / sizeof(long)];
+  mem = sizeof(buf);
+  rdb = (struct NtReparseDataBuffer *)buf;
+  if (DeviceIoControl(fh, kNtFsctlGetReparsePoint, 0, 0, rdb, mem, &n, 0)) {
+    i = 0;
+    n = rdb->SymbolicLinkReparseBuffer.PrintNameLength / sizeof(char16_t);
+    p = (char16_t *)((char *)rdb->SymbolicLinkReparseBuffer.PathBuffer +
+                     rdb->SymbolicLinkReparseBuffer.PrintNameOffset);
+    while (i < n) {
+      x = p[i++] & 0xffff;
+      if (!IsUcs2(x)) {
+        if (i < n) {
+          y = p[i++] & 0xffff;
+          x = MergeUtf16(x, y);
+        } else {
+          x = 0xfffd;
+        }
+      }
+      z += x < 0200 ? 1 : bsrl(tpenc(x)) >> 3;
+    }
+  } else {
+    SYSDEBUG("GetSizeOfReparsePoint failed %d", GetLastError());
+  }
+  return z;
+}
 
 textwindows int sys_fstat_nt(int64_t handle, struct stat *st) {
   int filetype;
   uint64_t actualsize;
   struct NtFileCompressionInfo fci;
   struct NtByHandleFileInformation wst;
+  if (!st) return efault();
   if ((filetype = GetFileType(handle))) {
-    memset(st, 0, sizeof(*st));
+    bzero(st, sizeof(*st));
     switch (filetype) {
       case kNtFileTypeChar:
         st->st_mode = S_IFCHR | 0644;
@@ -47,12 +87,13 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *st) {
       case kNtFileTypeDisk:
         if (GetFileInformationByHandle(handle, &wst)) {
           st->st_mode = 0555;
+          st->st_flags = wst.dwFileAttributes;
           if (!(wst.dwFileAttributes & kNtFileAttributeReadonly)) {
             st->st_mode |= 0200;
           }
           if (wst.dwFileAttributes & kNtFileAttributeDirectory) {
             st->st_mode |= S_IFDIR;
-          } else if (wst.dwFileAttributes & kNtFileFlagOpenReparsePoint) {
+          } else if (wst.dwFileAttributes & kNtFileAttributeReparsePoint) {
             st->st_mode |= S_IFLNK;
           } else {
             st->st_mode |= S_IFREG;
@@ -60,18 +101,28 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *st) {
           st->st_atim = FileTimeToTimeSpec(wst.ftLastAccessFileTime);
           st->st_mtim = FileTimeToTimeSpec(wst.ftLastWriteFileTime);
           st->st_ctim = FileTimeToTimeSpec(wst.ftCreationFileTime);
+          st->st_birthtim = st->st_ctim;
           st->st_size = (uint64_t)wst.nFileSizeHigh << 32 | wst.nFileSizeLow;
           st->st_blksize = PAGESIZE;
           st->st_dev = wst.dwVolumeSerialNumber;
+          st->st_rdev = wst.dwVolumeSerialNumber;
           st->st_ino = (uint64_t)wst.nFileIndexHigh << 32 | wst.nFileIndexLow;
           st->st_nlink = wst.nNumberOfLinks;
-          if (GetFileInformationByHandleEx(handle, kNtFileCompressionInfo, &fci,
-                                           sizeof(fci))) {
-            actualsize = fci.CompressedFileSize;
+          if (S_ISLNK(st->st_mode)) {
+            if (!st->st_size) {
+              st->st_size = GetSizeOfReparsePoint(handle);
+            }
           } else {
             actualsize = st->st_size;
+            if (S_ISREG(st->st_mode) &&
+                GetFileInformationByHandleEx(handle, kNtFileCompressionInfo,
+                                             &fci, sizeof(fci))) {
+              actualsize = fci.CompressedFileSize;
+            }
+            st->st_blocks = ROUNDUP(actualsize, PAGESIZE) / 512;
           }
-          st->st_blocks = roundup(actualsize, PAGESIZE) / 512;
+        } else {
+          SYSDEBUG("GetFileInformationByHandle failed %d", GetLastError());
         }
         break;
       default:
@@ -79,6 +130,7 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *st) {
     }
     return 0;
   } else {
+    SYSDEBUG("GetFileType failed %d", GetLastError());
     return __winerr();
   }
 }

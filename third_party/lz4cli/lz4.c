@@ -94,6 +94,7 @@
 **************************************/
 #define LZ4_STATIC_LINKING_ONLY
 #define LZ4_DISABLE_DEPRECATE_WARNINGS /* due to LZ4_decompress_safe_withPrefix64k */
+#include "libc/assert.h"
 #include "third_party/lz4cli/lz4.h"
 /* see also "memory routines" below */
 
@@ -107,21 +108,7 @@
 #  pragma warning(disable : 4293)        /* disable: C4293: too large shift (32-bits) */
 #endif  /* _MSC_VER */
 
-#ifndef LZ4_FORCE_INLINE
-#  ifdef _MSC_VER    /* Visual Studio */
-#    define LZ4_FORCE_INLINE static __forceinline
-#  else
-#    if defined (__cplusplus) || defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */
-#      ifdef __GNUC__
-#        define LZ4_FORCE_INLINE static inline __attribute__((always_inline))
-#      else
-#        define LZ4_FORCE_INLINE static inline
-#      endif
-#    else
-#      define LZ4_FORCE_INLINE static
-#    endif /* __STDC_VERSION__ */
-#  endif  /* _MSC_VER */
-#endif /* LZ4_FORCE_INLINE */
+#define LZ4_FORCE_INLINE static inline
 
 /* LZ4_FORCE_O2_GCC_PPC64LE and LZ4_FORCE_O2_INLINE_GCC_PPC64LE
  * Gcc on ppc64le generates an unrolled SIMDized loop for LZ4_wildCopy,
@@ -320,10 +307,6 @@ static const int LZ4_minLength = (MFLIMIT+1);
 **************************************/
 #if defined(LZ4_DEBUG) && (LZ4_DEBUG>=1)
 #include "libc/runtime/runtime.h"
-#else
-#  ifndef assert
-#    define assert(condition) ((void)0)
-#  endif
 #endif
 
 #define LZ4_STATIC_ASSERT(c)   { enum { LZ4_static_assert = 1/(int)(!!(c)) }; }   /* use after variable declarations */

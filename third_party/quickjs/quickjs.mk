@@ -10,16 +10,55 @@ THIRD_PARTY_QUICKJS_A = o/$(MODE)/third_party/quickjs/quickjs.a
 THIRD_PARTY_QUICKJS_HDRS = $(foreach x,$(THIRD_PARTY_QUICKJS_ARTIFACTS),$($(x)_HDRS))
 
 THIRD_PARTY_QUICKJS_A_SRCS =					\
+	third_party/quickjs/array.c				\
+	third_party/quickjs/atof.c				\
+	third_party/quickjs/atom.c				\
+	third_party/quickjs/atomics.c				\
+	third_party/quickjs/bigdecimal.c			\
+	third_party/quickjs/bigint.c				\
+	third_party/quickjs/byte.c				\
+	third_party/quickjs/call.c				\
 	third_party/quickjs/cutils.c				\
+	third_party/quickjs/date.c				\
+	third_party/quickjs/dbuf.c				\
+	third_party/quickjs/dbuf.c				\
+	third_party/quickjs/diglet.c				\
+	third_party/quickjs/eq.c				\
+	third_party/quickjs/err.c				\
+	third_party/quickjs/float.c				\
+	third_party/quickjs/gc.c				\
+	third_party/quickjs/gen.c				\
+	third_party/quickjs/iter.c				\
+	third_party/quickjs/json.c				\
+	third_party/quickjs/leb128.c				\
 	third_party/quickjs/libbf.c				\
 	third_party/quickjs/libregexp.c				\
 	third_party/quickjs/libunicode.c			\
+	third_party/quickjs/map.c				\
+	third_party/quickjs/math.c				\
+	third_party/quickjs/mem.c				\
+	third_party/quickjs/object.c				\
+	third_party/quickjs/parse.c				\
+	third_party/quickjs/prim.c				\
+	third_party/quickjs/promise.c				\
+	third_party/quickjs/proxy.c				\
 	third_party/quickjs/quickjs-libc.c			\
 	third_party/quickjs/quickjs.c				\
-	third_party/quickjs/wut.c
+	third_party/quickjs/reflect.c				\
+	third_party/quickjs/regexp.c				\
+	third_party/quickjs/shape.c				\
+	third_party/quickjs/str.c				\
+	third_party/quickjs/strbuf.c				\
+	third_party/quickjs/tok.c				\
+	third_party/quickjs/typedarray.c			\
+	third_party/quickjs/uri.c				\
+	third_party/quickjs/usage.c
 
 THIRD_PARTY_QUICKJS_A_HDRS =					\
 	third_party/quickjs/cutils.h				\
+	third_party/quickjs/diglet.h				\
+	third_party/quickjs/internal.h				\
+	third_party/quickjs/leb128.h				\
 	third_party/quickjs/libbf.h				\
 	third_party/quickjs/libregexp.h				\
 	third_party/quickjs/libunicode.h			\
@@ -28,13 +67,7 @@ THIRD_PARTY_QUICKJS_A_HDRS =					\
 	third_party/quickjs/quickjs.h
 
 THIRD_PARTY_QUICKJS_A_OBJS =					\
-	o/$(MODE)/third_party/quickjs/cutils.o			\
-	o/$(MODE)/third_party/quickjs/libbf.o			\
-	o/$(MODE)/third_party/quickjs/libregexp.o		\
-	o/$(MODE)/third_party/quickjs/libunicode.o		\
-	o/$(MODE)/third_party/quickjs/quickjs-libc.o		\
-	o/$(MODE)/third_party/quickjs/quickjs.o			\
-	o/$(MODE)/third_party/quickjs/wut.o
+	$(THIRD_PARTY_QUICKJS_A_SRCS:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_QUICKJS_A_DIRECTDEPS =				\
 	LIBC_ALG						\
@@ -44,6 +77,7 @@ THIRD_PARTY_QUICKJS_A_DIRECTDEPS =				\
 	LIBC_LOG						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
+	LIBC_NT_KERNEL32					\
 	LIBC_RUNTIME						\
 	LIBC_SOCK						\
 	LIBC_STDIO						\
@@ -75,6 +109,7 @@ THIRD_PARTY_QUICKJS_SRCS =					\
 	third_party/quickjs/qjs.c				\
 	third_party/quickjs/qjsc.c				\
 	third_party/quickjs/run-test262.c			\
+	third_party/quickjs/unicode_gen.c			\
 	$(foreach x,$(THIRD_PARTY_QUICKJS_ARTIFACTS),$($(x)_SRCS))
 
 THIRD_PARTY_QUICKJS_OBJS =					\
@@ -93,23 +128,31 @@ THIRD_PARTY_QUICKJS_CHECKS =					\
 	$(THIRD_PARTY_QUICKJS_A).pkg				\
 	$(THIRD_PARTY_QUICKJS_A_HDRS:%=o/$(MODE)/%.ok)
 
+o/$(MODE)/third_party/quickjs/qjscalc.c:			\
+		third_party/quickjs/qjscalc.js			\
+		o/$(MODE)/third_party/quickjs/qjsc.com
+	@$(COMPILE) -AQJSC o/$(MODE)/third_party/quickjs/qjsc.com -fbignum -o $@ -c $<
+
+o/$(MODE)/third_party/quickjs/repl.c:				\
+		third_party/quickjs/repl.js			\
+		o/$(MODE)/third_party/quickjs/qjsc.com
+	@$(COMPILE) -AQJSC o/$(MODE)/third_party/quickjs/qjsc.com -o $@ -m -c $<
+
 o/$(MODE)/third_party/quickjs/qjs.com.dbg:			\
-		$(THIRD_PARTY_QUICKJS_A_DEPS)			\
-		$(THIRD_PARTY_QUICKJS_A)			\
-		$(THIRD_PARTY_QUICKJS_A).pkg			\
+		$(THIRD_PARTY_QUICKJS)				\
 		o/$(MODE)/third_party/quickjs/qjs.o		\
+		o/$(MODE)/third_party/quickjs/repl.o		\
+		o/$(MODE)/third_party/quickjs/qjscalc.o		\
 		$(CRT)						\
 		$(APE)
-	-@$(APELINK)
+	@$(APELINK)
 
 o/$(MODE)/third_party/quickjs/qjsc.com.dbg:			\
-		$(THIRD_PARTY_QUICKJS_A_DEPS)			\
-		$(THIRD_PARTY_QUICKJS_A)			\
-		$(THIRD_PARTY_QUICKJS_A).pkg			\
+		$(THIRD_PARTY_QUICKJS)				\
 		o/$(MODE)/third_party/quickjs/qjsc.o		\
 		$(CRT)						\
 		$(APE)
-	-@$(APELINK)
+	@$(APELINK)
 
 # git clone git@github.com:tc39/test262 /opt/test262
 # make -j8 MODE=dbg o/dbg/third_party/quickjs/run-test262.com
@@ -121,7 +164,7 @@ o/$(MODE)/third_party/quickjs/run-test262.com.dbg:		\
 		o/$(MODE)/third_party/quickjs/run-test262.o	\
 		$(CRT)						\
 		$(APE)
-	-@$(APELINK)
+	@$(APELINK)
 
 o/$(MODE)/third_party/quickjs/unicode_gen.com.dbg:		\
 		$(THIRD_PARTY_QUICKJS_A_DEPS)			\
@@ -130,12 +173,16 @@ o/$(MODE)/third_party/quickjs/unicode_gen.com.dbg:		\
 		o/$(MODE)/third_party/quickjs/unicode_gen.o	\
 		$(CRT)						\
 		$(APE)
-	-@$(APELINK)
+	@$(APELINK)
 
 $(THIRD_PARTY_QUICKJS_OBJS):					\
 		OVERRIDE_CPPFLAGS +=				\
 			-DCONFIG_BIGNUM				\
 			-DCONFIG_VERSION=\"$(shell cat third_party/quickjs/VERSION)\"
+
+o/tiny/third_party/quickjs/call.o:				\
+		OVERRIDE_CFLAGS +=				\
+			-O2
 
 o/$(MODE)/third_party/quickjs/unicode_gen.o:			\
 		OVERRIDE_CPPFLAGS +=				\
@@ -146,6 +193,9 @@ o/$(MODE)/third_party/quickjs/libregexp.o			\
 o/$(MODE)/third_party/quickjs/quickjs.o:			\
 		OVERRIDE_CPPFLAGS +=				\
 			-DSTACK_FRAME_UNLIMITED
+
+o/$(MODE)/third_party/quickjs/call.o: QUOTA = -M1024m -C16
+o/$(MODE)/third_party/quickjs/quickjs.o: QUOTA = -M512m -C16
 
 .PHONY: o/$(MODE)/third_party/quickjs
 o/$(MODE)/third_party/quickjs:					\

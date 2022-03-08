@@ -34,10 +34,11 @@ FLAGS
   -b        log message bodies
   -a        log resource usage
   -g        log handler latency
+  -e        run specified Lua command
   -j        enable ssl client verify
   -k        disable ssl fetch verify
-  -B        use stronger cryptography
   -f        log worker function calls
+  -B        only use stronger cryptography
   -s        increase silence                  [repeatable]
   -v        increase verbosity                [repeatable]
   -V        increase ssl verbosity            [repeatable]
@@ -47,6 +48,7 @@ FLAGS
   -R /X=/Y  rewrites X to Y                   [repeatable]
   -K PATH   tls private key path              [repeatable]
   -C PATH   tls certificate(s) path           [repeatable]
+  -A PATH   add asset with path               [repeatable]
   -M INT    tunes max message payload size    [def. 65536]
   -t INT    timeout ms or keepalive sec if <0 [def. 60000]
   -p PORT   listen port                       [def. 8080; repeatable]
@@ -183,54 +185,6 @@ SECURITY
     http://127.0.0.1:8080/
     https://127.0.0.1:8080/
 
-  The easiest way to use a self-signed certificate is to provide
-  redbean with a key-signing key:
-
-    openssl req -x509 -newkey rsa:2048 \
-      -keyout .ca.key -out .ca.crt -days 6570 -nodes \
-      -subj '/C=US/ST=CA/O=Jane Doe/CN=My Root CA 1' \
-      -addext 'keyUsage = critical,cRLSign,keyCertSign'
-    sudo ./redbean.com -C ca.crt -K .ca.key -p 80 -p 443
-
-  Let's say you're migrating away from NGINX and you use Let's Encrypt.
-  In that case you'll likely want something like the following:
-
-     certbot certonly --nginx --key-type ecdsa \
-       --cert-name redbean-ecdsa -d redbean.dev -d www.redbean.dev
-     certbot certonly --nginx --key-type rsa \
-       --cert-name redbean-rsa -d redbean.dev -d www.redbean.dev
-
-  You can then program /var/www/html/.init.lua as such:
-
-     ProgramPrivateKey(Slurp('/etc/letsencrypt/live/redbean-ecdsa/privkey.pem'))
-     ProgramCertificate(Slurp('/etc/letsencrypt/live/redbean-ecdsa/fullchain.pem'))
-     ProgramPrivateKey(Slurp('/etc/letsencrypt/live/redbean-rsa/privkey.pem'))
-     ProgramCertificate(Slurp('/etc/letsencrypt/live/redbean-rsa/fullchain.pem'))
-     if IsDaemon() then
-        ProgramUid(33)  # see `vipw` to get appropriate number
-        ProgramGid(33)  # see `vigr` to get appropriate number
-        ProgramPort(80)
-        ProgramPort(443)
-        ProgramLogPath('/var/log/redbean.log')
-        ProgramPidPath('/var/run/redbean.pid')
-     end
-     function OnHttpRequest()
-        path = GetPath()
-        if path == '/favicon.ico' or
-           path == '/site.webmanifest' or
-           path == '/favicon-16x16.png' or
-           path == '/favicon-32x32.png' or
-           path == '/apple-touch-icon' then
-           SetLogLevel(kLogWarn)
-        end
-        Route()
-        SetHeader('Content-Language', 'en-US')
-     end
-
-  You'd then run redbean as follows:
-
-    redbean.com -dD /var/www/html
-
   SSL verbosity is controlled as follows for troubleshooting:
 
     -V       log ssl errors
@@ -238,7 +192,7 @@ SECURITY
     -VVV     log ssl informational messages too
     -VVVV    log ssl verbose details too
 
-  That's in addition to existing flags like -vvvm.
+  See https://redbean.dev for further details.
 
 LUA SERVER PAGES
 
@@ -307,9 +261,9 @@ SPECIAL PATHS
 
    /.lua/...
            Your Lua modules go in this directory. The way it works is redbean
-           sets Lua's package.path to zip:.lua/?.lua;zip:.lua/?/init.lua by
+           sets Lua's package.path to /zip/.lua/?.lua;/zip/.lua/?/init.lua by
            default. Cosmopolitan Libc lets system calls like open read from
-           the ZIP structure, if the filename is prefixed with zip:. So this
+           the ZIP structure, if the filename is prefixed with /zip/. So this
            works like magic.
 
    /redbean.png
@@ -337,7 +291,7 @@ HOOKS
    OnHttpRequest()
            If this function is defined in the global scope by your /.init.lua
            then redbean will call it at the ealiest possible moment to
-           handover control for all messages (with the exception of OPTIONS
+           hand over control for all messages (with the exception of OPTIONS
            *). See functions like Route which asks redbean to do its default
            thing from the handler.
 
@@ -353,12 +307,12 @@ HOOKS
            of the listening interface that accepted the connection. This may
            be used to create a server activity dashboard, in which case the
            data provider handler should set SetHeader('Connection','Close').
-           This won't be called in unprocess mode.
+           This won't be called in uniprocess mode.
 
    OnProcessDestroy(pid:int)
            If this function is defined it'll be called from the main process
            each time redbean reaps a child connection process using wait4().
-           This won't be called in unprocess mode.
+           This won't be called in uniprocess mode.
 
    OnServerStart()
            If this function is defined it'll be called from the main process
@@ -372,12 +326,12 @@ HOOKS
    OnWorkerStart()
            If this function is defined it'll be called from the child worker
            process after it's been forked and before messages are handled.
-           This won't be called in unprocess mode.
+           This won't be called in uniprocess mode.
 
    OnWorkerStop()
            If this function is defined it'll be called from the child worker
            process once _exit() is ready to be called. This won't be called
-           in unprocess mode.
+           in uniprocess mode.
 
 FUNCTIONS
 
@@ -390,7 +344,7 @@ FUNCTIONS
            line. reason is optional since redbean can fill in the appropriate
            text for well-known magic numbers, e.g. 200, 404, etc. This method
            will reset the response and is therefore mutually exclusive with
-           ServeAsset and ServeError. If a status setting function isn't
+           ServeAsset and other Serve* functions. If this function isn't
            called, then the default behavior is to send 200 OK.
 
    SetHeader(name:str,value:str)
@@ -400,12 +354,38 @@ FUNCTIONS
            trailing whitespace is trimmed automatically. Overlong characters
            are canonicalized. C0 and C1 control codes are forbidden, with the
            exception of tab. This function automatically calls SetStatus(200,
-           "OK") if a status has not yet been set. The header buffer is
-           independent of the payload buffer. Neither are written to the wire
+           "OK") if a status has not yet been set. As SetStatus and Serve*
+           functions reset the response, SetHeader needs to be called after
+           SetStatus and Serve* functions are called. The header buffer is
+           independent of the payload buffer. Neither is written to the wire
            until the Lua Server Page has finished executing. This function
-           disallows the setting of certain headers such as Date and
-           Content-Range which are abstracted by the transport layer. In such
-           cases, consider calling ServeAsset.
+           disallows the setting of certain headers such as Content-Range and
+           Date, which are abstracted by the transport layer. In such cases,
+           consider calling ServeAsset.
+
+   SetCookie(name:str,value:str[,options:table])
+           Appends Set-Cookie HTTP header to the response header buffer.
+           Several Set-Cookie headers can be added to the same response.
+           __Host- and __Secure- prefixes are supported and may set or
+           overwrite some of the options (for example, specifying __Host-
+           prefix sets the Secure option to true, sets the path to "/", and
+           removes the Domain option). The following options can be used (their
+           lowercase equivalents are supported as well):
+             - Expires: sets the maximum lifetime of the cookie as an HTTP-date
+               timestamp. Can be specified as a Date in the RFC1123 (string)
+               format or as a UNIX timestamp (number of seconds).
+             - MaxAge: sets number of seconds until the cookie expires. A zero
+               or negative number will expire the cookie immediately. If both
+               Expires and MaxAge are set, MaxAge has precedence.
+             - Domain: sets the host to which the cookie will be sent.
+             - Path: sets the path that must be present in the request URL, or
+               the client will not send the Cookie header.
+             - Secure: (bool) requests the cookie to be only send to the
+               server when a request is made with the https: scheme.
+             - HttpOnly: (bool) forbids JavaScript from accessing the cookie.
+             - SameSite: (Strict, Lax, or None) controls whether a cookie is
+               sent with cross-origin requests, providing some protection
+               against cross-site request forgery attacks.
 
    GetParam(name:str) → value:str
            Returns first value associated with name. name is handled in a
@@ -452,6 +432,28 @@ FUNCTIONS
            Turns binary into ASCII. This can be used to create HTML data:
            URIs that do things like embed a PNG file in a web page. See
            encodebase64.c.
+
+   EncodeJson(value[,options:table]) → json:str
+           Turns passed Lua value into a JSON string. Tables with non-zero
+           length (as reported by `#`) are encoded as arrays with non-array
+           elements ignored. Empty tables are encoded as empty arrays. All
+           other tables are encoded as objects with numerical keys
+           converted to strings (so `{[3]=1}` is encoded as `{"3":1}`).
+           The following options can be used:
+             - useoutput: (bool=false) encodes the result directly to the
+               output buffer and returns `nil` value. This option is
+               ignored if used outside of request handling code.
+             - numformat: (string="%.14g") sets numeric format to be used.
+             - maxdepth: (number=64) sets the max number of nested tables.
+
+   EncodeLua(value[,options:table]) → json:str
+           Turns passed Lua value into a Lua string. The following options
+           can be used:
+             - useoutput: (bool=false) encodes the result directly to the
+               output buffer and returns `nil` value. This option is
+               ignored if used outside of request handling code.
+             - numformat: (string="%.14g") sets numeric format to be used.
+             - maxdepth: (number=64) sets the max number of nested tables.
 
    EncodeLatin1(utf-8:str[,flags:int]) → iso-8859-1:str
            Turns UTF-8 into ISO-8859-1 string.
@@ -512,6 +514,29 @@ FUNCTIONS
    EscapeUser(str) → str
            Escapes URL username. See kescapeauthority.c.
 
+   Fetch(url:str[,body:str|{method=value:str,body=value:str,...}])
+       → status:int,{header:str=value:str,...},body:str
+           Sends an HTTP/HTTPS request to the specified URL. If only the URL is
+           provided, then a GET request is sent. If both URL and body parameters
+           are specified, then a POST request is sent. If any other method needs
+           to be specified (for example, PUT or DELETE), then passing a table as
+           the second value allows setting method and body values as well other
+           options:
+             - method (default = "GET"): sets the method to be used for the
+               request. The specified method is converted to uppercase.
+             - body (default = ""): sets the body value to be sent.
+             - followredirect (default = true): forces temporary and permanent
+               redirects to be followed. This behavior can be disabled by
+               passing `false`.
+             - maxredirects (default = 5): sets the number of allowed redirects
+               to minimize looping due to misconfigured servers. When the number
+               is exceeded, the result of the last redirect is returned.
+           When the redirect is being followed, the same method and body values
+           are being sent in all cases except when 303 status is returned. In
+           that case the method is set to GET and the body is removed before the
+           redirect is followed. Note that if these (method/body) values are
+           provided as table fields, they will be modified in place.
+
    FormatHttpDateTime(seconds:int) → rfc1123:str
            Converts UNIX timestamp to an RFC1123 string that looks like this:
            Mon, 29 Mar 2021 15:37:13 GMT. See formathttpdatetime.c.
@@ -519,6 +544,10 @@ FUNCTIONS
    FormatIp(uint32) → str
            Turns integer like 0x01020304 into a string like 1.2.3.4. See also
            ParseIp for the inverse operation.
+
+   GetAssetComment(path:str) → str
+           Returns comment text associated with asset in the ZIP central
+           directory. Also available as GetComment (deprecated).
 
    GetAssetMode(path:str) → int
            Returns UNIX-style octal mode for ZIP asset (or local file if the
@@ -528,15 +557,24 @@ FUNCTIONS
            Returns byte size of uncompressed contents of ZIP asset (or local
            file if the -D flag is used)
 
-   GetComment(path:str) → str
-           Returns comment text associated with asset in the ZIP central
-           directory.
+   GetBody() → str
+           Returns the request message body if present or an empty string.
+           Also available as GetPayload (deprecated).
+
+   GetCookie(name:str) → str
+           Returns cookie value.
+
+   GetCryptoHash(name:str,payload:str[,key:str]) → str
+           Returns value of the specified cryptographic hash function. If the
+           key is provided, then HMAC value of the same function is returned.
+           The name can be one of the following strings: MD5, SHA1, SHA224,
+           SHA256, SHA384, SHA512, and BLAKE2B256.
 
    GetRemoteAddr() → ip:uint32,port:uint16
            Returns client ip4 address and port, e.g. 0x01020304,31337 would
            represent 1.2.3.4:31337. This is the same as GetClientAddr except
            it will use the ip:port from the X-Forwarded-For header, only if
-           it IsPrivateIp or IsPrivateIp.
+           IsPrivateIp or IsLoopbackIp return true.
 
    GetClientAddr() → ip:uint32,port:uint16
            Returns client socket ip4 address and port, e.g. 0x01020304,31337
@@ -570,7 +608,7 @@ FUNCTIONS
            message, then this function will fold those multiple entries into
            a single string.
 
-   GetHeaders() → table[name:str,value:str]
+   GetHeaders() → {name:str=value:str,...}
            Returns HTTP headers as dictionary mapping header key strings to
            their UTF-8 decoded values. The ordering of headers from the
            request message is not preserved. Whether or not the same key can
@@ -591,6 +629,9 @@ FUNCTIONS
            Returns host associated with request. This will be the Host
            header, if it's supplied. Otherwise it's the bind address.
 
+   GetHostOs() → str
+           Returns string that describes the host OS.
+
    GetMonospaceWidth(str|char) → int
            Returns monospace display width of string. This is useful for
            fixed-width formatting. For example, CJK characters typically take
@@ -604,7 +645,7 @@ FUNCTIONS
            Anything else that the RFC classifies as a "token" string is
            accepted too, which might contain characters like &".
 
-   GetParams() → array[array[str]]
+   GetParams() → {{name:str[,value:str]},...}
            Returns name=value parameters from Request-URL and
            application/x-www-form-urlencoded message body in the order they
            were received. This may contain duplicates. The inner array will
@@ -631,9 +672,12 @@ FUNCTIONS
    GetScheme() → str
            Returns scheme from Request-URL, if any.
 
-   GetPayload() → str
-           Returns the request message payload, or empty string if there
-           isn't one.
+   GetStatus() → int
+           Returns current status (as set by an earlier SetStatus call) or
+           `nil` if the status hasn't been set yet.
+
+   GetTime() → seconds:number
+           Returns current time as a UNIX timestamp with 0.0001s precision.
 
    GetUrl() → str
            Returns the effective Request-URL as an ASCII string, where
@@ -643,13 +687,24 @@ FUNCTIONS
            if redbean is being used as an HTTP proxy server. In the future
            this API might change to return an object instead.
 
-   GetVersion() → int
+   GetHttpVersion() → int
            Returns the request HTTP protocol version, which can be 9 for
-           HTTP/0.9, 10 for HTTP/1.0, or 11 for HTTP/1.1.
+           HTTP/0.9, 10 for HTTP/1.0, or 11 for HTTP/1.1. Also available
+           as GetVersion (deprecated).
 
-   GetZipPaths() → array[str]
+   GetRandomBytes([length:int]) → str
+           Returns string with the specified number of random bytes (1..256).
+           If no length is specified, then a string of length 16 is returned.
+
+   GetRedbeanVersion() → int
+           Returns the Redbean version in the format 0xMMmmpp, with major (MM),
+           minor (mm), and patch (pp) versions encoded. The version value 1.4
+           would be represented as 0x010400.
+
+   GetZipPaths([prefix:str]) → {path:str,...}
            Returns paths of all assets in the zip central directory, prefixed
-           by a slash.
+           by a slash. If prefix parameter is provided, then only paths that
+           start with the prefix (case sensitive) are returned.
 
    HasParam(name:str) → bool
            Returns true if parameter with name was supplied in either the
@@ -667,6 +722,10 @@ FUNCTIONS
    IsPrivateIp(uint32) → bool
            Returns true if IP address is part of a private network
            (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16).
+
+   IsLoopbackClient() → bool
+           Returns true if the client IP address (returned by GetRemoteAddr)
+           is part of the localhost network (127.0.0.0/8).
 
    IsLoopbackIp(uint32) → bool
            Returns true if IP address is part of the localhost network
@@ -686,7 +745,7 @@ FUNCTIONS
            flag was used. If slurping large file into memory is a concern,
            then consider using ServeAsset which can serve directly off disk.
 
-   StoreAsset(path:str,data:str,mode:int)
+   StoreAsset(path:str,data:str[,mode:int])
            Stores asset to executable's ZIP central directory. This currently
            happens in an append-only fashion and is still largely in the
            proof-of-concept stages. Currently only supported on Linux, XNU,
@@ -745,6 +804,10 @@ FUNCTIONS
            0x01020304, or returns -1 for invalid inputs. See also FormatIp
            for the inverse operation.
 
+   ProgramAddr(str)
+           Configures the address on which to listen. Can be used multiple
+           times to set more than one address.
+
    ProgramBrand(str)
            Changes HTTP Server header, as well as the <h1> title on the /
            listing page. The brand string needs to be a UTF-8 value that's
@@ -760,11 +823,35 @@ FUNCTIONS
            browsers to cache for a given number of seconds. This should only
            be called from /.init.lua.
 
+   ProgramCertificate(pem:str)
+           Same as the -C flag if called from .init.lua, e.g.
+           ProgramCertificate(LoadAsset("/.sign.crt")) for zip loading or
+           ProgramCertificate(Slurp("/etc/letsencrypt.lol/fullchain.pem")) for
+           local file system only.
+
+   ProgramHeader(name:str,value:str)
+           Appends HTTP header to the header buffer for all responses (whereas
+           SetHeader only appends a header to the current response buffer).
+           name is case-insensitive and restricted to non-space ASCII. value
+           is a UTF-8 string that must be encodable as ISO-8859-1. Leading and
+           trailing whitespace is trimmed automatically. Overlong characters
+           are canonicalized. C0 and C1 control codes are forbidden, with the
+           exception of tab. The header buffer is independent of the payload
+           buffer. This function disallows the setting of certain headers such
+           as Content-Range and Date, which are abstracted by the transport
+           layer.
+
    ProgramPort(uint16)
            Hard-codes the port number on which to listen, which can be any
            number in the range 1..65535, or alternatively 0 to ask the
            operating system to choose a port, which may be revealed later on
            by GetServerAddr or the -z flag to stdout.
+
+   ProgramPrivateKey(pem:str)
+           Same as the -K flag if called from .init.lua, e.g.
+           ProgramPrivateKey(LoadAsset("/.sign.key")) for zip loading or
+           ProgramPrivateKey(Slurp("/etc/letsencrypt/fullchain.pem")) for
+           local file system only.
 
    ProgramRedirect(code:int,src:str,location:str)
            Configures fallback routing for paths which would otherwise return
@@ -773,17 +860,34 @@ FUNCTIONS
            a redirect response will be sent to the client. This should only
            be called from /.init.lua.
 
-   ProgramCertificate(pem:str)
-           Same as the -C flag if called from .init.lua, e.g.
-           ProgramCertificate(LoadAsset("/.sign.crt")) for zip loading or
-           ProgramCertificate(Slurp("/etc/letsencrypt.lol/fullchain.pem")) for
-           local file system only.
+   ProgramSslTicketLifetime(seconds:int)
+           Defaults to 86400 (24 hours). This may be set to ≤0 to disable
+           SSL tickets. It's a good idea to use these since it increases
+           handshake performance 10x and eliminates a network round trip.
 
-   ProgramPrivateKey(pem:str)
-           Same as the -K flag if called from .init.lua, e.g.
-           ProgramPrivateKey(LoadAsset("/.sign.key")) for zip loading or
-           ProgramPrivateKey(Slurp("/etc/letsencrypt/fullchain.pem")) for
-           local file system only.
+   EvadeDragnetSurveillance(bool)
+           If this option is programmed then redbean will not transmit a
+           Server Name Indicator (SNI) when performing Fetch() requests.
+
+   ProgramSslPresharedKey(key:str,identity:str)
+           This function can be used to enable the PSK ciphersuites
+           which simplify SSL and enhance its performance in controlled
+           environments. `key` may contain 1..32 bytes of random binary
+           data and identity is usually a short plaintext string. The
+           first time this function is called, the preshared key will
+           be added to both the client and the server SSL configs. If
+           it's called multiple times, then the remaining keys will be
+           added to the server, which is useful if you want to assign
+           separate keys to each client, each of which needs a separate
+           identity too. If this function is called multiple times with
+           the same identity string, then the latter call will overwrite
+           the prior. If a preshared key is supplied and no certificates
+           or key-signing-keys are programmed, then redbean won't bother
+           auto-generating any serving certificates and will instead use
+           only PSK ciphersuites.
+
+   ProgramSslCiphersuite(name:str)
+           See https://redbean.dev/ for further details.
 
    IsDaemon() → bool
            Returns true if -d flag was passed to redbean.
@@ -792,7 +896,7 @@ FUNCTIONS
            Same as the -U flag if called from .init.lua for setuid()
 
    ProgramGid(int)
-           Same as the -U flag if called from .init.lua for setgid()
+           Same as the -G flag if called from .init.lua for setgid()
 
    ProgramDirectory(str)
            Same as the -D flag if called from .init.lua for overlaying local
@@ -826,22 +930,30 @@ FUNCTIONS
            someone with a slow internet connection who's downloading big
            files unhappy.
 
+   ProgramUniprocess([bool]) → bool
+           Same as the -u flag if called from .init.lua. Can be used to
+           configure the uniprocess mode. The current value is returned.
+
    Slurp(filename:str) → str
            Reads file data from local file system.
+
+   Sleep(seconds:number)
+           Sleeps the specified number of seconds (can be fractional). The
+           smallest interval is a microsecond.
 
    Route([host:str,[path:str]])
            Instructs redbean to follow the normal HTTP serving path. This
            function is useful when writing an OnHttpRequest handler, since
            that overrides the serving path entirely. So if the handler
            decides it doesn't want to do anything, it can simply call this
-           function, to handover control back to the redbean core. By
+           function, to hand over control back to the redbean core. By
            default, the host and path arguments are supplied from the
            resolved GetUrl value. This handler always resolves, since it will
            generate a 404 Not Found response if redbean couldn't find an
            appropriate endpoint.
 
    RouteHost([host:str,[path:str]]) → bool
-           This is the same as Route except it only implements the subset of
+           This is the same as Route, except it only implements the subset of
            request routing needed for serving virtual-hosted assets, where
            redbean tries to prefix the path with the hostname when looking up
            a file. This function returns true if the request was resolved. If
@@ -849,23 +961,32 @@ FUNCTIONS
            set additional headers.
 
    RoutePath([path:str]) → bool
-           This is the same as Route except it only implements the subset of
+           This is the same as Route, except it only implements the subset of
            request routing needed for serving assets. This function returns
            true if the request was resolved. If it was resolved, then your
            OnHttpRequest request handler can still set additional headers.
+           Note that the asset needs to have "read other" permissions;
+           otherwise this function logs a warning and returns 403 Forbidden.
+           If this is undesirable, use GetAssetMode and ServeAsset to bypass
+           the check.
 
    ServeAsset(path:str)
            Instructs redbean to serve static asset at path. This function
            causes what would normally happen outside a dynamic handler to
            happen. The asset can be sourced from either the zip or local
            filesystem if -D is used. This function is mutually exclusive with
-           SetStatus and ServeError.
+           SetStatus and other Serve* functions.
 
    ServeError(code:int[,reason:str])
            Instructs redbean to serve a boilerplate error page. This takes
            care of logging the error, setting the reason phrase, and adding a
            payload. This function is mutually exclusive with SetStatus and
-           ServeAsset.
+           other Serve* functions.
+
+   ServeRedirect(code:int,location:str)
+           Instructs redbean to return the specified redirect code along with
+           the Location header set. This function is mutually exclusive with
+           SetStatus and other Serve* functions.
 
    SetLogLevel(level:int)
            Sets logger verbosity. Reasonable values for level are kLogDebug >
@@ -994,12 +1115,16 @@ RE MODULE
 
    re.ICASE
            Use this flag to make your pattern case ASCII case-insensitive.
-           This flag may only be used with re.compile and re.search.
-
-   re.NEWLINE
-           Use this flag to make your pattern case ASCII case-insensitive.
            This means [a-z] will mean the same thing as [A-Za-z]. This flag
            may only be used with re.compile and re.search.
+
+   re.NEWLINE
+           Use this flag to change the handling of NEWLINE (\x0a) characters.
+           When this flag is set, (1) a NEWLINE shall not be matched by a "."
+           or any form of a non-matching list, (2) a "^" shall match the
+           zero-length string immediately after a NEWLINE (regardless of
+           re.NOTBOL), and (3) a "$" shall match the zero-length string
+           immediately before a NEWLINE (regardless of re.NOTEOL).
 
    re.NOSUB
            Causes re.search to only report success and failure. This is
@@ -1009,12 +1134,12 @@ RE MODULE
    re.NOTBOL
            The first character of the string pointed to by string is not the
            beginning of the line. This flag may only be used with re.search
-           and regex_t*:search
+           and regex_t*:search.
 
    re.NOTEOL
            The last character of the string pointed to by string is not the
            end of the line. This flag may only be used with re.search and
-           regex_t*:search
+           regex_t*:search.
 
 CONSTANTS
 
@@ -1035,6 +1160,8 @@ CONSTANTS
 
    kLogFatal
            Integer for fatal logging level, which is less than kLogError.
+           Logging anything at this level will result in a backtrace and
+           process exit.
 
 SEE ALSO
 

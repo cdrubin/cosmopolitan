@@ -255,6 +255,12 @@ COSMOPOLITAN_C_START_
 #define MBEDTLS_TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256     0xCCAD /**< TLS 1.2 */
 #define MBEDTLS_TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256     0xCCAE /**< TLS 1.2 */
 
+/* RFC 8442 */
+#define MBEDTLS_TLS_ECDHE_PSK_WITH_AES_128_GCM_SHA256         0xD001 /**< TLS 1.2 */
+#define MBEDTLS_TLS_ECDHE_PSK_WITH_AES_256_GCM_SHA384         0xD002 /**< TLS 1.2 */
+#define MBEDTLS_TLS_ECDHE_PSK_WITH_AES_128_CCM_8_SHA256       0xD003 /**< TLS 1.2 */
+#define MBEDTLS_TLS_ECDHE_PSK_WITH_AES_128_CCM_SHA256         0xD005 /**< TLS 1.2 */
+
 /* Reminder: update mbedtls_ssl_premaster_secret when adding a new key exchange.
  * Reminder: update MBEDTLS_KEY_EXCHANGE__xxx below
  */
@@ -283,9 +289,9 @@ typedef struct mbedtls_ssl_ciphersuite_t mbedtls_ssl_ciphersuite_t;
 /**
  * \brief   This structure is used for storing ciphersuite information
  */
-struct mbedtls_ssl_ciphersuite_t
+struct thatispacked mbedtls_ssl_ciphersuite_t
 {
-    int id;
+    uint16_t id;
     const char * name;
     unsigned char cipher; /* mbedtls_cipher_type_t */
     unsigned char mac; /* mbedtls_md_type_t */
@@ -444,6 +450,8 @@ static inline int mbedtls_ssl_ciphersuite_uses_server_signature( const mbedtls_s
     }
 }
 #endif /* MBEDTLS_KEY_EXCHANGE_WITH_SERVER_SIGNATURE_ENABLED */
+
+const mbedtls_ssl_ciphersuite_t *GetCipherSuite(const char *);
 
 COSMOPOLITAN_C_END_
 #endif /* COSMOPOLITAN_THIRD_PARTY_MBEDTLS_SSL_CIPHERSUITES_H_ */

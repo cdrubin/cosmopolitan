@@ -20,6 +20,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/time/struct/timezone.h"
 #include "libc/time/time.h"
@@ -29,12 +30,15 @@
  *
  * @param tv points to timeval that receives result if non-NULL
  * @param tz receives UTC timezone if non-NULL
- * @return always zero
  * @see	clock_gettime() for nanosecond precision
  * @see	strftime() for string formatting
  */
 int gettimeofday(struct timeval *tv, struct timezone *tz) {
   axdx_t ad;
+  if (IsAsan() && ((tv && !__asan_is_valid(tv, sizeof(*tv))) ||
+                   (tz && !__asan_is_valid(tz, sizeof(*tz))))) {
+    return efault();
+  }
   if (!IsWindows() && !IsMetal()) {
     ad = sys_gettimeofday(tv, tz, NULL);
     assert(ad.ax != -1);

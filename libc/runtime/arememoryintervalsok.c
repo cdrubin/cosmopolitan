@@ -16,18 +16,27 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/runtime/memtrack.h"
-#include "libc/runtime/runtime.h"
+#include "libc/calls/sysdebug.internal.h"
+#include "libc/runtime/memtrack.internal.h"
 
 noasan bool AreMemoryIntervalsOk(const struct MemoryIntervals *mm) {
+  /* asan runtime depends on this function */
   int i;
   for (i = 0; i < mm->i; ++i) {
-    if (mm->p[i].y < mm->p[i].x) return false;
+    if (mm->p[i].y < mm->p[i].x) {
+      SYSDEBUG("AreMemoryIntervalsOk() y should be >= x!");
+      return false;
+    }
     if (i) {
-      if (mm->p[i].h || mm->p[i - 1].h) {
-        if (mm->p[i].x <= mm->p[i - 1].y) return false;
+      if (mm->p[i].h != -1 || mm->p[i - 1].h != -1) {
+        if (mm->p[i].x <= mm->p[i - 1].y) {
+          return false;
+        }
       } else {
-        if (mm->p[i].x <= mm->p[i - 1].y + 1) return false;
+        if (!(mm->p[i - 1].y + 1 <= mm->p[i].x)) {
+          SYSDEBUG("AreMemoryIntervalsOk() out of order or overlap!");
+          return false;
+        }
       }
     }
   }

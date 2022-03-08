@@ -1,5 +1,6 @@
 #ifndef COSMOPOLITAN_LIBC_X_H_
 #define COSMOPOLITAN_LIBC_X_H_
+#include "libc/calls/struct/rusage.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timeval.h"
@@ -53,6 +54,14 @@ void *xunbinga(size_t, const char16_t *) attributeallocalign((1)) _XMAL _XRET;
 void *xunbing(const char16_t *) _XMAL _XRET;
 char16_t *utf8toutf16(const char *, size_t, size_t *) nodiscard;
 char *utf16toutf8(const char16_t *, size_t, size_t *) nodiscard;
+wchar_t *utf8toutf32(const char *, size_t, size_t *) nodiscard;
+wchar_t *utf16to32(const char16_t *, size_t, size_t *) nodiscard;
+char *xhomedir(void) nodiscard;
+char *xstripext(const char *) nodiscard;
+char *xstripexts(const char *) nodiscard;
+void *xload(bool *, void **, const void *, size_t, size_t);
+void *xloadzd(bool *, void **, const void *, size_t, size_t, size_t, size_t,
+              uint32_t);
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § eXtended apis » files                                     ─╬─│┼
@@ -62,6 +71,8 @@ int rmrf(const char *);
 int makedirs(const char *, unsigned);
 char *xdirname(const char *) paramsnonnull() _XMAL;
 char *xjoinpaths(const char *, const char *) paramsnonnull() _XMAL;
+char *xreadlink(const char *) paramsnonnull() _XMAL;
+char *xreadlinkat(int, const char *) paramsnonnull() _XMAL;
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § eXtended apis » time                                      ─╬─│┼
@@ -85,6 +96,13 @@ int xbarf(const char *, const void *, size_t);
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
 #define xstrcat(...) (xstrcat)(__VA_ARGS__, NULL)
+
+/*───────────────────────────────────────────────────────────────────────────│─╗
+│ cosmopolitan § eXtended apis » processes                                 ─╬─│┼
+╚────────────────────────────────────────────────────────────────────────────│*/
+
+int xspawn(struct rusage *);
+int xvspawn(void (*)(void *), void *, struct rusage *);
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § eXtended apis » generic typing                            ─╬─│┼
