@@ -33,6 +33,7 @@ typedef struct dir_data {
   DIR *dir;
 } dir_data;
 
+// for the LuaFileSystem functions
 #include "libc/stdio/stdio.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/utime.c"
@@ -40,6 +41,18 @@ typedef struct dir_data {
 #include "libc/time/struct/utimbuf.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/calls/struct/stat.macros.h"
+
+// for the socket fuctions
+#include "libc/isystem/stdlib.h"
+#include "libc/isystem/errno.h"
+#include "libc/isystem/arpa/inet.h"
+#include "libc/sysv/consts/af.h"
+#include "libc/sysv/consts/so.h"
+#include "libc/sysv/consts/sol.h"
+#include "libc/sysv/consts/inaddr.h"
+#include "libc/isystem/sys/types.h"
+#include "libc/isystem/sys/socket.h"
+#include "libc/sysv/consts/sock.h"
 
 
 /*
@@ -535,6 +548,52 @@ LFS_EXPORT int luaopen_lfs(lua_State * L)
 
 
 /* Desirable bits of LuaFileSystem added ABOVE */
+
+static int pBind(lua_State *L)
+{
+  int sockfd;
+  struct sockaddr_in serv_addr;
+  int on   = 1;
+  int port = 0;
+  
+  if (lua_isnumber(L, 1))
+    port =lua_tonumber(L, 1);
+  else
+    return( pusherror(L, "bind(int) requires a port number" ) );
+  
+  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (sockfd < 0) 
+    return( pusherror(L, "ERROR opening socket") );
+
+
+  /* Enable address reuse */
+  setsockopt( sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on) );
+
+  memset( &serv_addr, '\0', sizeof(serv_addr));
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_addr.s_addr = INADDR_ANY;
+  serv_addr.sin_port = htons(port);
+
+  /* bind */
+  if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
+    return( pusherror(L, ("ERROR on binding") ));
+
+  /* queue five connections. */
+  listen(sockfd,5);
+
+  /* Return socket */
+  lua_pushnumber(L, sockfd);
+  return( 1 );
+}
+
+
+/* Desirable bits of Steve Kemp's libhttpd BELOW */
+
+
+
+/* Desirable bits of Steve Kemp's libhttpd ABOVE */
+
+
 
 
 // example c function to export to lua
