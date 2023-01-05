@@ -24,12 +24,10 @@ LIBC_DNS_A_CHECKS =				\
 	$(LIBC_DNS_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_DNS_A_DIRECTDEPS =				\
-	LIBC_ALG				\
 	LIBC_CALLS				\
 	LIBC_FMT				\
 	LIBC_MEM				\
 	LIBC_NEXGEN32E				\
-	LIBC_RAND				\
 	LIBC_RUNTIME				\
 	LIBC_SOCK				\
 	LIBC_STDIO				\

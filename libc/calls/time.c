@@ -17,6 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/timeval.h"
+#include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
+#include "libc/sysv/errfuns.h"
 #include "libc/time/time.h"
 
 /**
@@ -29,9 +32,16 @@
 int64_t time(int64_t *opt_out_ret) {
   int64_t secs;
   struct timeval tv;
-  secs = nowl();
-  if (opt_out_ret) {
-    *opt_out_ret = secs;
+  if (IsAsan() && opt_out_ret &&
+      !__asan_is_valid(opt_out_ret, sizeof(*opt_out_ret))) {
+    secs = efault();
+  } else if (gettimeofday(&tv, 0) != -1) {
+    secs = tv.tv_sec;
+    if (opt_out_ret) {
+      *opt_out_ret = secs;
+    }
+  } else {
+    secs = -1;
   }
   return secs;
 }

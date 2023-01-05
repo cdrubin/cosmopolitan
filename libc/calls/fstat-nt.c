@@ -17,12 +17,13 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
 #include "libc/calls/struct/stat.h"
-#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bsr.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/tpenc.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsr.h"
 #include "libc/nt/enum/fileflagandattributes.h"
 #include "libc/nt/enum/fileinfobyhandleclass.h"
 #include "libc/nt/enum/filetype.h"
@@ -33,7 +34,6 @@
 #include "libc/nt/struct/filecompressioninfo.h"
 #include "libc/nt/struct/reparsedatabuffer.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
 #include "libc/str/utf16.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/sysv/errfuns.h"
@@ -61,10 +61,10 @@ static textwindows uint32_t GetSizeOfReparsePoint(int64_t fh) {
           x = 0xfffd;
         }
       }
-      z += x < 0200 ? 1 : bsrl(tpenc(x)) >> 3;
+      z += x < 0200 ? 1 : _bsrl(_tpenc(x)) >> 3;
     }
   } else {
-    SYSDEBUG("GetSizeOfReparsePoint failed %d", GetLastError());
+    STRACE("%s failed %m", "GetSizeOfReparsePoint");
   }
   return z;
 }
@@ -105,7 +105,7 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *st) {
           st->st_size = (uint64_t)wst.nFileSizeHigh << 32 | wst.nFileSizeLow;
           st->st_blksize = PAGESIZE;
           st->st_dev = wst.dwVolumeSerialNumber;
-          st->st_rdev = wst.dwVolumeSerialNumber;
+          st->st_rdev = 0;
           st->st_ino = (uint64_t)wst.nFileIndexHigh << 32 | wst.nFileIndexLow;
           st->st_nlink = wst.nNumberOfLinks;
           if (S_ISLNK(st->st_mode)) {
@@ -122,7 +122,7 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *st) {
             st->st_blocks = ROUNDUP(actualsize, PAGESIZE) / 512;
           }
         } else {
-          SYSDEBUG("GetFileInformationByHandle failed %d", GetLastError());
+          STRACE("%s failed %m", "GetFileInformationByHandle");
         }
         break;
       default:
@@ -130,7 +130,7 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *st) {
     }
     return 0;
   } else {
-    SYSDEBUG("GetFileType failed %d", GetLastError());
+    STRACE("%s failed %m", "GetFileType");
     return __winerr();
   }
 }

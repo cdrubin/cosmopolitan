@@ -20,7 +20,6 @@ TOOL_VIZ_DIRECTDEPS =				\
 	DSP_MPEG				\
 	DSP_SCALE				\
 	DSP_TTY					\
-	LIBC_BITS				\
 	LIBC_CALLS				\
 	LIBC_DNS				\
 	LIBC_FMT				\
@@ -32,7 +31,6 @@ TOOL_VIZ_DIRECTDEPS =				\
 	LIBC_NT_GDI32				\
 	LIBC_NT_KERNEL32			\
 	LIBC_NT_USER32				\
-	LIBC_RAND				\
 	LIBC_RUNTIME				\
 	LIBC_SOCK				\
 	LIBC_STDIO				\
@@ -40,17 +38,17 @@ TOOL_VIZ_DIRECTDEPS =				\
 	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_SYSV_CALLS				\
-	LIBC_TESTLIB				\
 	LIBC_TIME				\
 	LIBC_TINYMATH				\
-	LIBC_UNICODE				\
 	LIBC_X					\
+	LIBC_ZIPOS				\
 	NET_HTTP				\
 	THIRD_PARTY_DLMALLOC			\
 	THIRD_PARTY_GDTOA			\
 	THIRD_PARTY_GETOPT			\
-	THIRD_PARTY_STB				\
+	THIRD_PARTY_MAXMIND			\
 	THIRD_PARTY_MUSL			\
+	THIRD_PARTY_STB				\
 	THIRD_PARTY_XED				\
 	THIRD_PARTY_ZLIB			\
 	TOOL_DECODE_LIB				\
@@ -68,15 +66,40 @@ o/$(MODE)/tool/viz/%.com.dbg:			\
 		o/$(MODE)/tool/viz/%.o		\
 		o/$(MODE)/tool/viz/viz.pkg	\
 		$(CRT)				\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/tool/viz/derasterize.o:		\
+o/$(MODE)/tool/viz/printimage.com.dbg:		\
+		$(TOOL_VIZ_DEPS)		\
+		o/$(MODE)/tool/viz/printimage.o	\
+		o/$(MODE)/tool/viz/viz.pkg	\
+		o/$(MODE)/LICENSE.zip.o		\
+		$(CRT)				\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/tool/viz/printimage.com:			\
+		o/$(MODE)/tool/viz/printimage.com.dbg	\
+		o/$(MODE)/third_party/zip/zip.com	\
+		o/$(MODE)/tool/build/symtab.com
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
+
+o/$(MODE)/tool/viz/printvideo.com:			\
+		o/$(MODE)/tool/viz/printvideo.com.dbg	\
+		o/$(MODE)/third_party/zip/zip.com	\
+		o/$(MODE)/tool/build/symtab.com
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
+
+o/$(MODE)/tool/viz/derasterize.o: private	\
 		OVERRIDE_CFLAGS +=		\
 			-DSTACK_FRAME_UNLIMITED	\
 			$(MATHEMATICAL)
 
-o/$(MODE)/tool/viz/magikarp.o:			\
+o/$(MODE)/tool/viz/magikarp.o: private		\
 		OVERRIDE_CFLAGS +=		\
 			$(MATHEMATICAL)
 

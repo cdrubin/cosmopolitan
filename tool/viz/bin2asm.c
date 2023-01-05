@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 
 #define COLS 8
 
@@ -28,7 +29,7 @@ int main(int argc, char *argv[]) {
   while ((c = getchar()) != -1) {
     if (col == 0) {
       printf("\t.byte\t");
-      memset(glyphs, 0, sizeof(glyphs));
+      bzero(glyphs, sizeof(glyphs));
     }
     ch = c & 0xff;
     glyphs[col] = kCp437[ch];

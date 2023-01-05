@@ -21,8 +21,8 @@
 #include "libc/intrin/pandn.h"
 #include "libc/intrin/pcmpgtw.h"
 #include "libc/intrin/pmovmskb.h"
+#include "libc/intrin/tpenc.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
 #include "libc/str/utf16.h"
 
 static const int16_t kDel16[8] = {127, 127, 127, 127, 127, 127, 127, 127};
@@ -50,7 +50,7 @@ static noasan axdx_t tprecode16to8_sse2(char *dst, size_t dstsize,
  * Transcodes UTF-16 to UTF-8.
  *
  * This is a low-level function intended for the core runtime. Use
- * utf16toutf8() for a much better API that uses malloc().
+ * utf16to8() for a much better API that uses malloc().
  *
  * @param dst is output buffer
  * @param dstsize is bytes in dst
@@ -74,7 +74,7 @@ axdx_t tprecode16to8(char *dst, size_t dstsize, const char16_t *src) {
       if (!(y = src[r.dx++])) break;
       x = MergeUtf16(x, y);
     }
-    w = tpenc(x);
+    w = _tpenc(x);
     while (w && r.ax + 1 < dstsize) {
       dst[r.ax++] = w & 0xFF;
       w >>= 8;

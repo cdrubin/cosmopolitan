@@ -16,14 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/promises.internal.h"
 #include "libc/nexgen32e/vendor.internal.h"
 #include "libc/nt/runtime.h"
-#include "libc/nt/thunk/msabi.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/nr.h"
-
-extern void(__msabi* __imp_ExitProcess)(uint32_t);
 
 /**
  * Terminates process, ignoring destructors and atexit() handlers.
@@ -31,19 +30,34 @@ extern void(__msabi* __imp_ExitProcess)(uint32_t);
  * When running on bare metal, this function will reboot your computer
  * by hosing the interrupt descriptors and triple faulting the system.
  *
- * @param exitcode is masked with 255
+ * @param exitcode is masked with 255 on unix (but not windows)
  * @asyncsignalsafe
+ * @threadsafe
  * @vforksafe
  * @noreturn
  */
-privileged noinstrument noasan noubsan wontreturn void _Exit(int exitcode) {
-  if ((!IsWindows() && !IsMetal()) || (IsMetal() && IsGenuineCosmo())) {
+privileged wontreturn void _Exit(int exitcode) {
+  int i;
+  STRACE("_Exit(%d)", exitcode);
+  if (!IsWindows() && !IsMetal()) {
+    // On Linux _Exit1 (exit) must be called in pledge("") mode. If we
+    // call _Exit (exit_group) when we haven't used pledge("stdio") then
+    // it'll terminate the process instead. On OpenBSD we must not call
+    // _Exit1 (__threxit) because only _Exit (exit) is whitelisted when
+    // operating in pledge("") mode.
+    if (!(IsLinux() && !PLEDGED(STDIO))) {
+      asm volatile("syscall"
+                   : /* no outputs */
+                   : "a"(__NR_exit_group), "D"(exitcode)
+                   : "rcx", "r11", "memory");
+    }
+    // Inline _Exit1() just in case _Exit() isn't allowed by pledge()
     asm volatile("syscall"
                  : /* no outputs */
-                 : "a"(__NR_exit_group), "D"(exitcode)
-                 : "memory");
+                 : "a"(__NR_exit), "D"(exitcode)
+                 : "rcx", "r11", "memory");
   } else if (IsWindows()) {
-    __imp_ExitProcess(exitcode & 0xff);
+    ExitProcess(exitcode);
   }
   asm("push\t$0\n\t"
       "push\t$0\n\t"

@@ -17,9 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/weaken.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -41,16 +41,16 @@ bool __grow(void *pp, size_t *capacity, size_t itemsize, size_t extra) {
   size_t t1, t2;
   extra += GUARANTEE_TERMINATOR;
   p = (void **)pp;
-  assert(itemsize);
-  assert((*p && *capacity) || (!*p && !*capacity));
-  assert(!_isheap(*p) || ((intptr_t)*p & 15) == 0);
+  _unassert(itemsize);
+  _unassert((*p && *capacity) || (!*p && !*capacity));
+  _unassert(!_isheap(*p) || ((intptr_t)*p & 15) == 0);
   p1 = _isheap(*p) ? *p : NULL;
   p2 = NULL;
   n1 = *capacity;
   n2 = (*p ? n1 + (n1 >> 1) : MAX(4, INITIAL_CAPACITY / itemsize)) + extra;
   if (!__builtin_mul_overflow(n1, itemsize, &t1) &&
       !__builtin_mul_overflow(n2, itemsize, &t2)) {
-    if (weaken(realloc) && (p2 = weaken(realloc)(p1, ROUNDUP(t2, 32)))) {
+    if (_weaken(realloc) && (p2 = _weaken(realloc)(p1, ROUNDUP(t2, 32)))) {
       if (!p1 && *p) memcpy(p2, *p, t1);
       bzero((char *)p2 + t1, t2 - t1);
       *capacity = n2;

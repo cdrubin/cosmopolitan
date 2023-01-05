@@ -24,22 +24,22 @@
 │ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN    │
 │ THE SOFTWARE.                                                                │
 └─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/pushpop.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/pushpop.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/math.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
 char buffer[1000];
-/* #define Format(...) gc(xasprintf(__VA_ARGS__)) */
+/* #define Format(...) _gc(xasprintf(__VA_ARGS__)) */
 #define Format(...) (snprintf(buffer, sizeof(buffer), __VA_ARGS__), buffer)
 
 TEST(sprintf, test_space_flag) {
@@ -541,14 +541,14 @@ TEST(sprintf, test_snprintf) {
   EXPECT_STREQ("-1", buffer);
 }
 
-testonly void vsnprintf_builder_1(char *buf, ...) {
+void vsnprintf_builder_1(char *buf, ...) {
   va_list args;
   va_start(args, buf);
   vsnprintf(buf, 100U, "%d", args);
   va_end(args);
 }
 
-testonly void vsnprintf_builder_3(char *buf, ...) {
+void vsnprintf_builder_3(char *buf, ...) {
   va_list args;
   va_start(args, buf);
   vsnprintf(buf, 100U, "%d %d %s", args);
@@ -572,13 +572,13 @@ TEST(xasprintf, hugeNtoa) {
   ASSERT_STREQ(
       "0b1111111111111111111111111111111111111111111111111111111111111111111111"
       "1111111111111111111111111111111111111111111111111111111111",
-      gc(xasprintf("%#jb", UINT128_MAX)));
+      _gc(xasprintf("%#jjb", UINT128_MAX)));
 }
 
 TEST(xasprintf, twosBane) {
-  ASSERT_STREQ("-2147483648", gc(xasprintf("%d", 0x80000000)));
+  ASSERT_STREQ("-2147483648", _gc(xasprintf("%d", 0x80000000)));
   ASSERT_STREQ("-9223372036854775808",
-               gc(xasprintf("%ld", 0x8000000000000000)));
+               _gc(xasprintf("%ld", 0x8000000000000000)));
 }
 
 TEST(snprintf, testFixedWidthString_wontOverrunInput) {
@@ -591,20 +591,19 @@ TEST(snprintf, testFixedWidthString_wontOverrunInput) {
   free(buf);
 }
 
-/* TODO(jart): why is this weird in TINY mode? */
-/* TEST(snprintf, testFixedWidthStringIsNull_wontOverrunBuffer) { */
-/*   int N = 3; */
-/*   char *buf = malloc(N + 1); */
-/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%.*s", pushpop(N), pushpop(NULL))); */
-/*   EXPECT_STREQ("(nu", buf); */
-/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%#.*s", pushpop(N), pushpop(NULL))); */
-/*   EXPECT_STREQ("(nu", buf); */
-/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%`'.*s", pushpop(N), pushpop(NULL))); */
-/*   EXPECT_STREQ("NUL", buf); */
-/*   EXPECT_EQ(3, snprintf(buf, N + 1, "%`#.*s", pushpop(N), pushpop(NULL))); */
-/*   EXPECT_STREQ("NUL", buf); */
-/*   free(buf); */
-/* } */
+TEST(snprintf, testFixedWidthStringIsNull_wontOverrunBuffer) {
+  int N = 3;
+  char *buf = malloc(N + 1);
+  EXPECT_EQ(3, snprintf(buf, N + 1, "%.*s", pushpop(N), pushpop(NULL)));
+  EXPECT_STREQ("(nu", buf);
+  EXPECT_EQ(3, snprintf(buf, N + 1, "%#.*s", pushpop(N), pushpop(NULL)));
+  EXPECT_STREQ("(nu", buf);
+  EXPECT_EQ(3, snprintf(buf, N + 1, "%`'.*s", pushpop(N), pushpop(NULL)));
+  EXPECT_STREQ("NUL", buf);
+  EXPECT_EQ(3, snprintf(buf, N + 1, "%`#.*s", pushpop(N), pushpop(NULL)));
+  EXPECT_STREQ("NUL", buf);
+  free(buf);
+}
 
 TEST(snprintf, twosBaneWithTypePromotion) {
   int16_t x = 0x8000;
@@ -612,8 +611,8 @@ TEST(snprintf, twosBaneWithTypePromotion) {
 }
 
 TEST(snprintf, formatStringLiteral) {
-  EXPECT_EQ('\\' | 'n' << 8, cescapec('\n'));
-  EXPECT_EQ('\\' | '3' << 8 | '7' << 16 | '7' << 24, cescapec('\377'));
+  EXPECT_EQ('\\' | 'n' << 8, _cescapec('\n'));
+  EXPECT_EQ('\\' | '3' << 8 | '7' << 16 | '7' << 24, _cescapec('\377'));
   EXPECT_STREQ("\"hi\\n\"", Format("%`'s", "hi\n"));
   EXPECT_STREQ("\"\\000\"", Format("%`'.*s", 1, "\0"));
 }
@@ -639,22 +638,22 @@ BENCH(palandprintf, bench) {
   EZBENCH2("23 %x", donothing, Format("%x", VEIL("r", 23)));
   EZBENCH2("23 %d", donothing, Format("%d", VEIL("r", 23)));
   EZBENCH2("%f M_PI", donothing, Format("%f", VEIL("x", M_PI)));
+  EZBENCH2("%Lf M_PI", donothing, Format("%Lf", VEIL("t", M_PI)));
   EZBENCH2("%g M_PI", donothing, Format("%g", VEIL("x", M_PI)));
+  EZBENCH2("%Lg M_PI", donothing, Format("%Lg", VEIL("t", M_PI)));
   EZBENCH2("%a M_PI", donothing, Format("%a", VEIL("x", M_PI)));
+  EZBENCH2("%La M_PI", donothing, Format("%La", VEIL("t", M_PI)));
   EZBENCH2("%e M_PI", donothing, Format("%e", VEIL("x", M_PI)));
+  EZBENCH2("%Le M_PI", donothing, Format("%Le", VEIL("t", M_PI)));
+  EZBENCH2("ULONG_MAX %lo", donothing, Format("%lo", VEIL("r", ULONG_MAX)));
   EZBENCH2("INT_MIN %x", donothing, Format("%x", VEIL("r", INT_MIN)));
   EZBENCH2("INT_MIN %d", donothing, Format("%d", VEIL("r", INT_MIN)));
   EZBENCH2("INT_MIN %,d", donothing, Format("%,d", VEIL("r", INT_MIN)));
   EZBENCH2("INT_MIN %ld", donothing, Format("%ld", (long)VEIL("r", INT_MIN)));
-  EZBENCH2("INT_MIN %jd", donothing,
-           Format("%jd", (intmax_t)VEIL("r", INT_MIN)));
   EZBENCH2("LONG_MIN %lx", donothing, Format("%lx", VEIL("r", LONG_MIN)));
   EZBENCH2("LONG_MIN %ld", donothing, Format("%ld", VEIL("r", LONG_MIN)));
-  EZBENCH2("LONG_MIN %jd", donothing,
-           Format("%jd", (intmax_t)VEIL("r", LONG_MIN)));
-  EZBENCH2("LONG_MIN %jx", donothing,
-           Format("%jx", (intmax_t)VEIL("r", LONG_MIN)));
-  EZBENCH2("int64toarray 23", donothing, int64toarray_radix10(23, buffer));
-  EZBENCH2("int64toarray min", donothing,
-           int64toarray_radix10(INT_MIN, buffer));
+  EZBENCH2("INT128_MIN %jjd", donothing, Format("%jjd", INT128_MIN));
+  EZBENCH2("INT128_MIN %jjx", donothing, Format("%jjx", INT128_MIN));
+  EZBENCH2("int64toarray 23", donothing, FormatInt64(buffer, 23));
+  EZBENCH2("int64toarray min", donothing, FormatInt64(buffer, INT_MIN));
 }

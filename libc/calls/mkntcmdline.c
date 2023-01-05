@@ -23,54 +23,71 @@
 #include "libc/str/utf16.h"
 #include "libc/sysv/errfuns.h"
 
-#define APPEND(c)                     \
-  do {                                \
-    cmdline[k++] = c;                 \
-    if (k == ARG_MAX) return e2big(); \
+#define APPEND(c)           \
+  do {                      \
+    cmdline[k++] = c;       \
+    if (k == ARG_MAX / 2) { \
+      return e2big();       \
+    }                       \
   } while (0)
 
-static noasan bool NeedsQuotes(const char *s) {
+static bool NeedsQuotes(const char *s) {
   if (!*s) return true;
   do {
-    if (*s == ' ' || *s == '\t') {
-      return true;
+    switch (*s) {
+      case '"':
+      case ' ':
+      case '\t':
+      case '\v':
+      case '\n':
+        return true;
+      default:
+        break;
     }
   } while (*s++);
   return false;
 }
 
-/**
- * Converts System V argv to Windows-style command line.
- *
- * Escaping is performed and it's designed to round-trip with
- * GetDosArgv() or GetDosArgv(). This function does NOT escape
- * command interpreter syntax, e.g. $VAR (sh), %VAR% (cmd).
- *
- * @param cmdline is output buffer
- * @param prog is used as argv[0]
- * @param argv is an a NULL-terminated array of UTF-8 strings
- * @return freshly allocated lpCommandLine or NULL w/ errno
- * @see libc/runtime/dosargv.c
- */
-textwindows noasan int mkntcmdline(char16_t cmdline[ARG_MAX], const char *prog,
-                                   char *const argv[]) {
-  char *arg;
+static inline int IsAlpha(int c) {
+  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+}
+
+// Converts System V argv to Windows-style command line.
+//
+// Escaping is performed and it's designed to round-trip with
+// GetDosArgv() or GetDosArgv(). This function does NOT escape
+// command interpreter syntax, e.g. $VAR (sh), %VAR% (cmd).
+//
+// TODO(jart): this needs fuzzing and security review
+//
+// @param cmdline is output buffer
+// @param argv is an a NULL-terminated array of UTF-8 strings
+// @return 0 on success, or -1 w/ errno
+// @raise E2BIG if everything is too huge
+// @see "Everyone quotes command line arguments the wrong way" MSDN
+// @see libc/runtime/getdosargv.c
+textwindows int mkntcmdline(char16_t cmdline[ARG_MAX / 2], char *const argv[]) {
   uint64_t w;
   wint_t x, y;
   int slashes, n;
   bool needsquote;
   char16_t cbuf[2];
+  char *ansiargv[2];
   size_t i, j, k, s;
-  for (arg = prog, k = i = 0; arg; arg = argv[++i]) {
+  if (!argv[0]) {
+    bzero(ansiargv, sizeof(ansiargv));
+    argv = ansiargv;
+  }
+  for (k = i = 0; argv[i]; ++i) {
     if (i) APPEND(u' ');
-    if ((needsquote = NeedsQuotes(arg))) APPEND(u'"');
+    if ((needsquote = NeedsQuotes(argv[i]))) APPEND(u'"');
     for (slashes = j = 0;;) {
-      x = arg[j++] & 255;
+      x = argv[i][j++] & 255;
       if (x >= 0300) {
         n = ThomPikeLen(x);
         x = ThomPikeByte(x);
         while (--n) {
-          if ((y = arg[j++] & 255)) {
+          if ((y = argv[i][j++] & 255)) {
             x = ThomPikeMerge(x, y);
           } else {
             x = 0;
@@ -79,17 +96,33 @@ textwindows noasan int mkntcmdline(char16_t cmdline[ARG_MAX], const char *prog,
         }
       }
       if (!x) break;
-      if (!i && x == '/') {
-        x = '\\';
+      if (x == '/' || x == '\\') {
+        if (!i) {
+          // turn / into \ for first argv[i]
+          x = '\\';
+          // turn \c\... into c:\ for first argv[i]
+          if (k == 2 && IsAlpha(cmdline[1]) && cmdline[0] == '\\') {
+            cmdline[0] = cmdline[1];
+            cmdline[1] = ':';
+          }
+        } else {
+          // turn stuff like `less /c/...`
+          //            into `less c:/...`
+          // turn stuff like `more <"/c/..."`
+          //            into `more <"c:/..."`
+          if (k > 3 && IsAlpha(cmdline[k - 1]) &&
+              (cmdline[k - 2] == '/' || cmdline[k - 2] == '\\') &&
+              (cmdline[k - 3] == '"' || cmdline[k - 3] == ' ')) {
+            cmdline[k - 2] = cmdline[k - 1];
+            cmdline[k - 1] = ':';
+          }
+        }
       }
       if (x == '\\') {
         ++slashes;
       } else if (x == '"') {
-        for (s = 0; s < slashes * 2; ++s) {
-          APPEND(u'\\');
-        }
-        slashes = 0;
-        APPEND(u'\\');
+        APPEND(u'"');
+        APPEND(u'"');
         APPEND(u'"');
       } else {
         for (s = 0; s < slashes; ++s) {

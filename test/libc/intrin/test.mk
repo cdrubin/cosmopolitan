@@ -24,20 +24,24 @@ TEST_LIBC_INTRIN_CHECKS =				\
 
 TEST_LIBC_INTRIN_DIRECTDEPS =				\
 	LIBC_CALLS					\
-	LIBC_STDIO					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
+	LIBC_STDIO					\
 	LIBC_STR					\
 	LIBC_STUBS					\
+	LIBC_SYSV					\
+	LIBC_SYSV_CALLS					\
+	LIBC_THREAD					\
 	LIBC_TESTLIB					\
 	LIBC_TINYMATH					\
 	LIBC_X						\
-	TOOL_VIZ_LIB
+	TOOL_VIZ_LIB					\
+	THIRD_PARTY_COMPILER_RT				\
+	THIRD_PARTY_NSYNC
 
 TEST_LIBC_INTRIN_DEPS :=				\
 	$(call uniq,$(foreach x,$(TEST_LIBC_INTRIN_DIRECTDEPS),$($(x))))
@@ -52,10 +56,19 @@ o/$(MODE)/test/libc/intrin/%.com.dbg:			\
 		o/$(MODE)/test/libc/intrin/intrin.pkg	\
 		$(LIBC_TESTMAIN)			\
 		$(CRT)					\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(TEST_LIBC_INTRIN_OBJS):				\
+# Test what happens when *NSYNC isn't linked.
+o/$(MODE)/test/libc/intrin/lock_test.com.dbg:		\
+		$(TEST_LIBC_INTRIN_DEPS)		\
+		o/$(MODE)/test/libc/intrin/lock_test.o	\
+		o/$(MODE)/test/libc/intrin/intrin.pkg	\
+		$(CRT)					\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+$(TEST_LIBC_INTRIN_OBJS): private			\
 		OVERRIDE_CFLAGS +=			\
 			-fno-builtin
 

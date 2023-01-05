@@ -5,9 +5,13 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/siginfo.h"
+#include "libc/calls/ucontext.h"
 #include "libc/dce.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
@@ -94,10 +98,10 @@ ShowCrashReportHook(int err, int fd, int sig,
 {
     PyObject *str;
     PyFrameObject *frame;
-    __printf("\nCalamity Occurred w/ Python\n");
+    kprintf("\nCalamity Occurred w/ Python\n");
     for (frame = PyEval_GetFrame(); frame; frame = frame->f_back) {
         str = PyUnicode_AsUTF8String(frame->f_code->co_filename);
-        __printf("%s:%d\n", PyBytes_AS_STRING(str), frame->f_code->co_firstlineno/* frame->f_lineno */);
+        kprintf("%s:%d\n", PyBytes_AS_STRING(str), frame->f_code->co_firstlineno/* frame->f_lineno */);
         Py_DECREF(str);
     }
 }
@@ -123,7 +127,7 @@ main(int argc, char *argv[])
     Py_LimitedPath();
     if (!(a = PyList_New(argc))) return 127;
     for (i = 0; i < argc; ++i) {
-        if (!(w = utf8toutf32(argv[i], -1, &n))) return 126;
+        if (!(w = utf8to32(argv[i], -1, &n))) return 126;
         if (!(s = PyUnicode_FromWideChar(w, n))) return 125;
         PyList_SetItem(a, i, s);
         free(w);

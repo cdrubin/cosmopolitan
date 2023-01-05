@@ -16,10 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
-#include "libc/calls/calls.h"
-#include "libc/fmt/conv.h"
+#include "libc/calls/struct/stat.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/s.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/zip.h"
 #include "libc/zipos/zipos.internal.h"
@@ -28,18 +28,18 @@ int __zipos_stat_impl(struct Zipos *zipos, size_t cf, struct stat *st) {
   size_t lf;
   if (zipos && st) {
     bzero(st, sizeof(*st));
-    if (ZIP_CFILE_FILEATTRCOMPAT(zipos->map + cf) == kZipOsUnix) {
-      st->st_mode = ZIP_CFILE_EXTERNALATTRIBUTES(zipos->map + cf) >> 16;
+    if (cf) {
+      lf = GetZipCfileOffset(zipos->map + cf);
+      st->st_mode = GetZipCfileMode(zipos->map + cf);
+      st->st_size = GetZipLfileUncompressedSize(zipos->map + lf);
+      st->st_blocks =
+          roundup(GetZipLfileCompressedSize(zipos->map + lf), 512) / 512;
+      GetZipCfileTimestamps(zipos->map + cf, &st->st_mtim, &st->st_atim,
+                            &st->st_ctim, 0);
+      st->st_birthtim = st->st_ctim;
     } else {
-      st->st_mode = 0100644;
+      st->st_mode = 0444 | S_IFDIR | 0111;
     }
-    lf = GetZipCfileOffset(zipos->map + cf);
-    st->st_size = GetZipLfileUncompressedSize(zipos->map + lf);
-    st->st_blocks =
-        roundup(GetZipLfileCompressedSize(zipos->map + lf), 512) / 512;
-    GetZipCfileTimestamps(zipos->map + cf, &st->st_mtim, &st->st_atim,
-                          &st->st_ctim, 0);
-    st->st_birthtim = st->st_ctim;
     return 0;
   } else {
     return einval();

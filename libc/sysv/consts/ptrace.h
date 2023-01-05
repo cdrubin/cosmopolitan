@@ -4,52 +4,55 @@
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-extern const long PTRACE_TRACEME;
-extern const long PTRACE_PEEKTEXT;
-extern const long PTRACE_PEEKDATA;
-extern const long PTRACE_PEEKUSER;
-extern const long PTRACE_POKETEXT;
-extern const long PTRACE_POKEDATA;
-extern const long PTRACE_POKEUSER;
-extern const long PTRACE_CONT;
-extern const long PTRACE_KILL;
-extern const long PTRACE_SINGLESTEP;
-extern const long PTRACE_GETREGS;
-extern const long PTRACE_SETREGS;
-extern const long PTRACE_GETFPREGS;
-extern const long PTRACE_SETFPREGS;
-extern const long PTRACE_ATTACH;
-extern const long PTRACE_DETACH;
-extern const long PTRACE_GETFPXREGS;
-extern const long PTRACE_SETFPXREGS;
-extern const long PTRACE_SYSCALL;
-extern const long PTRACE_GETEVENTMSG;
-extern const long PTRACE_GETSIGINFO;
-extern const long PTRACE_SETOPTIONS;
-extern const long PTRACE_SETSIGINFO;
-extern const long PTRACE_GETREGSET;
-extern const long PTRACE_GETSIGMASK;
-extern const long PTRACE_INTERRUPT;
-extern const long PTRACE_LISTEN;
-extern const long PTRACE_PEEKSIGINFO;
-extern const long PTRACE_SECCOMP_GET_FILTER;
-extern const long PTRACE_SEIZE;
-extern const long PTRACE_SETREGSET;
-extern const long PTRACE_SETSIGMASK;
-extern const long PTRACE_O_TRACESYSGOOD;
-extern const long PTRACE_O_TRACEFORK;
-extern const long PTRACE_O_TRACEVFORK;
-extern const long PTRACE_O_TRACECLONE;
-extern const long PTRACE_O_TRACEEXEC;
-extern const long PTRACE_O_TRACEVFORKDONE;
-extern const long PTRACE_O_TRACEEXIT;
-extern const long PTRACE_O_MASK;
-extern const long PTRACE_EVENT_FORK;
-extern const long PTRACE_EVENT_VFORK;
-extern const long PTRACE_EVENT_CLONE;
-extern const long PTRACE_EVENT_EXEC;
-extern const long PTRACE_EVENT_VFORK_DONE;
-extern const long PTRACE_EVENT_EXIT;
+extern const int PTRACE_TRACEME;
+extern const int PTRACE_PEEKTEXT;
+extern const int PTRACE_PEEKDATA;
+extern const int PTRACE_PEEKUSER;
+extern const int PTRACE_POKETEXT;
+extern const int PTRACE_POKEDATA;
+extern const int PTRACE_POKEUSER;
+extern const int PTRACE_CONT;
+extern const int PTRACE_KILL;
+extern const int PTRACE_SINGLESTEP;
+extern const int PTRACE_GETREGS;
+extern const int PTRACE_SETREGS;
+extern const int PTRACE_GETFPREGS;
+extern const int PTRACE_SETFPREGS;
+extern const int PTRACE_ATTACH;
+extern const int PTRACE_DETACH;
+extern const int PTRACE_GETFPXREGS;
+extern const int PTRACE_SETFPXREGS;
+extern const int PTRACE_SYSCALL;
+extern const int PTRACE_GETEVENTMSG;
+extern const int PTRACE_GETSIGINFO;
+extern const int PTRACE_SETOPTIONS;
+extern const int PTRACE_SETSIGINFO;
+extern const int PTRACE_GETREGSET;
+extern const int PTRACE_GETSIGMASK;
+extern const int PTRACE_INTERRUPT;
+extern const int PTRACE_LISTEN;
+extern const int PTRACE_PEEKSIGINFO;
+extern const int PTRACE_SECCOMP_GET_FILTER;
+extern const int PTRACE_SEIZE;
+extern const int PTRACE_SETREGSET;
+extern const int PTRACE_SETSIGMASK;
+extern const int PTRACE_O_TRACESYSGOOD;
+extern const int PTRACE_O_TRACEFORK;
+extern const int PTRACE_O_TRACEVFORK;
+extern const int PTRACE_O_TRACECLONE;
+extern const int PTRACE_O_TRACEEXEC;
+extern const int PTRACE_O_TRACEVFORKDONE;
+extern const int PTRACE_O_TRACEEXIT;
+extern const int PTRACE_O_TRACESECCOMP;
+extern const int PTRACE_O_MASK;
+extern const int PTRACE_EVENT_FORK;
+extern const int PTRACE_EVENT_VFORK;
+extern const int PTRACE_EVENT_CLONE;
+extern const int PTRACE_EVENT_EXEC;
+extern const int PTRACE_EVENT_VFORK_DONE;
+extern const int PTRACE_EVENT_EXIT;
+extern const int PTRACE_EVENT_STOP;
+extern const int PTRACE_EVENT_SECCOMP;
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
@@ -93,6 +96,7 @@ COSMOPOLITAN_C_END_
 #define PTRACE_O_TRACEEXEC        SYMBOLIC(PTRACE_O_TRACEEXEC)
 #define PTRACE_O_TRACEVFORKDONE   SYMBOLIC(PTRACE_O_TRACEVFORKDONE)
 #define PTRACE_O_TRACEEXIT        SYMBOLIC(PTRACE_O_TRACEEXIT)
+#define PTRACE_O_TRACESECCOMP     SYMBOLIC(PTRACE_O_TRACESECCOMP)
 #define PTRACE_O_MASK             SYMBOLIC(PTRACE_O_MASK)
 #define PTRACE_EVENT_FORK         SYMBOLIC(PTRACE_EVENT_FORK)
 #define PTRACE_EVENT_VFORK        SYMBOLIC(PTRACE_EVENT_VFORK)
@@ -100,5 +104,7 @@ COSMOPOLITAN_C_END_
 #define PTRACE_EVENT_EXEC         SYMBOLIC(PTRACE_EVENT_EXEC)
 #define PTRACE_EVENT_VFORK_DONE   SYMBOLIC(PTRACE_EVENT_VFORK_DONE)
 #define PTRACE_EVENT_EXIT         SYMBOLIC(PTRACE_EVENT_EXIT)
+#define PTRACE_EVENT_STOP         SYMBOLIC(PTRACE_EVENT_STOP)
+#define PTRACE_EVENT_SECCOMP      SYMBOLIC(PTRACE_EVENT_SECCOMP)
 
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_PTRACE_H_ */

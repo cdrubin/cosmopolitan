@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/kntprioritycombos.internal.h"
 #include "libc/errno.h"
@@ -53,11 +54,6 @@ void testlib_benchwarmup(void) {
  */
 void testlib_runallbenchmarks(void) {
   int e;
-  e = errno;
-  _peekall();
-  mlockall(MCL_CURRENT);
-  nice(-1);
-  errno = e;
   __log_level = kLogWarn;
   testlib_runtestcases(__bench_start, __bench_end, testlib_benchwarmup);
 }

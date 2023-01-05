@@ -16,14 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/oldutf16.internal.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "libc/str/tpdecodecb.internal.h"
+#include "libc/str/utf16.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -70,7 +72,7 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
         }
         break;
       case '%': {
-        uintmax_t number;
+        uint128_t number;
         void *buf;
         size_t bufsize;
         unsigned width = 0;
@@ -117,8 +119,12 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
             case '\'':
               thousands = true;
               break;
-            case 'j': /* 128-bit */
-              bits = sizeof(intmax_t) * 8;
+            case 'j': /* j=64-bit jj=128-bit */
+              if (bits < 64) {
+                bits = 64;
+              } else {
+                bits = 128;
+              }
               break;
             case 'l': /* long */
             case 'L': /* loooong */
@@ -173,9 +179,11 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
       DecodeNumber:
         if (c != -1) {
           number = 0;
+          width = !width ? bits : width;
           do {
             diglet = kBase36[(unsigned char)c];
             if (1 <= diglet && diglet <= base) {
+              width -= 1;
               number *= base;
               number += diglet - 1;
             } else if (thousands && diglet == ',') {
@@ -183,9 +191,9 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
             } else {
               break;
             }
-          } while ((c = callback(arg)) != -1);
+          } while ((c = callback(arg)) != -1 && width > 0);
           if (!discard) {
-            uintmax_t bane = (uintmax_t)1 << (bits - 1);
+            uint128_t bane = (uint128_t)1 << (bits - 1);
             if (!(number & ~((bane - 1) | (issigned ? 0 : bane))) ||
                 (issigned && number == bane /* two's complement bane */)) {
               ++items;
@@ -198,8 +206,8 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
             }
             void *out = va_arg(va, void *);
             switch (bits) {
-              case sizeof(uintmax_t) * CHAR_BIT:
-                *(uintmax_t *)out = number;
+              case sizeof(uint128_t) * CHAR_BIT:
+                *(uint128_t *)out = number;
                 break;
               case 48:
               case 64:
@@ -224,9 +232,9 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
         if (discard) {
           buf = NULL;
         } else if (ismalloc) {
-          buf = weaken(malloc)(bufsize * charbytes);
+          buf = _weaken(malloc)(bufsize * charbytes);
           struct FreeMe *entry;
-          if (buf && (entry = weaken(calloc)(1, sizeof(struct FreeMe)))) {
+          if (buf && (entry = _weaken(calloc)(1, sizeof(struct FreeMe)))) {
             entry->ptr = buf;
             entry->next = freeme;
             freeme = entry;
@@ -238,7 +246,7 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
           size_t j = 0;
           for (;;) {
             if (ismalloc && !width && j + 2 + 1 >= bufsize &&
-                !weaken(__grow)(&buf, &bufsize, charbytes, 0)) {
+                !_weaken(__grow)(&buf, &bufsize, charbytes, 0)) {
               width = bufsize - 1;
             }
             if (c != -1 && j + !rawmode < bufsize && (rawmode || !isspace(c))) {
@@ -248,8 +256,13 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
               } else if (tpdecodecb((wint_t *)&c, c, (void *)callback, arg) !=
                          -1) {
                 if (charbytes == sizeof(char16_t)) {
-                  j += abs(pututf16(&((char16_t *)buf)[j], bufsize - j - 1, c,
-                                    false));
+                  size_t k = 0;
+                  unsigned w = EncodeUtf16(c);
+                  do {
+                    if ((j + 1) * 2 < bufsize) {
+                      ((char16_t *)buf)[j++] = w;
+                    }
+                  } while ((w >>= 16));
                 } else {
                   ((wchar_t *)buf)[j++] = (wchar_t)c;
                 }
@@ -286,11 +299,11 @@ int vcscanf(int callback(void *), int unget(int, void *), void *arg,
     }
   }
 Done:
-  while (freeme && weaken(free)) {
+  while (freeme && _weaken(free)) {
     struct FreeMe *entry = freeme;
     freeme = entry->next;
-    if (items == -1) weaken(free)(entry->ptr);
-    weaken(free)(entry);
+    if (items == -1) _weaken(free)(entry->ptr);
+    _weaken(free)(entry);
   }
   return items;
 }

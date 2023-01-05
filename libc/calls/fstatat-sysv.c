@@ -16,21 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
 #include "libc/calls/struct/metastat.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
- * Supports stat(), lstat(), fstatat(), etc. implementations.
+ * Performs fstatat() on System Five.
  * @asyncsignalsafe
  */
 int32_t sys_fstatat(int32_t dirfd, const char *path, struct stat *st,
                     int32_t flags) {
+  int rc;
   void *p;
   union metastat ms;
-  if (IsAsan() && !__asan_is_valid(path, 1)) return efault();
+  if (IsAsan() && !__asan_is_valid_str(path)) return efault();
   if (IsLinux()) {
     _Static_assert(sizeof(*st) == sizeof(ms.linux), "assumption broken");
     if (IsAsan() && (st && !__asan_is_valid(st, sizeof(*st)))) return efault();

@@ -24,13 +24,11 @@ TEST_TOOL_VIZ_LIB_CHECKS =				\
 
 TEST_TOOL_VIZ_LIB_DIRECTDEPS =				\
 	DSP_MPEG					\
-	LIBC_ALG					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STUBS					\
@@ -38,7 +36,6 @@ TEST_TOOL_VIZ_LIB_DIRECTDEPS =				\
 	LIBC_STR					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
 	LIBC_X						\
 	TOOL_VIZ_LIB
 
@@ -55,7 +52,7 @@ o/$(MODE)/test/tool/viz/lib/%.com.dbg:			\
 		o/$(MODE)/test/tool/viz/lib/vizlib.pkg	\
 		$(LIBC_TESTMAIN)			\
 		$(CRT)					\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 .PHONY:		o/$(MODE)/test/tool/viz/lib

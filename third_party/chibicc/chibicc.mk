@@ -10,18 +10,17 @@
 #   This makefile compiles and runs each test twice. The first with
 #   GCC-built chibicc, and a second time with chibicc-built chibicc
 
-CHIBICC = o/$(MODE)/third_party/chibicc/chibicc.com.dbg
-CHIBICC2 = o/$(MODE)/third_party/chibicc/chibicc2.com.dbg
+CHIBICC = o/$(MODE)/third_party/chibicc/chibicc.com
 CHIBICC_FLAGS =								\
 	-fno-common							\
 	-include libc/integral/normalize.inc				\
-	-DIMAGE_BASE_VIRTUAL=$(IMAGE_BASE_VIRTUAL)
+	-DIMAGE_BASE_VIRTUAL=$(IMAGE_BASE_VIRTUAL)			\
+	-DMODE='"$(MODE)"'
 
 PKGS += THIRD_PARTY_CHIBICC
 THIRD_PARTY_CHIBICC_ARTIFACTS += THIRD_PARTY_CHIBICC_A
 THIRD_PARTY_CHIBICC = $(THIRD_PARTY_CHIBICC_A_DEPS) $(THIRD_PARTY_CHIBICC_A)
 THIRD_PARTY_CHIBICC_A = o/$(MODE)/third_party/chibicc/chibicc.a
-THIRD_PARTY_CHIBICC2_A = o/$(MODE)/third_party/chibicc/chibicc2.a
 THIRD_PARTY_CHIBICC_A_FILES := $(wildcard third_party/chibicc/*)
 THIRD_PARTY_CHIBICC_A_HDRS = $(filter %.h,$(THIRD_PARTY_CHIBICC_A_FILES))
 THIRD_PARTY_CHIBICC_A_SRCS = $(filter %.c,$(THIRD_PARTY_CHIBICC_A_FILES))
@@ -34,23 +33,16 @@ THIRD_PARTY_CHIBICC_DEFINES =						\
 
 THIRD_PARTY_CHIBICC_BINS =						\
 	o/$(MODE)/third_party/chibicc/chibicc.com.dbg			\
-	o/$(MODE)/third_party/chibicc/chibicc.com			\
-	o/$(MODE)/third_party/chibicc/chibicc2.com.dbg			\
-	o/$(MODE)/third_party/chibicc/chibicc2.com
+	o/$(MODE)/third_party/chibicc/chibicc.com
 
 THIRD_PARTY_CHIBICC_A_OBJS =						\
 	$(THIRD_PARTY_CHIBICC_A_SRCS:%.c=o/$(MODE)/%.o)
-THIRD_PARTY_CHIBICC2_A_OBJS =						\
-	$(THIRD_PARTY_CHIBICC_A_SRCS:%.c=o/$(MODE)/%.chibicc.o)
 
 THIRD_PARTY_CHIBICC_A_CHECKS =						\
 	$(THIRD_PARTY_CHIBICC_A).pkg					\
-	$(THIRD_PARTY_CHIBICC2_A).pkg					\
 	$(THIRD_PARTY_CHIBICC_A_HDRS:%=o/$(MODE)/%.ok)
 
 THIRD_PARTY_CHIBICC_A_DIRECTDEPS =					\
-	LIBC_ALG							\
-	LIBC_BITS							\
 	LIBC_CALLS							\
 	LIBC_FMT							\
 	LIBC_INTRIN							\
@@ -64,7 +56,6 @@ THIRD_PARTY_CHIBICC_A_DIRECTDEPS =					\
 	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_TIME							\
-	LIBC_UNICODE							\
 	LIBC_X								\
 	THIRD_PARTY_COMPILER_RT						\
 	THIRD_PARTY_DLMALLOC						\
@@ -82,52 +73,35 @@ $(THIRD_PARTY_CHIBICC_A).pkg:						\
 		$(THIRD_PARTY_CHIBICC_A_OBJS)				\
 		$(foreach x,$(THIRD_PARTY_CHIBICC_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(THIRD_PARTY_CHIBICC2_A):						\
-		third_party/chibicc/					\
-		$(THIRD_PARTY_CHIBICC2_A).pkg				\
-		$(THIRD_PARTY_CHIBICC2_A_OBJS)
-$(THIRD_PARTY_CHIBICC2_A).pkg:						\
-		$(THIRD_PARTY_CHIBICC2_A_OBJS)				\
-		$(foreach x,$(THIRD_PARTY_CHIBICC_A_DIRECTDEPS),$($(x)_A).pkg)
-
 o/$(MODE)/third_party/chibicc/chibicc.com.dbg:				\
 		$(THIRD_PARTY_CHIBICC_A_DEPS)				\
 		$(THIRD_PARTY_CHIBICC_A)				\
-		$(APE)							\
+		$(APE_NO_MODIFY_SELF)					\
 		$(CRT)							\
 		o/$(MODE)/third_party/chibicc/help.txt.zip.o		\
 		o/$(MODE)/third_party/chibicc/chibicc.main.o		\
 		$(THIRD_PARTY_CHIBICC_A).pkg
 	@$(APELINK)
-o/$(MODE)/third_party/chibicc/chibicc2.com.dbg:				\
-		$(THIRD_PARTY_CHIBICC_A_DEPS)				\
-		$(THIRD_PARTY_CHIBICC2_A)				\
-		$(APE)							\
-		$(CRT)							\
-		o/$(MODE)/third_party/chibicc/help.txt.zip.o		\
-		o/$(MODE)/third_party/chibicc/chibicc.main.chibicc.o	\
-		$(THIRD_PARTY_CHIBICC2_A).pkg
-	@$(APELINK)
+
+o/$(MODE)/third_party/chibicc/chibicc.com:				\
+		o/$(MODE)/third_party/chibicc/chibicc.com.dbg		\
+		o/$(MODE)/third_party/zip/zip.com			\
+		o/$(MODE)/tool/build/symtab.com
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
 
 o/$(MODE)/third_party/chibicc/as.com.dbg:				\
 		$(THIRD_PARTY_CHIBICC_A_DEPS)				\
 		$(THIRD_PARTY_CHIBICC_A)				\
-		$(APE)							\
+		$(APE_NO_MODIFY_SELF)					\
 		$(CRT)							\
 		o/$(MODE)/third_party/chibicc/as.main.o			\
 		$(THIRD_PARTY_CHIBICC_A).pkg
 	@$(APELINK)
 
-o/$(MODE)/third_party/chibicc/chibicc.o:				\
+o/$(MODE)/third_party/chibicc/chibicc.o: private			\
 		OVERRIDE_CPPFLAGS += $(THIRD_PARTY_CHIBICC_DEFINES)
-
-o/$(MODE)/third_party/chibicc/chibicc.chibicc.o:			\
-		CHIBICC_FLAGS += $(THIRD_PARTY_CHIBICC_DEFINES)
-
-o/$(MODE)/%.chibicc.o: %.c o/$(MODE)/third_party/chibicc/chibicc.com.dbg
-	@$(COMPILE) -ACHIBICC -T$@ $(CHIBICC) $(CHIBICC_FLAGS) -c -o $@ $<
-o/$(MODE)/%.chibicc2.o: %.c o/$(MODE)/third_party/chibicc/chibicc2.com.dbg
-	@$(COMPILE) -ACHIBICC2 -T$@ $(CHIBICC2) $(CHIBICC_FLAGS) -c -o $@ $<
 
 THIRD_PARTY_CHIBICC_LIBS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)))
 THIRD_PARTY_CHIBICC_SRCS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)_SRCS))

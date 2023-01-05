@@ -16,16 +16,19 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
 #include "libc/calls/internal.h"
+#include "libc/intrin/atomic.h"
+#include "libc/macros.internal.h"
+#include "libc/str/str.h"
 
+// really want to avoid locking here so close() needn't block signals
 void __releasefd(int fd) {
-  int x;
-  if (!__vforked && 0 <= fd && fd < g_fds.n) {
-    g_fds.p[fd].kind = kFdEmpty;
-    do {
-      x = g_fds.f;
-      if (fd >= x) break;
-    } while (!cmpxchg(&g_fds.f, x, fd));
-  }
+  int f1, f2;
+  if (!(0 <= fd && fd < g_fds.n)) return;
+  bzero(g_fds.p + fd, sizeof(*g_fds.p));
+  f1 = atomic_load_explicit(&g_fds.f, memory_order_relaxed);
+  do {
+    f2 = MIN(fd, f1);
+  } while (!atomic_compare_exchange_weak_explicit(
+      &g_fds.f, &f1, f2, memory_order_release, memory_order_relaxed));
 }

@@ -16,13 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 
+/**
+ * Formats and writes text to stream.
+ * @see printf() for further documentation
+ */
 int(fprintf)(FILE *f, const char *fmt, ...) {
   int rc;
   va_list va;
+  flockfile(f);
   va_start(va, fmt);
-  rc = (vfprintf)(f, fmt, va);
+  rc = (vfprintf_unlocked)(f, fmt, va);
   va_end(va);
+  funlockfile(f);
   return rc;
 }

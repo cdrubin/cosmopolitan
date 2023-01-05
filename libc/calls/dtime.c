@@ -16,10 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
 #include "libc/calls/struct/timespec.h"
-#include "libc/str/str.h"
-#include "libc/time/time.h"
 
 /**
  * Returns seconds since epoch w/ high-precision.

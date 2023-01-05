@@ -13,18 +13,17 @@ COSMOPOLITAN_C_START_
 
 int tcgetattr(int, struct termios *);
 int tcsetattr(int, int, const struct termios *);
-int tcsetpgrp(int, int32_t);
-int32_t tcgetpgrp(int);
 
 int openpty(int *, int *, char *, const struct termios *,
-            const struct winsize *) paramsnonnull((1, 2)) nodiscard;
+            const struct winsize *) paramsnonnull((1, 2));
 int forkpty(int *, char *, const struct termios *, const struct winsize *)
-    paramsnonnull((1, 2)) nodiscard;
+    paramsnonnull((1, 2)) dontdiscard;
+char *ptsname(int);
 errno_t ptsname_r(int, char *, size_t);
 
 int grantpt(int);
 int unlockpt(int);
-int posix_openpt(int) nodiscard;
+int posix_openpt(int) dontdiscard;
 
 int tcdrain(int);
 int tcgetsid(int);
@@ -32,8 +31,8 @@ int tcflow(int, int);
 int tcflush(int, int);
 int tcsendbreak(int, int);
 void cfmakeraw(struct termios *);
-int cfsetospeed(struct termios *, int);
-int cfsetispeed(struct termios *, int);
+int cfsetospeed(struct termios *, unsigned);
+int cfsetispeed(struct termios *, unsigned);
 uint32_t cfgetospeed(const struct termios *);
 uint32_t cfgetispeed(const struct termios *);
 

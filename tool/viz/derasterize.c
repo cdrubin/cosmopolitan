@@ -24,18 +24,18 @@
 #include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/tpenc.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/x86feature.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/fileno.h"
@@ -138,7 +138,7 @@ extern const char16_t kRunes[];
  */
 static char *tptoa(char *p, wchar_t x) {
   unsigned long w;
-  for (w = tpenc(x); w; w >>= 010) *p++ = w & 0xff;
+  for (w = _tpenc(x); w; w >>= 010) *p++ = w & 0xff;
   return p;
 }
 
@@ -248,7 +248,7 @@ static unsigned combinecolors(unsigned char bf[1u << MC][2],
                               const unsigned char bl[CN][YS * XS]) {
   uint64_t hv, ht[(1u << MC) * 2];
   unsigned i, j, n, b, f, h, hi, bu, fu;
-  memset(ht, 0, sizeof(ht));
+  bzero(ht, sizeof(ht));
   for (n = b = 0; b < BN && n < (1u << MC); ++b) {
     bu = bl[2][b] << 020 | bl[1][b] << 010 | bl[0][b];
     hi = 0;
@@ -295,7 +295,7 @@ static unsigned combinecolors(unsigned char bf[1u << MC][2],
                            const float lb[CN][YS * XS]) {         \
     unsigned i, k, gu;                                            \
     float p[BN], q[BN], fu, bu, r;                                \
-    memset(q, 0, sizeof(q));                                      \
+    bzero(q, sizeof(q));                                          \
     for (k = 0; k < CN; ++k) {                                    \
       gu = kGlyphs[g];                                            \
       bu = lb[k][b];                                              \
@@ -336,7 +336,7 @@ static float adjudicate(unsigned b, unsigned f, unsigned g,
                         const float lb[CN][YS * XS]) {
   unsigned i, k, gu;
   float p[BN], q[BN], fu, bu, r;
-  memset(q, 0, sizeof(q));
+  bzero(q, sizeof(q));
   for (k = 0; k < CN; ++k) {
     gu = kGlyphs[g];
     bu = lb[k][b];
@@ -434,7 +434,7 @@ static void PrintImage(unsigned yn, unsigned xn,
   char *v, *vt;
   size = yn * (xn * (32 + (2 + (1 + 3) * 3) * 2 + 1 + 3)) * 1 + 5 + 1;
   size = ROUNDUP(size, FRAMESIZE);
-  CHECK_NE(MAP_FAILED, (vt = mapanon(size)));
+  CHECK_NOTNULL((vt = _mapanon(size)));
   v = RenderImage(vt, yn, xn, rgb);
   *v++ = '\r';
   *v++ = 033;
@@ -488,7 +488,7 @@ static void LoadFileViaImageMagick(const char *path, unsigned yn, unsigned xn,
   const char *convert;
   int pid, ws, pipefds[2];
   char pathbuf[PATH_MAX], dim[32];
-  if (!(convert = commandv("convert", pathbuf))) {
+  if (!(convert = commandv("convert", pathbuf, sizeof(pathbuf)))) {
     fputs("error: `convert` command not found\n"
           "try: apt-get install imagemagick\n",
           stderr);
@@ -532,8 +532,8 @@ static void LoadFile(const char *path, size_t yn, size_t xn, void *rgb) {
   CHECK_EQ(CN, 3);
   data2size = ROUNDUP(sizeof(float) * goty * gotx * CN, FRAMESIZE);
   data3size = ROUNDUP(sizeof(float) * yn * YS * xn * XS * CN, FRAMESIZE);
-  CHECK_NE(MAP_FAILED, (data2 = mapanon(data2size)));
-  CHECK_NE(MAP_FAILED, (data3 = mapanon(data3size)));
+  CHECK_NOTNULL((data2 = _mapanon(data2size)));
+  CHECK_NOTNULL((data3 = _mapanon(data3size)));
   rgb2lin(goty * gotx * CN, data2, data);
   lanczos3(yn * YS, xn * XS, data3, goty, gotx, data2, gotx * 3);
   rgb2std(yn * YS * xn * XS * CN, rgb, data3);
@@ -588,7 +588,7 @@ int main(int argc, char *argv[]) {
   size_t size;
   char *option;
   unsigned yd, xd;
-  showcrashreports();
+  ShowCrashReports();
   GetOpts(argc, argv);
   // if sizes are given, 2 cases:
   //  - positive values: use that as the target size
@@ -603,7 +603,7 @@ int main(int argc, char *argv[]) {
   // FIXME: on the conversion stage should do 2Y because of halfblocks
   // printf( "filename >%s<\tx >%d<\ty >%d<\n\n", filename, x_, y_);
   size = y_ * YS * x_ * XS * CN;
-  CHECK_NE(MAP_FAILED, (rgb = mapanon(ROUNDUP(size, FRAMESIZE))));
+  CHECK_NOTNULL((rgb = _mapanon(ROUNDUP(size, FRAMESIZE))));
   for (i = optind; i < argc; ++i) {
     if (!argv[i]) continue;
     if (m_) {

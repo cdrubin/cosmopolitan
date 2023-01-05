@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/dns/dns.h"
 #include "libc/dns/hoststxt.h"
@@ -24,7 +24,7 @@
 #include "libc/dns/servicestxt.h"
 #include "libc/fmt/conv.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.h"
+#include "libc/mem/gc.h"
 #include "libc/sock/sock.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
@@ -39,8 +39,9 @@
  * @param service is the port number as a string
  * @param hints may be passed to specialize behavior (optional)
  * @param res receives a pointer that must be freed with freeaddrinfo(),
- *     and won't be modified if -1 is returned
+ *     and won't be modified if non-zero is returned
  * @return 0 on success or EAI_xxx value
+ * @threadsafe
  */
 int getaddrinfo(const char *name, const char *service,
                 const struct addrinfo *hints, struct addrinfo **res) {

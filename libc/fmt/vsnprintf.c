@@ -21,6 +21,7 @@
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 
 struct SprintfStr {
   char *p;
@@ -29,7 +30,9 @@ struct SprintfStr {
 };
 
 static int vsnprintfputchar(const char *s, struct SprintfStr *t, size_t n) {
-  if (t->i + n <= t->n) {
+  if (n == 1 && t->i < t->n) {
+    t->p[t->i] = s[0];
+  } else if (t->i + n <= t->n) {
     memcpy(t->p + t->i, s, n);
   } else if (t->i < t->n) {
     memcpy(t->p + t->i, s, t->n - t->i);

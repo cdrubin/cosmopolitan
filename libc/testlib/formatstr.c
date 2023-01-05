@@ -16,15 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
 /**
  * Turns string into code.
  */
-nodiscard testonly char *testlib_formatstr(size_t cw, const void *s, int n) {
+dontdiscard char *testlib_formatstr(size_t cw, const void *s, int n) {
   if (s) {
     switch (cw) {
       case 1:

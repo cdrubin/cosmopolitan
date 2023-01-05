@@ -17,10 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/weaken.h"
+#include "libc/intrin/bsf.h"
+#include "libc/intrin/cxaatexit.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsf.h"
-#include "libc/runtime/cxaatexit.internal.h"
 #include "libc/runtime/runtime.h"
 
 /**
@@ -33,19 +34,25 @@
  * @param pred can be null to match all
  */
 void __cxa_finalize(void *pred) {
+  void *fp, *arg;
   unsigned i, mask;
   struct CxaAtexitBlock *b, *b2;
 StartOver:
+  __cxa_lock();
+StartOverLocked:
   if ((b = __cxa_blocks.p)) {
     for (;;) {
       mask = b->mask;
       while (mask) {
-        i = bsf(mask);
+        i = _bsf(mask);
         mask &= ~(1u << i);
         if (!pred || pred == b->p[i].pred) {
           b->mask &= ~(1u << i);
-          if (b->p[i].fp) {
-            ((void (*)(void *))b->p[i].fp)(b->p[i].arg);
+          if ((fp = b->p[i].fp)) {
+            arg = b->p[i].arg;
+            __cxa_unlock();
+            STRACE("__cxa_finalize(%t, %p)", fp, arg);
+            ((void (*)(void *))fp)(arg);
             goto StartOver;
           }
         }
@@ -53,13 +60,13 @@ StartOver:
       if (!pred) {
         b2 = b->next;
         if (b2) {
-          assert(b != &__cxa_blocks.root);
-          if (weaken(free)) {
-            weaken(free)(b);
+          _npassert(b != &__cxa_blocks.root);
+          if (_weaken(free)) {
+            _weaken(free)(b);
           }
         }
         __cxa_blocks.p = b2;
-        goto StartOver;
+        goto StartOverLocked;
       } else {
         if (b->next) {
           b = b->next;
@@ -69,4 +76,5 @@ StartOver:
       }
     }
   }
+  __cxa_unlock();
 }

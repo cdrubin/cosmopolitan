@@ -16,23 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/arraylist2.internal.h"
-#include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
-#include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/tpenc.h"
 #include "libc/log/check.h"
-#include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/str/thompike.h"
-#include "libc/str/tpenc.h"
+#include "libc/str/unicode.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/unicode/unicode.h"
 #include "libc/x/x.h"
 #include "tool/build/lib/pty.h"
 
@@ -486,7 +480,7 @@ static void PtyWriteTab(struct Pty *pty) {
   }
 }
 
-int PtyAtoi(const char *s, const char **e) {
+static int PtyAtoi(const char *s, const char **e) {
   int i;
   for (i = 0; isdigit(*s); ++s) i *= 10, i += *s - '0';
   if (e) *e = s;
@@ -647,15 +641,18 @@ static void PtyDeleteLines(struct Pty *pty) {
 }
 
 static void PtyReportDeviceStatus(struct Pty *pty) {
-  PtyWriteInput(pty, "\e[0n", 4);
+  static const char report[] = "\e[0n";
+  PtyWriteInput(pty, report, strlen(report));
 }
 
 static void PtyReportPreferredVtType(struct Pty *pty) {
-  PtyWriteInput(pty, "\e[?1;0c", 4);
+  static const char report[] = "\e[?1;0c";
+  PtyWriteInput(pty, report, strlen(report));
 }
 
 static void PtyReportPreferredVtIdentity(struct Pty *pty) {
-  PtyWriteInput(pty, "\e/Z", 4);
+  static const char report[] = "\e/Z";
+  PtyWriteInput(pty, report, strlen(report));
 }
 
 static void PtyBell(struct Pty *pty) {
@@ -693,9 +690,9 @@ static void PtyReportCursorPosition(struct Pty *pty) {
   p = buf;
   *p++ = '\e';
   *p++ = '[';
-  p += uint64toarray_radix10((pty->y + 1) & 0x7fff, p);
+  p = FormatInt32(p, (pty->y + 1) & 0x7fff);
   *p++ = ';';
-  p += uint64toarray_radix10((pty->x + 1) & 0x7fff, p);
+  p = FormatInt32(p, (pty->x + 1) & 0x7fff);
   *p++ = 'R';
   PtyWriteInput(pty, buf, p - buf);
 }
@@ -1105,7 +1102,8 @@ ssize_t PtyWrite(struct Pty *pty, const void *data, size_t n) {
           if (--pty->n8) break;
         }
         wc = pty->u8;
-        if ((0x00 <= wc && wc <= 0x1F) || (0x7F <= wc && wc <= 0x9F)) {
+        if ((0x00 <= wc && wc <= 0x1F) ||  //
+            (0x7F <= wc && wc <= 0x9F)) {
           PtyCntrl(pty, wc);
         } else {
           PtyWriteGlyph(pty, wc, wcwidth(wc));
@@ -1167,10 +1165,45 @@ ssize_t PtyWrite(struct Pty *pty, const void *data, size_t n) {
 }
 
 ssize_t PtyWriteInput(struct Pty *pty, const void *data, size_t n) {
-  PtyConcatInput(pty, data, n);
-  if (!(pty->conf & kPtyNoecho)) {
-    PtyWrite(pty, data, n);
+  int c;
+  bool cr;
+  char *p;
+  const char *q;
+  size_t i, j, m;
+  q = data;
+  p = pty->input.p;
+  i = pty->input.i;
+  m = pty->input.n;
+  if (i + n * 2 + 1 > m) {
+    m = MAX(m, 8);
+    do m += m >> 1;
+    while (i + n * 2 + 1 > m);
+    if (!(p = realloc(p, m))) {
+      return -1;
+    }
+    pty->input.p = p;
+    pty->input.n = m;
   }
+  cr = i && p[i - 1] == '\r';
+  for (j = 0; j < n; ++j) {
+    c = q[j] & 255;
+    if (c == '\r') {
+      cr = true;
+    } else if (cr) {
+      if (c != '\n') {
+        p[i++] = '\n';
+      }
+      cr = false;
+    }
+    p[i++] = c;
+  }
+  if (cr) {
+    p[i++] = '\n';
+  }
+  if (!(pty->conf & kPtyNoecho)) {
+    PtyWrite(pty, p + pty->input.i, i - pty->input.i);
+  }
+  pty->input.i = i;
   return n;
 }
 
@@ -1194,18 +1227,18 @@ ssize_t PtyRead(struct Pty *pty, void *buf, size_t size) {
 static char *PtyEncodeRgb(char *p, int rgb) {
   *p++ = '2';
   *p++ = ';';
-  p += uint64toarray_radix10((rgb & 0x0000ff) >> 000, p);
+  p = FormatUint32(p, (rgb & 0x0000ff) >> 000);
   *p++ = ';';
-  p += uint64toarray_radix10((rgb & 0x00ff00) >> 010, p);
+  p = FormatUint32(p, (rgb & 0x00ff00) >> 010);
   *p++ = ';';
-  p += uint64toarray_radix10((rgb & 0xff0000) >> 020, p);
+  p = FormatUint32(p, (rgb & 0xff0000) >> 020);
   return p;
 }
 
 static char *PtyEncodeXterm256(char *p, int xt) {
   *p++ = '5';
   *p++ = ';';
-  p += uint64toarray_radix10(xt, p);
+  p = FormatUint32(p, xt);
   return p;
 }
 
@@ -1327,7 +1360,7 @@ int PtyAppendLine(struct Pty *pty, struct Buffer *buf, unsigned y) {
         u = wc;
         w = 1;
       } else {
-        u = tpenc(wc);
+        u = _tpenc(wc);
         w = max(1, wcwidth(wc));
       }
     } else {
@@ -1338,7 +1371,7 @@ int PtyAppendLine(struct Pty *pty, struct Buffer *buf, unsigned y) {
       if (u != ' ') {
         np ^= kPtyFlip;
       } else {
-        u = tpenc(u'▂');
+        u = _tpenc(u'▂');
         if (pty->conf & kPtyBlinkcursor) {
           np |= kPtyBlink;
         }

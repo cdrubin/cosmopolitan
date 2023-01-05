@@ -9,7 +9,7 @@
 #include "libc/calls/ttydefaults.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
-#include "libc/sysv/consts/baud.h"
+#include "libc/sysv/consts/baud.internal.h"
 #include "libc/sysv/consts/fio.h"
 #include "libc/sysv/consts/modem.h"
 #include "libc/sysv/consts/pty.h"
@@ -603,7 +603,7 @@ PyInit_termios(void)
     if (IXANY) PyModule_AddIntConstant(m, "IXANY", IXANY);
     if (IXOFF) PyModule_AddIntConstant(m, "IXOFF", IXOFF);
     if (IMAXBEL) PyModule_AddIntConstant(m, "IMAXBEL", IMAXBEL);
-    if (OPOST) PyModule_AddIntConstant(m, "OPOST", OPOST);
+    PyModule_AddIntConstant(m, "OPOST", OPOST);
     if (OLCUC) PyModule_AddIntConstant(m, "OLCUC", OLCUC);
     if (ONLCR) PyModule_AddIntConstant(m, "ONLCR", ONLCR);
     if (OCRNL) PyModule_AddIntConstant(m, "OCRNL", OCRNL);

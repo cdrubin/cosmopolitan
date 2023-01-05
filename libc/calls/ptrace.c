@@ -16,17 +16,42 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/sysv/consts/ptrace.h"
 #include "libc/sysv/errfuns.h"
 
 /**
  * Traces process.
  *
+ * This API is terrible. Consider using sys_ptrace().
+ *
  * @param request can be PTRACE_xxx
  * @note de facto linux only atm
+ * @vforksafe
  */
-long ptrace(int request, int pid, void *addr, void *data) {
-  /* TODO(jart): FreeBSD addr and data args are different */
-  if (request == -1) return einval(); /* see consts.sh */
-  return sys_ptrace(request, pid, addr, data);
+long ptrace(int request, ...) {
+  // TODO(jart): FreeBSD addr and data args are different
+  int pid;
+  va_list va;
+  bool ispeek;
+  long rc, peek, addr, *data;
+  va_start(va, request);
+  pid = va_arg(va, int);
+  addr = va_arg(va, long);
+  data = va_arg(va, long *);
+  va_end(va);
+  if (request == -1) {
+    rc = einval(); /* see consts.sh */
+  } else {
+    ispeek = IsLinux() && request - 1u < 3;
+    if (ispeek) data = &peek;
+    rc = __sys_ptrace(request, pid, addr, data);
+    if (rc != -1 && ispeek) rc = peek;
+  }
+  STRACE("ptrace(%s, %d, %p, %p) → %p% m", DescribePtrace(request), pid, addr,
+         data, rc);
+  return rc;
 }

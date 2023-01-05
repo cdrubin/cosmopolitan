@@ -4,7 +4,7 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/pushpop.h"
+#include "libc/intrin/pushpop.h"
 #include "libc/runtime/dlfcn.h"
 #include "third_party/python/Include/ceval.h"
 #include "third_party/python/Include/dictobject.h"
@@ -17,7 +17,7 @@
 #include "third_party/python/Include/pystate.h"
 /* clang-format off */
 
-#if defined(__FSANITIZE_ADDRESS__) || defined(__FSANITIZE_UNDEFINED__)
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__)
 STATIC_YOINK("__die"); /* to guarantee backtraces */
 #endif
 

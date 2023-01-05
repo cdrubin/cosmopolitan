@@ -1,50 +1,6 @@
 (defconst cosmo-c-keywords-regex
   (let (
 
-        ;;         (kar
-        ;;          '("case"
-        ;;            "do"
-        ;;            "return"
-        ;;            "struct"
-        ;;            "for"
-        ;;            "default"
-        ;;            "auto"
-        ;;            "while"
-        ;;            "else"
-        ;;            "break"
-        ;;            "union"
-        ;;            "switch"
-        ;;            "continue"
-        ;;            "extern"
-        ;;            "sizeof"
-        ;;            "if"
-        ;;            "goto"))
-
-        ;; (ansi
-        ;;  '("static"
-        ;;    "sizeof"
-        ;;    "if"
-        ;;    "typedef"
-        ;;    "const"
-        ;;    "struct"
-        ;;    "for"
-        ;;    "union"
-        ;;    "switch"
-        ;;    "volatile"
-        ;;    "do"
-        ;;    "return"
-        ;;    "goto"
-        ;;    "auto"
-        ;;    "enum"
-        ;;    "else"
-        ;;    "break"
-        ;;    "extern"
-        ;;    "case"
-        ;;    "default"
-        ;;    "register"
-        ;;    "while"
-        ;;    "continue"))
-
         (c99
          '("inline"
            "restrict"
@@ -55,86 +11,32 @@
 
         (c11
          '("_Atomic"
+           "alignas"
            "_Alignas"
+           "alignof"
            "_Alignof"
            "_Noreturn"
            "_Generic"
+           "thread_local"
            "_Thread_local"
+           "static_assert"
            "_Static_assert"
            "_Complex_I"
            "_Imaginary_I"))
 
-        ;; (cxx17
-        ;;  '("this"
-        ;;    "thread_local"
-        ;;    "private"
-        ;;    "catch"
-        ;;    "export"
-        ;;    "operator"
-        ;;    "sizeof"
-        ;;    "dynamic_cast"
-        ;;    "static_assert"
-        ;;    "const_cast"
-        ;;    "const"
-        ;;    "for"
-        ;;    "static_cast"
-        ;;    "union"
-        ;;    "namespace"
-        ;;    "switch"
-        ;;    "virtual"
-        ;;    "class"
-        ;;    "alignas"
-        ;;    "continue"
-        ;;    "volatile"
-        ;;    "template"
-        ;;    "mutable"
-        ;;    "if"
-        ;;    "public"
-        ;;    "friend"
-        ;;    "do"
-        ;;    "inline"
-        ;;    "return"
-        ;;    "goto"
-        ;;    "alignof"
-        ;;    "auto"
-        ;;    "enum"
-        ;;    "typedef"
-        ;;    "else"
-        ;;    "break"
-        ;;    "constexpr"
-        ;;    "new"
-        ;;    "extern"
-        ;;    "using"
-        ;;    "throw"
-        ;;    "asm"
-        ;;    "case"
-        ;;    "typeid"
-        ;;    "decltype"
-        ;;    "reinterpret_cast"
-        ;;    "default"
-        ;;    "noexcept"
-        ;;    "register"
-        ;;    "nullptr"
-        ;;    "try"
-        ;;    "typename"
-        ;;    "while"
-        ;;    "protected"
-        ;;    "static"
-        ;;    "explicit"
-        ;;    "delete"))
-
         (cosmo
          '("__msabi"
+           "function"
            "offsetof"
            "microarchitecture"
            "targetclones"
-           "testonly"
            "forcealignargpointer"
            "textexit"
            "externinline"
            "dontinline"
-           "noclone"
+           "dontclone"
            "donothing"
+           "notsan"
            "printfesque"
            "flattenout"
            "mallocesque"
@@ -147,7 +49,7 @@
            "decltype"
            "forceinline"
            "nocallersavedregisters"
-           "nothrow"
+           "dontthrow"
            "nooptimize"
            "optimizesize"
            "optimizespeed"
@@ -163,14 +65,17 @@
            "reallocesque"
            "nullterminated"
            "unreachable"
-           "hidden"
+           "notpossible"
+           "_Hide"
            "privileged"
            "hasatleast"
            "nodebuginfo"
            "frownedupon"
            "wontreturn"
            "noasan"
+           "nomsan"
            "noubsan"
+           "smashmystack"
            "initarray"
            "mayalias"
            "noinstrument"
@@ -180,7 +85,7 @@
            "warnifused"
            "attributeallocsize"
            "attributeallocalign"
-           "nodiscard"
+           "dontdiscard"
            "nointerpose"
            "compatfn"
            "returnsnonnull"
@@ -201,7 +106,8 @@
            "_Vector_size"))
 
         (gnu
-         '("__inline"
+         '("__extension__"
+           "__inline"
            "__thread"
            "__alignof"
            "__typeof"
@@ -272,6 +178,7 @@
            "__no_sanitize_address__"
            "__no_address_safety_analysis__"
            "__no_sanitize_thread__"
+           "__no_stack_protector__"
            "__leaf__"
            "__no_sanitize_undefined__"
            "__no_split_stack__"
@@ -298,19 +205,20 @@
            "__weak__"
            "__vector_size__"
            "__ms_abi__"
-           "__mode__"))
+           "__mode__"
+           "__seg_fs"
+           "__seg_gs"))
 
         (clang
          '("__optnone__"
-           "__nodebug__"))
+           "__nodebug__"
+           "musttail"
+           "__musttail__"))
 
         )
     (concat "\\_<"
-            (regexp-opt (append ;; kar
-                         ;; ansi
-                         ;; c99
+            (regexp-opt (append
                          c11
-                         ;; cxx17
                          gnu
                          clang
                          cosmo))

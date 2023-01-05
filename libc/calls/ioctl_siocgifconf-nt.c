@@ -17,10 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
+#include "libc/errno.h"
+#include "libc/intrin/cmpxchg.h"
+#include "libc/intrin/weaken.h"
+#include "libc/mem/mem.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/iphlpapi.h"
 #include "libc/nt/runtime.h"
@@ -29,6 +30,7 @@
 #include "libc/runtime/runtime.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/ifconf.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/iff.h"
@@ -51,10 +53,10 @@ struct HostAdapterInfoNode {
 /* Frees all the nodes of the _hostInfo */
 static void freeHostInfo(void) {
   struct HostAdapterInfoNode *next, *node = __hostInfo;
-  if (weaken(free)) {
+  if (_weaken(free)) {
     while (node) {
       next = node->next;
-      weaken(free)(node);
+      _weaken(free)(node);
       node = next;
     }
   }
@@ -101,7 +103,7 @@ struct HostAdapterInfoNode *appendHostInfo(
   struct sockaddr_in *a;
   int attemptNum;
 
-  if (!weaken(calloc) || !(node = weaken(calloc)(1, sizeof(*node)))) {
+  if (!_weaken(calloc) || !(node = _weaken(calloc)(1, sizeof(*node)))) {
     errno = ENOMEM;
     return NULL;
   }
@@ -141,8 +143,8 @@ struct HostAdapterInfoNode *appendHostInfo(
 
   if (attemptNum == MAX_NAME_CLASH) {
     /* Cannot resolve the conflict */
-    if (weaken(free)) {
-      weaken(free)(node);
+    if (_weaken(free)) {
+      _weaken(free)(node);
     }
     errno = EEXIST;
     return NULL;
@@ -251,7 +253,7 @@ static int createHostInfo(struct NtIpAdapterAddresses *firstAdapter) {
   int count, i;
 
   /* __hostInfo must be empty */
-  assert(__hostInfo == NULL);
+  _unassert(__hostInfo == NULL);
 
   for (aa = firstAdapter; aa; aa = aa->Next) {
     /* Skip all the interfaces with no address and the ones that are not AF_INET
@@ -261,7 +263,7 @@ static int createHostInfo(struct NtIpAdapterAddresses *firstAdapter) {
       continue;
     }
 
-    /* Use max IFNAMSIZ-1 chars, leave the last char for eventual conficts */
+    /* Use max IFNAMSIZ-1 chars, leave the last char for eventual conflicts */
     tprecode16to8(baseName, IFNAMSIZ - 1, aa->FriendlyName);
     baseName[IFNAMSIZ - 2] = '\0';
     /* Replace any space with a '_' */
@@ -275,7 +277,7 @@ static int createHostInfo(struct NtIpAdapterAddresses *firstAdapter) {
       if (!node) goto err;
       if (!__hostInfo) {
         __hostInfo = node;
-        if (cmpxchg(&once, false, true)) {
+        if (_cmpxchg(&once, false, true)) {
           atexit(freeHostInfo);
         }
       }
@@ -313,8 +315,8 @@ static int readAdapterAddresses(void) {
     goto err;
   }
 
-  if (!weaken(malloc) ||
-      !(aa = (struct NtIpAdapterAddresses *)weaken(malloc)(size))) {
+  if (!_weaken(malloc) ||
+      !(aa = (struct NtIpAdapterAddresses *)_weaken(malloc)(size))) {
     enomem();
     goto err;
   }
@@ -334,14 +336,14 @@ static int readAdapterAddresses(void) {
     goto err;
   }
 
-  if (weaken(free)) {
-    weaken(free)(aa);
+  if (_weaken(free)) {
+    _weaken(free)(aa);
   }
   return 0;
 
 err:
-  if (weaken(free)) {
-    weaken(free)(aa);
+  if (_weaken(free)) {
+    _weaken(free)(aa);
   }
   freeHostInfo();
   return -1;

@@ -1,34 +1,24 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_SYSCALLS_H_
 #define COSMOPOLITAN_LIBC_CALLS_SYSCALLS_H_
-#include "libc/calls/struct/dirent.h"
-#include "libc/calls/struct/iovec.h"
-#include "libc/calls/struct/rlimit.h"
-#include "libc/calls/struct/rusage.h"
-#include "libc/calls/struct/sigaction.h"
-#include "libc/calls/struct/sigset.h"
-#include "libc/calls/struct/sigval.h"
-#include "libc/calls/struct/stat.h"
-#include "libc/calls/struct/sysinfo.h"
-#include "libc/calls/struct/timespec.h"
-#include "libc/calls/struct/tms.h"
-#include "libc/calls/struct/utsname.h"
-#include "libc/dce.h"
-#include "libc/fmt/pflink.h"
-#include "libc/sysv/consts/s.h"
-#include "libc/sysv/consts/sig.h"
 
-#define EOF      -1  /* end of file */
-#define WEOF     -1u /* end of file (multibyte) */
-#define _IOFBF   0   /* fully buffered */
-#define _IOLBF   1   /* line buffered */
-#define _IONBF   2   /* no buffering */
-#define SEEK_SET 0   /* relative to beginning */
-#define SEEK_CUR 1   /* relative to current position */
-#define SEEK_END 2   /* relative to end */
+#define _POSIX_VERSION  200809L
+#define _POSIX2_VERSION _POSIX_VERSION
+#define _XOPEN_VERSION  700
+
+#define EOF      -1         /* end of file */
+#define WEOF     -1u        /* end of file (multibyte) */
+#define _IOFBF   0          /* fully buffered */
+#define _IOLBF   1          /* line buffered */
+#define _IONBF   2          /* no buffering */
+#define SEEK_SET 0          /* relative to beginning */
+#define SEEK_CUR 1          /* relative to current position */
+#define SEEK_END 2          /* relative to end */
+#define __WALL   0x40000000 /* Wait on all children, regardless of type */
+#define __WCLONE 0x80000000 /* Wait only on non-SIGCHLD children */
 
 #define SIG_ERR ((void (*)(int))(-1))
-#define SIG_DFL ((void *)0)
-#define SIG_IGN ((void *)1)
+#define SIG_DFL ((void (*)(int))0)
+#define SIG_IGN ((void (*)(int))1)
 
 #define MAP_FAILED ((void *)-1)
 
@@ -40,23 +30,16 @@
 #define MAP_HUGE_2MB (21 << MAP_HUGE_SHIFT)
 #define MAP_HUGE_1GB (30 << MAP_HUGE_SHIFT)
 
-#define S_ISDIR(mode)  (((mode)&S_IFMT) == S_IFDIR)
-#define S_ISCHR(mode)  (((mode)&S_IFMT) == S_IFCHR)
-#define S_ISBLK(mode)  (((mode)&S_IFMT) == S_IFBLK)
-#define S_ISREG(mode)  (((mode)&S_IFMT) == S_IFREG)
-#define S_ISFIFO(mode) (((mode)&S_IFMT) == S_IFIFO)
-#define S_ISLNK(mode)  (((mode)&S_IFMT) == S_IFLNK)
-#define S_ISSOCK(mode) (((mode)&S_IFMT) == S_IFSOCK)
-
-#define WCOREDUMP(s)    ((s)&0x80)
-#define WEXITSTATUS(s)  (((s)&0xff00) >> 8)
+#define WCOREDUMP(s)    (0x80 & (s))
+#define WEXITSTATUS(s)  ((0xff00 & (s)) >> 8)
 #define WIFCONTINUED(s) ((s) == 0xffff)
 #define WIFEXITED(s)    (!WTERMSIG(s))
-#define WIFSIGNALED(s)  (((s)&0xffff) - 1u < 0xffu)
-#define WIFSTOPPED(s)   ((short)((((s)&0xffff) * 0x10001) >> 8) > 0x7f00)
-#define WSTOPSIG(s)     WEXITSTATUS(s)
-#define WTERMSIG(s)     ((s)&0x7f)
-#define W_STOPCODE(s)   ((s) << 8 | 0177)
+#define WIFSIGNALED(s)  ((0xffff & (s)) - 1u < 0xffu)
+#define WIFSTOPPED(s) \
+  ((short)(((0xffff & (unsigned)(s)) * 0x10001) >> 8) > 0x7f00)
+#define WSTOPSIG(s)   WEXITSTATUS(s)
+#define WTERMSIG(s)   (127 & (s))
+#define W_STOPCODE(s) ((s) << 8 | 0177)
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
@@ -66,8 +49,6 @@ COSMOPOLITAN_C_START_
 
 typedef int sig_atomic_t;
 
-DIR *fdopendir(int) nodiscard;
-DIR *opendir(const char *) nodiscard;
 bool fileexists(const char *);
 bool isdirectory(const char *);
 bool isexecutable(const char *);
@@ -75,26 +56,27 @@ bool isregularfile(const char *);
 bool issymlink(const char *);
 bool32 isatty(int) nosideeffect;
 bool32 ischardev(int) nosideeffect;
-char *commandv(const char *, char[hasatleast PATH_MAX]);
-char *get_current_dir_name(void) nodiscard;
+char *commandv(const char *, char *, size_t);
+char *get_current_dir_name(void) dontdiscard;
 char *getcwd(char *, size_t);
 char *realpath(const char *, char *);
-char *replaceuser(const char *) nodiscard;
+char *replaceuser(const char *) dontdiscard;
 char *ttyname(int);
-int access(const char *, int) nothrow;
+int access(const char *, int) dontthrow;
 int arch_prctl();
 int chdir(const char *);
-int chmod(const char *, uint32_t);
-int chown(const char *, uint32_t, uint32_t);
+int chmod(const char *, unsigned);
+int chown(const char *, unsigned, unsigned);
 int chroot(const char *);
-int clone(int (*)(void *), void *, int, void *, ...);
 int close(int);
-int closedir(DIR *);
-int creat(const char *, uint32_t);
-int dirfd(DIR *);
+int close_range(unsigned, unsigned, unsigned);
+int closefrom(int);
+int creat(const char *, unsigned);
 int dup(int);
 int dup2(int, int);
 int dup3(int, int, int);
+int eaccess(const char *, int);
+int euidaccess(const char *, int);
 int execl(const char *, const char *, ...) nullterminated();
 int execle(const char *, const char *, ...) nullterminated((1));
 int execlp(const char *, const char *, ...) nullterminated();
@@ -102,60 +84,64 @@ int execv(const char *, char *const[]);
 int execve(const char *, char *const[], char *const[]);
 int execvp(const char *, char *const[]);
 int execvpe(const char *, char *const[], char *const[]);
-int faccessat(int, const char *, int, uint32_t);
+int faccessat(int, const char *, int, int);
 int fadvise(int, uint64_t, uint64_t, int);
 int fchdir(int);
-int fchmod(int, uint32_t) nothrow;
-int fchmodat(int, const char *, uint32_t, int);
-int fchown(int, uint32_t, uint32_t);
-int fchownat(int, const char *, uint32_t, uint32_t, int);
+int fchmod(int, unsigned) dontthrow;
+int fchmodat(int, const char *, unsigned, int);
+int fchown(int, unsigned, unsigned);
+int fchownat(int, const char *, unsigned, unsigned, int);
 int fcntl(int, int, ...);
 int fdatasync(int);
-int filecmp(const char *, const char *);
+int fexecve(int, char *const[], char *const[]);
 int flock(int, int);
 int fork(void);
-int fstat(int, struct stat *);
-int fstatat(int, const char *, struct stat *, int);
 int fsync(int);
 int ftruncate(int, int64_t);
-int getdents(unsigned, void *, unsigned, long *);
 int getdomainname(char *, size_t);
+int getgroups(int, unsigned[]);
 int gethostname(char *, size_t);
-int getpgid(int);
-int getpid(void);
+int getloadavg(double *, int);
+int getpgid(int) libcesque;
+int getpgrp(void) nosideeffect;
+int getpid(void) nosideeffect libcesque;
 int getppid(void);
 int getpriority(int, unsigned);
-int getrlimit(int, struct rlimit *);
-int getrusage(int, struct rusage *);
+int getresgid(unsigned *, unsigned *, unsigned *);
+int getresuid(unsigned *, unsigned *, unsigned *);
+int getsid(int) nosideeffect libcesque;
+int gettid(void) libcesque;
+int ioprio_get(int, int);
+int ioprio_set(int, int, int);
+int issetugid(void);
 int kill(int, int);
 int killpg(int, int);
-int link(const char *, const char *) nothrow;
+int lchmod(const char *, unsigned);
+int lchown(const char *, unsigned, unsigned);
+int link(const char *, const char *) dontthrow;
 int linkat(int, const char *, int, const char *, int);
-int lstat(const char *, struct stat *);
-int lutimes(const char *, const struct timeval[2]);
 int madvise(void *, uint64_t, int);
-int mkdir(const char *, uint32_t);
-int mkdirat(int, const char *, uint32_t);
-int mkfifo(const char *, uint32_t);
-int mkfifoat(int, const char *, uint32_t);
-int mknod(const char *, uint32_t, uint64_t);
-int mknodat(int, const char *, int32_t, uint64_t);
-int mlock(const void *, size_t);
-int mlock2(const void *, size_t, int);
-int mlockall(int);
-int munlock(const void *, size_t);
-int munlockall(void);
+int makedirs(const char *, unsigned);
+int memfd_create(const char *, unsigned int);
+int mincore(void *, size_t, unsigned char *);
+int mkdir(const char *, unsigned);
+int mkdirat(int, const char *, unsigned);
+int mkfifo(const char *, unsigned);
+int mkfifoat(int, const char *, unsigned);
+int mknod(const char *, unsigned, uint64_t);
+int mknodat(int, const char *, int, uint64_t);
 int nice(int);
 int open(const char *, int, ...);
-int openanon(char *, unsigned);
 int openat(int, const char *, int, ...);
 int pause(void);
 int personality(uint64_t);
 int pipe(int[hasatleast 2]);
 int pipe2(int[hasatleast 2], int);
-int posix_fadvise(int, uint64_t, uint64_t, int);
+int pivot_root(const char *, const char *);
+int pledge(const char *, const char *);
+int posix_fadvise(int, int64_t, int64_t, int);
 int posix_madvise(void *, uint64_t, int);
-int prctl();
+int prctl(int, ...);
 int raise(int);
 int reboot(int);
 int remove(const char *);
@@ -163,92 +149,73 @@ int rename(const char *, const char *);
 int renameat(int, const char *, int, const char *);
 int renameat2(long, const char *, long, const char *, int);
 int rmdir(const char *);
-int sched_getaffinity(int, uint64_t, void *);
-int sched_setaffinity(int, uint64_t, const void *);
 int sched_yield(void);
-int setegid(uint32_t);
-int seteuid(uint32_t);
-int setgid(uint32_t);
+int seccomp(unsigned, unsigned, void *);
+int setegid(unsigned);
+int seteuid(unsigned);
+int setfsgid(unsigned);
+int setfsuid(unsigned);
+int setgid(unsigned);
+int setgroups(size_t, const unsigned[]);
 int setpgid(int, int);
+int setpgrp(void);
 int setpriority(int, unsigned, int);
-int setregid(uint32_t, uint32_t);
-int setresgid(uint32_t, uint32_t, uint32_t);
-int setresuid(uint32_t, uint32_t, uint32_t);
-int setreuid(uint32_t, uint32_t);
-int setrlimit(int, const struct rlimit *);
+int setregid(unsigned, unsigned);
+int setresgid(unsigned, unsigned, unsigned);
+int setresuid(unsigned, unsigned, unsigned);
+int setreuid(unsigned, unsigned);
 int setsid(void);
-int setuid(uint32_t);
+int setuid(unsigned);
 int sigignore(int);
 int siginterrupt(int, int);
-int sigprocmask(int, const struct sigset *, struct sigset *);
-int sigqueue(int, int, const union sigval);
-int sigsuspend(const struct sigset *);
-int stat(const char *, struct stat *);
 int symlink(const char *, const char *);
 int symlinkat(const char *, int, const char *);
 int sync_file_range(int, int64_t, int64_t, unsigned);
-int sysctl(const int *, unsigned, void *, size_t *, void *, size_t);
-int sysinfo(struct sysinfo *);
-int touch(const char *, uint32_t);
-int truncate(const char *, uint64_t);
+int sys_iopl(int);
+int sys_mlock(const void *, size_t);
+int sys_mlock2(const void *, size_t, int);
+int sys_mlockall(int);
+int sys_munlock(const void *, size_t);
+int sys_munlockall(void);
+int sys_ptrace(int, ...);
+int sys_sysctl(const int *, unsigned, void *, size_t *, void *, size_t);
+int tcgetpgrp(int);
+int tcsetpgrp(int, int);
+int tgkill(int, int, int);
+int tkill(int, int);
+int tmpfd(void);
+int touch(const char *, unsigned);
+int truncate(const char *, int64_t);
 int ttyname_r(int, char *, size_t);
-int uname(struct utsname *);
 int unlink(const char *);
 int unlink_s(const char **);
 int unlinkat(int, const char *, int);
+int unveil(const char *, const char *);
+int usleep(unsigned);
 int vfork(void) returnstwice;
 int wait(int *);
-int wait3(int *, int, struct rusage *);
-int wait4(int, int *, int, struct rusage *);
 int waitpid(int, int *, int);
 intptr_t syscall(int, ...);
-long ptrace(int, int, void *, void *);
-long telldir(DIR *);
-long times(struct tms *);
-size_t GetFileSize(const char *);
-size_t getfiledescriptorsize(int);
-ssize_t copy_file_range(int, long *, int, long *, size_t, uint32_t);
-ssize_t copyfd(int, int64_t *, int, int64_t *, size_t, uint32_t);
-ssize_t lseek(int, int64_t, unsigned);
+long ptrace(int, ...);
+ssize_t copy_file_range(int, long *, int, long *, size_t, unsigned);
+ssize_t copyfd(int, int64_t *, int, int64_t *, size_t, unsigned);
+ssize_t getfiledescriptorsize(int);
+ssize_t lseek(int, int64_t, int);
 ssize_t pread(int, void *, size_t, int64_t);
-ssize_t preadv(int, struct iovec *, int, int64_t);
 ssize_t pwrite(int, const void *, size_t, int64_t);
-ssize_t pwritev(int, const struct iovec *, int, int64_t);
 ssize_t read(int, void *, size_t);
 ssize_t readansi(int, char *, size_t);
 ssize_t readlink(const char *, char *, size_t);
 ssize_t readlinkat(int, const char *, char *, size_t);
-ssize_t splice(int, int64_t *, int, int64_t *, size_t, uint32_t);
-ssize_t vmsplice(int, const struct iovec *, int64_t, uint32_t);
+ssize_t splice(int, int64_t *, int, int64_t *, size_t, unsigned);
 ssize_t write(int, const void *, size_t);
-struct dirent *readdir(DIR *);
-uint32_t getegid(void) nosideeffect;
-uint32_t geteuid(void) nosideeffect;
-uint32_t getgid(void) nosideeffect;
-uint32_t getpgrp(void) nosideeffect;
-uint32_t getsid(int) nosideeffect;
-uint32_t gettid(void) nosideeffect;
-uint32_t getuid(void) nosideeffect;
-uint32_t umask(int32_t);
-void rewinddir(DIR *);
+unsigned getegid(void) nosideeffect;
+unsigned geteuid(void) nosideeffect;
+unsigned getgid(void) nosideeffect;
+unsigned getuid(void) libcesque;
+unsigned umask(unsigned);
 void sync(void);
 
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § system calls » formatting                                 ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-int dprintf(int, const char *, ...) printfesque(2) paramsnonnull((2));
-int vdprintf(int, const char *, va_list) paramsnonnull();
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § system calls » link-time optimizations                    ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-
-#define dprintf(FD, FMT, ...) (dprintf)(FD, PFLINK(FMT), ##__VA_ARGS__)
-#define vdprintf(FD, FMT, VA) (vdprintf)(FD, PFLINK(FMT), VA)
-
-#endif /* GNU && !ANSI */
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_SYSCALLS_H_ */

@@ -18,25 +18,52 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Duplicates file descriptor, granting it specific number.
+ *
+ * The `O_CLOEXEC` flag shall be cleared from the resulting file
+ * descriptor; see dup3() to preserve it.
+ *
+ * Unlike dup3(), the dup2() function permits oldfd and newfd to be the
+ * same, in which case the only thing this function does is test if
+ * oldfd is open.
  *
  * @param oldfd isn't closed afterwards
  * @param newfd if already assigned, is silently closed beforehand;
  *     unless it's equal to oldfd, in which case dup2() is a no-op
  * @return new file descriptor, or -1 w/ errno
+ * @raise EPERM if pledge() is in play without stdio
+ * @raise EMFILE if `RLIMIT_NOFILE` has been reached
+ * @raise ENOTSUP if `oldfd` is on zip file system
+ * @raise EINTR if a signal handler was called
+ * @raise EBADF is `newfd` negative or too big
+ * @raise EBADF is `oldfd` isn't open
  * @asyncsignalsafe
  * @vforksafe
  */
 int dup2(int oldfd, int newfd) {
-  SYSDEBUG("dup2(%d, %d)", oldfd, newfd);
-  if (oldfd == newfd) return newfd;
-  if (!IsWindows()) {
-    return sys_dup3(oldfd, newfd, 0);
+  int rc;
+  if (__isfdkind(oldfd, kFdZip)) {
+    rc = enotsup();
+  } else if (!IsWindows()) {
+    rc = sys_dup2(oldfd, newfd);
+  } else if (newfd < 0) {
+    rc = ebadf();
+  } else if (oldfd == newfd) {
+    if (__isfdopen(oldfd)) {
+      rc = newfd;
+    } else {
+      rc = ebadf();
+    }
   } else {
-    return sys_dup_nt(oldfd, newfd, 0);
+    rc = sys_dup_nt(oldfd, newfd, 0, -1);
   }
+  STRACE("dup2(%d, %d) → %d% m", oldfd, newfd, rc);
+  return rc;
 }

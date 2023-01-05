@@ -21,9 +21,10 @@
 #include "libc/fmt/strtol.internal.h"
 #include "libc/limits.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 
 /**
- * Decodes 128-bit signed integer from ASCII string.
+ * Decodes intmax_t from ASCII string.
  *
  * @param s is a non-null nul-terminated string
  * @param endptr if non-null will always receive a pointer to the char

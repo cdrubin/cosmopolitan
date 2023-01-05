@@ -15,28 +15,28 @@
 COSMOPOLITAN_C_START_
 
 int snprintf(char *, size_t, const char *, ...) printfesque(3)
-    paramsnonnull((3)) nothrow nocallback;
+    paramsnonnull((3)) dontthrow nocallback;
 int vsnprintf(char *, size_t, const char *, va_list)
-    paramsnonnull((3)) nothrow nocallback;
+    paramsnonnull((3)) dontthrow nocallback;
 int sprintf(char *, const char *, ...) printfesque(2)
-    paramsnonnull((2)) nothrow nocallback frownedupon(snprintf);
+    paramsnonnull((2)) dontthrow nocallback frownedupon(snprintf);
 int vsprintf(char *, const char *, va_list)
-    paramsnonnull((2)) nothrow nocallback frownedupon(vsnprintf);
+    paramsnonnull((2)) dontthrow nocallback frownedupon(vsnprintf);
 int sscanf(const char *, const char *, ...) scanfesque(2);
 int vsscanf(const char *, const char *, va_list);
 int vcscanf(int (*)(void *), int (*)(int, void *), void *, const char *,
             va_list);
-int strerror_r(int, char *, size_t) nothrow nocallback;
-int __fmt(void *, void *, const char *, va_list) hidden;
+int __fmt(void *, void *, const char *, va_list) _Hide;
 char *itoa(int, char *, int) compatfn;
 char *fcvt(double, int, int *, int *);
 char *ecvt(double, int, int *, int *);
+char *gcvt(double, int, char *);
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § string formatting » optimizations                         ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
+#if defined(__GNUC__) && !defined(__STRICT_ANSI__) && !defined(__cplusplus)
 #define sprintf(BUF, FMT, ...)        (sprintf)(BUF, PFLINK(FMT), ##__VA_ARGS__)
 #define vsprintf(BUF, FMT, VA)        (vsprintf)(BUF, PFLINK(FMT), VA)
 #define snprintf(B, Z, F, ...)        (snprintf)(B, Z, PFLINK(F), ##__VA_ARGS__)

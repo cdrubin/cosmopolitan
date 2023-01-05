@@ -18,11 +18,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
-#include "libc/unicode/unicode.h"
+#include "libc/str/unicode.h"
 #include "tool/build/lib/pty.h"
 
 char *render(struct Pty *pty) {

@@ -17,10 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/bswap.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bswap.h"
 #include "libc/macros.internal.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "net/http/http.h"
 
 static const struct ContentTypeExtension {
@@ -40,6 +41,7 @@ static const struct ContentTypeExtension {
     {"cc", "text/plain"},                      //
     {"css", "text/css"},                       //
     {"csv", "text/csv"},                       //
+    {"diff", "text/plain"},                    //
     {"diff", "text/plain"},                    //
     {"doc", "application/msword"},             //
     {"epub", "application/epub+zip"},          //
@@ -70,6 +72,7 @@ static const struct ContentTypeExtension {
     {"ogv", "video/ogg"},                      //
     {"ogx", "application/ogg"},                //
     {"otf", "font/otf"},                       //
+    {"patch", "text/plain"},                   //
     {"pdf", "application/pdf"},                //
     {"png", "image/png"},                      //
     {"rar", "application/vnd.rar"},            //

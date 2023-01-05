@@ -16,8 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/mem/mem.h"
+#include "libc/stdio/append.h"
+#include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
@@ -137,6 +139,7 @@ TEST(appendr, testExtend_zeroFills) {
 TEST(appendr, testAbsent_allocatesNul) {
   char *b = 0;
   ASSERT_NE(-1, appendr(&b, 0));
+  ASSERT_BINEQ(u" ", b);
   EXPECT_EQ(0, appendz(b).i);
   ASSERT_BINEQ(u" ", b);
   free(b);
@@ -157,10 +160,21 @@ TEST(appendd, testMemFail_doesntFreeExistingAllocation) {
   free(b);
 }
 
+TEST(appendd, nontrivialAmountOfMemory) {
+  char *b = 0;
+  int i, n = 40000;
+  for (i = 0; i < n; ++i) {
+    ASSERT_EQ(2, appendd(&b, "hi", 2));
+  }
+  EXPECT_EQ(40000 * 2, appendz(b).i);
+  free(b);
+}
+
 BENCH(vappendf, bench) {
   const char t[] = {0};
   char *b = 0;
   EZBENCH2("appendf", donothing, appendf(&b, "hello"));
+  EZBENCH2("kappendf", donothing, kappendf(&b, "hello"));
   free(b), b = 0;
   EZBENCH2("appends", donothing, appends(&b, "hello"));
   free(b), b = 0;

@@ -19,7 +19,6 @@ THIRD_PARTY_ARGON2_A_DIRECTDEPS =				\
 	LIBC_CALLS						\
 	LIBC_FMT						\
 	LIBC_INTRIN						\
-	LIBC_BITS						\
 	LIBC_NEXGEN32E						\
 	LIBC_MEM						\
 	LIBC_SYSV						\
@@ -27,7 +26,6 @@ THIRD_PARTY_ARGON2_A_DIRECTDEPS =				\
 	LIBC_RUNTIME						\
 	LIBC_SYSV_CALLS						\
 	LIBC_STR						\
-	LIBC_UNICODE						\
 	LIBC_STUBS
 
 THIRD_PARTY_ARGON2_A_DEPS :=					\
@@ -41,6 +39,14 @@ $(THIRD_PARTY_ARGON2_A):					\
 $(THIRD_PARTY_ARGON2_A).pkg:					\
 		$(THIRD_PARTY_ARGON2_A_OBJS)			\
 		$(foreach x,$(THIRD_PARTY_ARGON2_A_DIRECTDEPS),$($(x)_A).pkg)
+
+# we can't use ubsan because:
+#   it's just too slow to be practical (like 6s vs. 13s)
+$(THIRD_PARTY_ARGON2_A_OBJS): private				\
+		OVERRIDE_CFLAGS +=				\
+			-ffunction-sections			\
+			-fdata-sections				\
+			-fno-sanitize=undefined
 
 THIRD_PARTY_ARGON2_LIBS = $(foreach x,$(THIRD_PARTY_ARGON2_ARTIFACTS),$($(x)))
 THIRD_PARTY_ARGON2_SRCS = $(foreach x,$(THIRD_PARTY_ARGON2_ARTIFACTS),$($(x)_SRCS))

@@ -45,11 +45,9 @@ $(LIBC_STR_A).pkg:						\
 		$(LIBC_STR_A_OBJS)				\
 		$(foreach x,$(LIBC_STR_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/libc/str/memmem.o:					\
-		OVERRIDE_CPPFLAGS +=				\
-			-DSTACK_FRAME_UNLIMITED
-
-o/$(MODE)/libc/str/dosdatetimetounix.o:				\
+o/$(MODE)/libc/str/wmemset.o					\
+o/$(MODE)/libc/str/memset16.o					\
+o/$(MODE)/libc/str/dosdatetimetounix.o: private			\
 		OVERRIDE_CFLAGS +=				\
 			-O3
 
@@ -64,26 +62,61 @@ o/$(MODE)/libc/str/getzipcfileoffset.o				\
 o/$(MODE)/libc/str/getzipcfileuncompressedsize.o		\
 o/$(MODE)/libc/str/getziplfilecompressedsize.o			\
 o/$(MODE)/libc/str/getziplfileuncompressedsize.o		\
-o/$(MODE)/libc/str/getzipcfiletimestamps.o:			\
+o/$(MODE)/libc/str/getzipcfiletimestamps.o: private		\
 		OVERRIDE_CFLAGS +=				\
 			-Os
 
 o/$(MODE)/libc/str/iswpunct.o					\
 o/$(MODE)/libc/str/iswupper.o					\
 o/$(MODE)/libc/str/iswlower.o					\
-o/$(MODE)/libc/str/iswseparator.o:				\
+o/$(MODE)/libc/str/iswseparator.o: private			\
 		OVERRIDE_CFLAGS +=				\
 			-fno-jump-tables
 
 o/$(MODE)/libc/str/bcmp.o					\
+o/$(MODE)/libc/str/strcmp.o					\
 o/$(MODE)/libc/str/windowsdurationtotimeval.o			\
 o/$(MODE)/libc/str/windowsdurationtotimespec.o			\
 o/$(MODE)/libc/str/timevaltowindowstime.o			\
 o/$(MODE)/libc/str/timespectowindowstime.o			\
 o/$(MODE)/libc/str/windowstimetotimeval.o			\
-o/$(MODE)/libc/str/windowstimetotimespec.o:			\
+o/$(MODE)/libc/str/windowstimetotimespec.o: private		\
 		OVERRIDE_CFLAGS +=				\
-			-O3
+			-O2
+
+# we can't use compiler magic because:
+#   kprintf() depends on these functions
+o/$(MODE)/libc/fmt/strsignal.greg.o: private			\
+		OVERRIDE_CFLAGS +=				\
+			-fpie					\
+			-ffreestanding				\
+			$(NO_MAGIC)
+
+o/$(MODE)/libc/str/eastasianwidth.bin:				\
+		libc/str/eastasianwidth.txt			\
+		o/$(MODE)/tool/decode/mkwides.com
+	@$(COMPILE) -AMKWIDES -T$@ o/$(MODE)/tool/decode/mkwides.com -o $@ $<
+o/$(MODE)/libc/str/eastasianwidth.bin.lz4:			\
+		o/$(MODE)/libc/str/eastasianwidth.bin		\
+		o/$(MODE)/third_party/lz4cli/lz4cli.com
+	@$(COMPILE) -ALZ4 -T$@ o/$(MODE)/third_party/lz4cli/lz4cli.com -q -f -9 --content-size $< $@
+o/$(MODE)/libc/str/eastasianwidth.s:				\
+		o/$(MODE)/libc/str/eastasianwidth.bin.lz4	\
+		o/$(MODE)/tool/build/lz4toasm.com
+	@$(COMPILE) -ABIN2ASM -T$@ o/$(MODE)/tool/build/lz4toasm.com -s kEastAsianWidth -o $@ $<
+
+o/$(MODE)/libc/str/combiningchars.bin:				\
+		libc/str/strdata.txt				\
+		o/$(MODE)/tool/decode/mkcombos.com
+	@$(COMPILE) -AMKCOMBOS -T$@ o/$(MODE)/tool/decode/mkcombos.com -o $@ $<
+o/$(MODE)/libc/str/combiningchars.bin.lz4:			\
+		o/$(MODE)/libc/str/combiningchars.bin		\
+		o/$(MODE)/third_party/lz4cli/lz4cli.com
+	@$(COMPILE) -ALZ4 -T$@ o/$(MODE)/third_party/lz4cli/lz4cli.com -q -f -9 --content-size $< $@
+o/$(MODE)/libc/str/combiningchars.s:				\
+		o/$(MODE)/libc/str/combiningchars.bin.lz4	\
+		o/$(MODE)/tool/build/lz4toasm.com
+	@$(COMPILE) -ABIN2ASM -T$@ o/$(MODE)/tool/build/lz4toasm.com -s kCombiningChars -o $@ $<
 
 LIBC_STR_LIBS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)))
 LIBC_STR_SRCS = $(foreach x,$(LIBC_STR_ARTIFACTS),$($(x)_SRCS))

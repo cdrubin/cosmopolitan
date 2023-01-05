@@ -20,7 +20,7 @@
 #include "libc/dce.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
 #include "libc/str/str.h"
 
 #define W sizeof(size_t)
@@ -53,13 +53,17 @@ ssize_t appendd(char **b, const void *s, size_t l) {
     z.n = ROUNDUP(z.n, W);
     if ((p = realloc(p, z.n))) {
       z.n = malloc_usable_size(p);
-      assert(!(z.n & (W - 1)));
+      _unassert(!(z.n & (W - 1)));
       *b = p;
     } else {
       return -1;
     }
   }
-  *(char *)mempcpy(p + z.i, s, l) = 0;
+  if (l) {
+    *(char *)mempcpy(p + z.i, s, l) = 0;
+  } else {
+    p[z.i] = 0;
+  }
   z.i += l;
   if (!IsTiny() && W == 8) z.i |= (size_t)APPEND_COOKIE << 48;
   *(size_t *)(p + z.n - W) = z.i;

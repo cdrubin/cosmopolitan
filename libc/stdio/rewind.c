@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 
 /**
@@ -26,6 +27,8 @@
  * EOF state, without reopening it.
  */
 void rewind(FILE *f) {
-  fseek(f, 0, SEEK_SET);
+  flockfile(f);
+  fseeko_unlocked(f, 0, SEEK_SET);
   f->state = 0;
+  funlockfile(f);
 }

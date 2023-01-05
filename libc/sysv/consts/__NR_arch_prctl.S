@@ -1,2 +1,0 @@
-#include "libc/sysv/consts/syscon.internal.h"
-.syscon nr,__NR_arch_prctl,0x009e,0xfff,0x00a5,0x00a5,0xfff,0xfff

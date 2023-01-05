@@ -16,16 +16,21 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/dprintf.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/internal.h"
+#include "libc/macros.internal.h"
 #include "libc/nt/events.h"
 #include "libc/nt/runtime.h"
-#include "libc/runtime/valist.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/sockaddr.h"
 #include "libc/sock/syslog.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -35,7 +40,6 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/sock.h"
 #include "libc/time/struct/tm.h"
-#include "libc/time/time.h"
 
 /* Note: log_facility should be initialized with LOG_USER by default,
  * but since LOG_USER is not a constant value, we cannot initialize it
@@ -43,13 +47,18 @@
  * for the first time.
  */
 static int log_facility = -1;
-static char log_ident[32];
+static char16_t log_ident[32];
 static int log_opt;
 static int log_mask;
 static uint16_t log_id; /* Used for Windows EvtID */
 static int64_t log_fd = -1;
 
-static const struct sockaddr_un log_addr = {AF_UNIX, "/dev/log"};
+static const char *const kLogPaths[] = {
+    "/dev/log",
+    // "/var/run/log", // TODO: Help with XNU and FreeBSD.
+};
+
+static struct sockaddr_un log_addr = {AF_UNIX, "/dev/log"};
 
 static int64_t Time(int64_t *tp) {
   struct timespec ts;
@@ -72,16 +81,20 @@ forceinline int is_lost_conn(int e) {
 }
 
 static void __openlog() {
+  int i;
   if (IsWindows()) {
-    log_fd = RegisterEventSourceA(NULL, log_ident);
+    log_fd = RegisterEventSource(NULL, log_ident);
   } else {
     log_fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (log_fd >= 0) {
-      int rc = connect(log_fd, (void *)&log_addr, sizeof(log_addr));
-      if (rc < 0) {
-        printf("ERR: connect(openlog) failed: %s (errno=%d)\n", strerror(errno),
-               errno);
+      for (i = 0; i < ARRAYLEN(kLogPaths); ++i) {
+        strcpy(log_addr.sun_path, kLogPaths[i]);
+        if (!connect(log_fd, (void *)&log_addr, sizeof(log_addr))) {
+          return;
+        }
       }
+      printf("ERR: connect(openlog) failed: %s (errno=%d)\n", strerror(errno),
+             errno);
     }
   }
 }
@@ -112,16 +125,13 @@ void vsyslog(int priority, const char *message, va_list ap) {
   int l, l2;
   int hlen; /* If LOG_CONS is specified, use to store the point in
              * the header message after the timestamp */
-
+  BLOCK_CANCELLATIONS;
   if (log_fd < 0) __openlog();
-
   if (!(priority & LOG_FACMASK)) priority |= log_facility;
-
   /* Build the time string */
   now = Time(NULL);
   gmtime_r(&now, &tm);
   strftime(timebuf, sizeof(timebuf), "%b %e %T", &tm);
-
   pid = (log_opt & LOG_PID) ? getpid() : 0;
   /* This is a clever trick to optionally include "[<pid>]"
    * only if pid != 0. When pid==0, the while "[%.0d]" is skipped:
@@ -134,10 +144,9 @@ void vsyslog(int priority, const char *message, va_list ap) {
    */
   l = snprintf(buf, sizeof(buf), "<%d>%s ", priority, timebuf);
   hlen = l;
-  l += snprintf(buf + l, sizeof(buf) - l, "%s%s%.0d%s: ", log_ident, "[" + !pid,
-                pid, "]" + !pid);
+  l += snprintf(buf + l, sizeof(buf) - l, "%hs%s%.0d%s: ", log_ident,
+                "[" + !pid, pid, "]" + !pid);
   errno = errno_save;
-
   /* Append user message */
   l2 = vsnprintf(buf + l, sizeof(buf) - l, message, ap);
   if (l2 >= 0) {
@@ -154,37 +163,17 @@ void vsyslog(int priority, const char *message, va_list ap) {
        * - First try to send it to syslogd
        * - If fails and LOG_CONS is provided, writes to /dev/console
        */
-
-#if 0
-      if (send(log_fd, buf, l, 0) < 0 && (!is_lost_conn(errno)
-            || connect(log_fd, (void *)&log_addr, sizeof(log_addr)) < 0
-            || send(log_fd, buf, l, 0) < 0)
-          && (log_opt & LOG_CONS)) {
-        int fd = open("/dev/console", O_WRONLY|O_NOCTTY);
+      if (send(log_fd, buf, l, 0) < 0 &&
+          (!is_lost_conn(errno) ||
+           connect(log_fd, (void *)&log_addr, sizeof(log_addr)) < 0 ||
+           send(log_fd, buf, l, 0) < 0) &&
+          (log_opt & LOG_CONS)) {
+        int fd = open("/dev/console", O_WRONLY | O_NOCTTY);
         if (fd >= 0) {
-          dprintf(fd, "%.*s", l-hlen, buf+hlen);
+          dprintf(fd, "%.*s", l - hlen, buf + hlen);
           close(fd);
         }
       }
-#else
-      int rc = send(log_fd, buf, l, 0);
-      if (rc < 0) {
-        printf("ERR: send(1) failed: %s (errno=%d)\n", strerror(errno), errno);
-        if (!is_lost_conn(errno)) {
-          rc = connect(log_fd, (void *)&log_addr, sizeof(log_addr));
-          if (rc < 0) {
-            printf("ERR: connect(syslog) failed: %s (errno=%d)\n",
-                   strerror(errno), errno);
-          } else {
-            rc = send(log_fd, buf, l, 0);
-            if (rc < 0) {
-              printf("ERR: send(2) failed: %s (errno=%d)\n", strerror(errno),
-                     errno);
-            }
-          }
-        }
-      }
-#endif
     } else {
       uint16_t evtType;
       uint32_t evtID;
@@ -217,9 +206,11 @@ void vsyslog(int priority, const char *message, va_list ap) {
                    NULL /* Arguments */);
       ++log_id;
     }
-
-    if (log_opt & LOG_PERROR) dprintf(2, "%.*s", l - hlen, buf + hlen);
+    if (log_opt & LOG_PERROR) {
+      dprintf(2, "%.*s", l - hlen, buf + hlen);
+    }
   }
+  ALLOW_CANCELLATIONS;
 }
 
 /**
@@ -236,9 +227,7 @@ void vsyslog(int priority, const char *message, va_list ap) {
  */
 int setlogmask(int maskpri) {
   int ret;
-  if (log_facility == -1) {
-    __initlog();
-  }
+  if (log_facility == -1) __initlog();
   ret = log_mask;
   if (maskpri) log_mask = LOG_PRI(maskpri);
   return ret;
@@ -273,21 +262,15 @@ int setlogmask(int maskpri) {
  */
 void openlog(const char *ident, int opt, int facility) {
   size_t n;
-
-  if (log_facility == -1) {
-    __initlog();
-  }
-  if (!ident) {
-    ident = program_invocation_short_name;
-  }
-  n = strnlen(ident, sizeof(log_ident) - 1);
-  memcpy(log_ident, ident, n);
-  log_ident[n] = 0;
+  BLOCK_CANCELLATIONS;
+  if (log_facility == -1) __initlog();
+  if (!ident) ident = firstnonnull(program_invocation_short_name, "unknown");
+  tprecode8to16(log_ident, ARRAYLEN(log_ident), ident);
   log_opt = opt;
   log_facility = facility;
   log_id = 0;
-
   if ((opt & LOG_NDELAY) && log_fd < 0) __openlog();
+  ALLOW_CANCELLATIONS;
 }
 
 /**
@@ -327,13 +310,12 @@ void closelog(void) {
   if (log_facility == -1) {
     __initlog();
   }
-  if (log_fd == -1) {
-    return;
+  if (log_fd != -1) {
+    if (IsWindows()) {
+      DeregisterEventSource(log_fd);
+    } else {
+      close(log_fd);
+    }
+    log_fd = -1;
   }
-  if (IsWindows()) {
-    DeregisterEventSource(log_fd);
-  } else {
-    close(log_fd);
-  }
-  log_fd = -1;
 }

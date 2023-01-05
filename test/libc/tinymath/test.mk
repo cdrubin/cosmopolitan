@@ -28,7 +28,6 @@ TEST_LIBC_TINYMATH_DIRECTDEPS =					\
 	LIBC_INTRIN						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
-	LIBC_RAND						\
 	LIBC_STDIO						\
 	LIBC_RUNTIME						\
 	LIBC_STR						\
@@ -36,9 +35,9 @@ TEST_LIBC_TINYMATH_DIRECTDEPS =					\
 	LIBC_SYSV						\
 	LIBC_TESTLIB						\
 	LIBC_TINYMATH						\
-	LIBC_UNICODE						\
 	LIBC_X							\
-	THIRD_PARTY_GDTOA
+	THIRD_PARTY_GDTOA					\
+	THIRD_PARTY_DOUBLECONVERSION
 
 TEST_LIBC_TINYMATH_DEPS :=					\
 	$(call uniq,$(foreach x,$(TEST_LIBC_TINYMATH_DIRECTDEPS),$($(x))))
@@ -53,10 +52,10 @@ o/$(MODE)/test/libc/tinymath/%.com.dbg:				\
 		o/$(MODE)/test/libc/tinymath/tinymath.pkg	\
 		$(LIBC_TESTMAIN)				\
 		$(CRT)						\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(TEST_LIBC_TINYMATH_OBJS):					\
+$(TEST_LIBC_TINYMATH_OBJS): private				\
 		OVERRIDE_CFLAGS +=				\
 			-fno-builtin
 

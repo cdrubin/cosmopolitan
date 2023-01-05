@@ -27,7 +27,6 @@ TEST_DSP_SCALE_DIRECTDEPS =				\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
@@ -50,7 +49,7 @@ o/$(MODE)/test/dsp/scale/%.com.dbg:			\
 		o/$(MODE)/test/dsp/scale/scale.pkg	\
 		$(LIBC_TESTMAIN)			\
 		$(CRT)					\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 .PHONY: o/$(MODE)/test/dsp/scale

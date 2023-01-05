@@ -34,20 +34,20 @@ o/$(MODE)/third_party/lz4cli/lz4.o			\
 o/$(MODE)/third_party/lz4cli/lz4io.o			\
 o/$(MODE)/third_party/lz4cli/lz4hc.o			\
 o/$(MODE)/third_party/lz4cli/lz4frame.o			\
-o/$(MODE)/third_party/lz4cli/datagen.o:			\
+o/$(MODE)/third_party/lz4cli/datagen.o: private		\
 	DEFAULT_CPPFLAGS +=				\
 		-DSTACK_FRAME_UNLIMITED
 
 THIRD_PARTY_LZ4CLI_DIRECTDEPS =				\
 	LIBC_INTRIN					\
 	LIBC_STDIO					\
-	LIBC_TIME					\
-	LIBC_UNICODE
+	LIBC_LOG					\
+	LIBC_TIME
 
 THIRD_PARTY_LZ4CLI_DEPS :=				\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_LZ4CLI_DIRECTDEPS),$($(x))))
 
-$(THIRD_PARTY_LZ4CLI_OBJS):				\
+$(THIRD_PARTY_LZ4CLI_OBJS): private			\
 	DEFAULT_CPPFLAGS +=				\
 		-isystem third_party/lz4cli
 
@@ -55,8 +55,11 @@ o/$(MODE)/third_party/lz4cli/lz4cli.com.dbg:		\
 		$(THIRD_PARTY_LZ4CLI_DEPS)		\
 		$(THIRD_PARTY_LZ4CLI_OBJS)		\
 		$(CRT)					\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
+
+o/$(MODE)/third_party/lz4cli/lz4cli.o:			\
+		third_party/lz4cli/COPYING
 
 $(THIRD_PARTY_LZ4CLI_OBJS):				\
 		$(BUILD_FILES)				\

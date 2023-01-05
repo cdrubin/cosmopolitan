@@ -18,10 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
+#include "libc/intrin/bsr.h"
 #include "libc/log/check.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/sock/sock.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
@@ -62,9 +62,9 @@ static bool IsOverlappingIov(struct iovec *a, struct iovec *b) {
  */
 void PersistObject(const char *path, size_t align,
                    const struct ObjectParam *obj) {
+  const char *pad;
   struct iovec *iov;
   int i, n, fd, iovlen;
-  const char *tmp, *pad;
   long len, size, bytes, filesize;
   unsigned char *hdr, *p1, *p2, **pp;
   intptr_t arrayptroffset, arraydataoffset;
@@ -76,10 +76,9 @@ void PersistObject(const char *path, size_t align,
   CHECK(IsWithin(sizeof(*obj->abi), obj->abi, obj->size, obj->p));
   for (n = i = 0; obj->arrays[i].size; ++i) ++n;
   iovlen = (n + 1) * 2;
-  pad = gc(xcalloc(align, 1));
-  hdr = gc(xmalloc(obj->size));
-  iov = gc(xcalloc(iovlen, sizeof(*iov)));
-  tmp = gc(xasprintf("%s.%d.%s", path, getpid(), "tmp"));
+  pad = _gc(xcalloc(align, 1));
+  hdr = _gc(xmalloc(obj->size));
+  iov = _gc(xcalloc(iovlen, sizeof(*iov)));
   bytes = obj->size;
   iov[0].iov_base = memcpy(hdr, obj->p, obj->size);
   iov[0].iov_len = bytes;
@@ -95,7 +94,7 @@ void PersistObject(const char *path, size_t align,
     p2 = obj->arrays[i].pp;
     arrayptroffset = p2 - p1;
     arraydataoffset = filesize;
-    CHECK((!len || bsrl(len) + bsrl(size) < 31),
+    CHECK((!len || _bsrl(len) + _bsrl(size) < 31),
           "path=%s i=%d len=%,lu size=%,lu", path, i, len, size);
     CHECK(IsWithin(sizeof(void *), pp, obj->size, obj->p));
     CHECK(!IsOverlapping(pp, pp + sizeof(void *), obj->magic,
@@ -115,8 +114,7 @@ void PersistObject(const char *path, size_t align,
           iov[(i + 0) * 2].iov_base, iov[(i + 0) * 2].iov_len, (i + 1) * 2,
           iov[(i + 1) * 2].iov_base, iov[(i + 1) * 2].iov_len, path);
   }
-  CHECK_NE(-1, (fd = open(tmp, O_CREAT | O_WRONLY | O_EXCL, 0644)), "%s", tmp);
+  CHECK_NE(-1, (fd = creat(path, 0644)), "%s", path);
   CHECK_EQ(filesize, writev(fd, iov, iovlen));
   CHECK_NE(-1, close(fd));
-  CHECK_NE(-1, rename(tmp, path), "%s", path);
 }

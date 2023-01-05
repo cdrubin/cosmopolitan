@@ -16,9 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/ioctl.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/weaken.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sysv/errfuns.h"
@@ -35,11 +37,11 @@ int ioctl_default(int fd, uint64_t request, ...) {
     return sys_ioctl(fd, request, arg);
   } else if (__isfdopen(fd)) {
     if (g_fds.p[fd].kind == kFdSocket) {
-      handle = g_fds.p[fd].handle;
-      if ((rc = weaken(__sys_ioctlsocket_nt)(handle, request, arg)) != -1) {
+      handle = __getfdhandleactual(fd);
+      if ((rc = _weaken(__sys_ioctlsocket_nt)(handle, request, arg)) != -1) {
         return rc;
       } else {
-        return weaken(__winsockerr)();
+        return _weaken(__winsockerr)();
       }
     } else {
       return eopnotsupp();

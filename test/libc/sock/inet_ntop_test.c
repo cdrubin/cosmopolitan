@@ -41,29 +41,29 @@ TEST(inet_ntop, testBadFamily) {
   uint8_t localhost[4] = {127, 0, 0, 1};
   ASSERT_EQ(NULL, inet_ntop(666, localhost, buf, sizeof(buf)));
   EXPECT_EQ(EAFNOSUPPORT, errno);
-  ASSERT_STREQ("", buf);
+  ASSERT_STREQ("hi", buf);
 }
 
 TEST(inet_ntop, testNoSpace) {
   char *buf = memcpy(malloc(16), "hi", 3);
   uint8_t localhost[4] = {127, 0, 0, 1};
-  ASSERT_EQ(NULL, inet_ntop(AF_INET, localhost, buf, 0));
+  EXPECT_EQ(NULL, inet_ntop(AF_INET, localhost, buf, 1));
   EXPECT_EQ(ENOSPC, errno);
   ASSERT_STREQ("hi", buf);
   ASSERT_EQ(NULL, inet_ntop(AF_INET, localhost, buf, 7));
-  ASSERT_STREQ("", buf);
+  ASSERT_STREQ("hi", buf);
   free(buf);
 }
 
 TEST(inet_ntop, ipv6_testMin_isJustColons) {
-  char buf[72];
+  char buf[46];
   uint8_t ip[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   EXPECT_STREQ("::", inet_ntop(AF_INET6, ip, buf, sizeof(buf)));
 }
 
 TEST(inet_ntop, ipv6_testMax) {
-  char buf[72];
+  char buf[46];
   uint8_t ip[16] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
   EXPECT_STREQ("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
@@ -71,14 +71,14 @@ TEST(inet_ntop, ipv6_testMax) {
 }
 
 TEST(inet_ntop, ipv6_loopback_isColonsThenJustOne) {
-  char buf[72];
+  char buf[46];
   uint8_t ip[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
   EXPECT_STREQ("::1", inet_ntop(AF_INET6, ip, buf, sizeof(buf)));
 }
 
 TEST(inet_ntop, ipv6_rfc4291example) {
-  char buf[72];
+  char buf[46];
   uint8_t ip[16] = {0x20, 0x01, 0x0D, 0xB8, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x08, 0x08, 0x00, 0x20, 0x0C, 0x41, 0x7A};
   EXPECT_STREQ("2001:db8::8:800:200c:417a",
@@ -86,14 +86,14 @@ TEST(inet_ntop, ipv6_rfc4291example) {
 }
 
 TEST(inet_ntop, ipv6_leading) {
-  char buf[72];
+  char buf[46];
   uint8_t ip[16] = {0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   EXPECT_STREQ("1::", inet_ntop(AF_INET6, ip, buf, sizeof(buf)));
 }
 
 TEST(inet_ntop, ipv6_kindOfLeading) {
-  char buf[72];
+  char buf[46];
   uint8_t ip[16] = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   EXPECT_STREQ("100::", inet_ntop(AF_INET6, ip, buf, sizeof(buf)));

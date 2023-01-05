@@ -16,34 +16,75 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/assert.h"
+#include "libc/calls/blocksigs.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
+#include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/sigset.internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/nt/process.h"
+#include "libc/runtime/internal.h"
+#include "libc/sysv/consts/sig.h"
+#include "libc/thread/posixthread.internal.h"
+#include "libc/thread/tls.h"
+
+int _fork(uint32_t dwCreationFlags) {
+  struct CosmoTib *tib;
+  struct PosixThread *pt;
+  int ax, dx, tid, parent;
+  BLOCK_SIGNALS;
+  if (__threaded && _weaken(_pthread_onfork_prepare)) {
+    _weaken(_pthread_onfork_prepare)();
+  }
+  if (!IsWindows()) {
+    ax = sys_fork();
+  } else {
+    ax = sys_fork_nt(dwCreationFlags);
+  }
+  if (!ax) {
+    if (!IsWindows()) {
+      dx = sys_getpid().ax;
+    } else {
+      dx = GetCurrentProcessId();
+    }
+    parent = __pid;
+    __pid = dx;
+    if (__tls_enabled) {
+      tib = __get_tls();
+      tid = IsLinux() ? dx : sys_gettid();
+      atomic_store_explicit(&tib->tib_tid, tid, memory_order_relaxed);
+      if ((pt = (struct PosixThread *)tib->tib_pthread)) {
+        atomic_store_explicit(&pt->ptid, tid, memory_order_relaxed);
+      }
+    }
+    if (__threaded && _weaken(_pthread_onfork_child)) {
+      _weaken(_pthread_onfork_child)();
+    }
+    STRACE("fork() → 0 (child of %d)", parent);
+  } else {
+    if (__threaded && _weaken(_pthread_onfork_parent)) {
+      _weaken(_pthread_onfork_parent)();
+    }
+    STRACE("fork() → %d% m", ax);
+  }
+  ALLOW_SIGNALS;
+  return ax;
+}
 
 /**
  * Creates new process.
  *
- * @return 0 to child, child pid to parent, or -1 on error
+ * @return 0 to child, child pid to parent, or -1 w/ errno
+ * @raise EAGAIN if `RLIMIT_NPROC` was exceeded or system lacked resources
+ * @raise ENOMEM if we require more vespene gas
  * @asyncsignalsafe
+ * @threadsafe
  */
 int fork(void) {
-  axdx_t ad;
-  int ax, dx;
-  if (!IsWindows()) {
-    ad = sys_fork();
-    ax = ad.ax;
-    dx = ad.dx;
-    if (IsXnu() && ax != -1) {
-      /* eax always returned with childs pid */
-      /* edx is 0 for parent and 1 for child */
-      ax &= dx - 1;
-    }
-  } else {
-    ax = sys_fork_nt();
-  }
-  if (!ax) {
-    __onfork();
-  }
-  return ax;
+  return _fork(0);
 }

@@ -26,8 +26,7 @@ STATIC_YOINK("_init_stderr");
  */
 FILE *stderr;
 
-hidden FILE __stderr;
-hidden unsigned char __stderr_buf[BUFSIZ];
+_Hide FILE __stderr;
 
 static textstartup void __stderr_init() {
   __fflush_register(stderr);

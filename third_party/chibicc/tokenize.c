@@ -1,7 +1,8 @@
+#include "libc/intrin/bsf.h"
 #include "libc/log/log.h"
-#include "libc/nexgen32e/bsf.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "third_party/chibicc/chibicc.h"
 #include "third_party/chibicc/file.h"
 #include "third_party/chibicc/kw.h"
@@ -97,6 +98,9 @@ bool consume(Token **rest, Token *tok, char *str, size_t n) {
 
 // Ensure that the current token is `op`.
 Token *skip(Token *tok, char op) {
+  while (tok->kind == TK_JAVADOWN) {
+    tok = tok->next;
+  }
   if (tok->len == 1 && *tok->loc == op) {
     return tok->next;
   } else {
@@ -676,7 +680,7 @@ static void convert_universal_chars(char *p) {
           p += 16;
           q += 16;
         } else {
-          m = bsf(m);
+          m = _bsf(m);
           memmove(q, p, m);
           p += m;
           q += m;

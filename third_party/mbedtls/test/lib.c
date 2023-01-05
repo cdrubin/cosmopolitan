@@ -14,12 +14,12 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-#include "libc/assert.h"
-#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/libfatal.internal.h"
@@ -27,16 +27,17 @@
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/vendor.internal.h"
 #include "libc/nt/runtime.h"
-#include "libc/rand/rand.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/nr.h"
-#include "libc/x/x.h"
+#include "libc/time/time.h"
+#include "libc/x/xasprintf.h"
 #include "third_party/mbedtls/config.h"
 #include "third_party/mbedtls/endian.h"
 #include "third_party/mbedtls/error.h"
@@ -75,19 +76,12 @@ jmp_buf jmp_tmp;
 int option_verbose = 1;
 mbedtls_test_info_t mbedtls_test_info;
 
-static uint64_t Rando(void) {
-  static uint64_t x = 0x18abac12f3191aed;
-  uint64_t z = (x += 0x9e3779b97f4a7c15);
-  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-  z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-  return z ^ (z >> 31);
-}
-
 int mbedtls_test_platform_setup(void) {
   char *p;
   int ret = 0;
   static char mybuf[2][BUFSIZ];
-  showcrashreports();
+  ShowCrashReports();
+  makedirs("o/tmp", 0755);
   setvbuf(stdout, mybuf[0], _IOLBF, BUFSIZ);
   setvbuf(stderr, mybuf[1], _IOLBF, BUFSIZ);
 #if defined(MBEDTLS_PLATFORM_C)
@@ -125,7 +119,7 @@ int mbedtls_hardware_poll(void *wut, unsigned char *p, size_t n, size_t *olen) {
   size_t i, j;
   unsigned char b[8];
   for (i = 0; i < n; ++i) {
-    x = Rando();
+    x = lemur64();
     WRITE64LE(b, x);
     for (j = 0; j < 8 && i + j < n; ++j) {
       p[i + j] = b[j];
@@ -794,7 +788,8 @@ static int convert_params(size_t cnt, char **params, int *int_params_store) {
  *
  * \return      0 for success else 1
  */
-static dontinline int test_snprintf(size_t n, const char *ref_buf, int ref_ret) {
+static dontinline int test_snprintf(size_t n, const char *ref_buf,
+                                    int ref_ret) {
   int ret;
   char buf[10] = "xxxxxxxxx";
   const char ref[10] = "xxxxxxxxx";
@@ -1010,8 +1005,8 @@ int execute_tests(int argc, const char **argv, const char *default_filename) {
     file = fopen(test_filename, "r");
     if (file == NULL) {
       WRITE("%s (%s) failed to open test file: %s %m\n",
-            program_invocation_short_name, program_executable_name,
-            test_filename);
+            firstnonnull(program_invocation_short_name, "unknown"),
+            GetProgramExecutableName(), test_filename);
       if (outcome_file != NULL) fclose(outcome_file);
       return 1;
     }

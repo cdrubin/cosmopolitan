@@ -19,6 +19,7 @@
 #include "libc/fmt/itoa.h"
 #include "libc/macros.internal.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "tool/build/lib/buffer.h"
 #include "tool/build/lib/cga.h"
 
@@ -30,9 +31,9 @@ size_t FormatCga(uint8_t bgfg, char buf[hasatleast 11]) {
   char *p = buf;
   *p++ = '\e';
   *p++ = '[';
-  p += uint64toarray_radix10(kCgaToAnsi[(bgfg & 0xF0) >> 4] + 10, p);
+  p = FormatUint32(p, kCgaToAnsi[(bgfg & 0xF0) >> 4] + 10);
   *p++ = ';';
-  p += uint64toarray_radix10(kCgaToAnsi[bgfg & 0x0F], p);
+  p = FormatUint32(p, kCgaToAnsi[bgfg & 0x0F]);
   *p++ = 'm';
   *p = '\0';
   return p - buf;

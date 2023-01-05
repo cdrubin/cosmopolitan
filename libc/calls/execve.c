@@ -17,16 +17,28 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/pledge.h"
+#include "libc/calls/pledge.internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/promises.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
 
 /**
  * Replaces current process with program.
+ *
+ * On Windows, `argv` and `envp` can't contain binary strings. They need
+ * to be valid UTF-8 in order to round-trip the WIN32 API, without being
+ * corrupted.
  *
  * @param program will not be PATH searched, see commandv()
  * @param argv[0] is the name of the program to run
@@ -38,35 +50,29 @@
  * @asyncsignalsafe
  * @vforksafe
  */
-int execve(const char *program, char *const argv[], char *const envp[]) {
+int execve(const char *prog, char *const argv[], char *const envp[]) {
+  int rc;
   size_t i;
-  if (!program || !argv || !envp) return efault();
-  if (IsAsan() &&
-      (!__asan_is_valid(program, 1) || !__asan_is_valid_strlist(argv) ||
-       !__asan_is_valid_strlist(envp))) {
-    return efault();
-  }
-  if (DEBUGSYS) {
-    __printf("SYS: execve(%s, {", program);
-    for (i = 0; argv[i]; ++i) {
-      if (i) __printf(", ");
-      __printf("%s", argv[i]);
-    }
-    __printf("}, {");
-    for (i = 0; envp[i]; ++i) {
-      if (i) __printf(", ");
-      __printf("%s", envp[i]);
-    }
-    __printf("})\n");
-  }
-  for (i = 3; i < g_fds.n; ++i) {
-    if (g_fds.p[i].kind != kFdEmpty && (g_fds.p[i].flags & O_CLOEXEC)) {
-      close(i);
-    }
-  }
-  if (!IsWindows()) {
-    return sys_execve(program, argv, envp);
+  if (!prog || !argv || !envp ||
+      (IsAsan() && (!__asan_is_valid_str(prog) ||      //
+                    !__asan_is_valid_strlist(argv) ||  //
+                    !__asan_is_valid_strlist(envp)))) {
+    rc = efault();
   } else {
-    return sys_execve_nt(program, argv, envp);
+    STRACE("execve(%#s, %s, %s) → ...", prog, DescribeStringList(argv),
+           DescribeStringList(envp));
+    if (!IsWindows()) {
+      rc = 0;
+      if (IsLinux() && __execpromises && _weaken(sys_pledge_linux)) {
+        rc = _weaken(sys_pledge_linux)(__execpromises, __pledge_mode);
+      }
+      if (!rc) {
+        rc = sys_execve(prog, argv, envp);
+      }
+    } else {
+      rc = sys_execve_nt(prog, argv, envp);
+    }
   }
+  STRACE("execve(%#s) failed %d% m", prog, rc);
+  return rc;
 }

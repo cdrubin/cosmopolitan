@@ -20,17 +20,18 @@
 #include "libc/dce.h"
 #include "libc/calls/calls.h"
 #include "libc/sysv/consts/fileno.h"
+#include "libc/thread/thread.h"
 #include "libc/macros.internal.h"
-.source	__FILE__
 
 	.init.start 400,_init_stdout
 	ezlea	__stdout,ax
 	push	STDOUT_FILENO
-	pop	12(%rax)			#→ f.fd
+	pop	0x0c(%rax)				#→ f.fd
 	mov	O_WRONLY,%edx
-	mov	%edx,4(%rax)			#→ f.iomode
-	ezlea	__stdout_buf,cx
-	mov	%rcx,24(%rax)			#→ f.buf
-	movl	$BUFSIZ,32(%rax)		#→ f.size
+	mov	%edx,4(%rax)				#→ f.iomode
+	lea	0x50(%rax),%rcx				#← f.mem
+	mov	%rcx,0x18(%rax)				#→ f.buf
+	movl	$BUFSIZ,0x20(%rax)			#→ f.size
+	movb	$PTHREAD_MUTEX_RECURSIVE,0x38+4(%rax)	#→ f.lock._type
 	mov	%rax,stdout(%rip)
 	.init.end 400,_init_stdout,globl,hidden

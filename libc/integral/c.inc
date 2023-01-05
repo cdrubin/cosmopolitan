@@ -26,7 +26,6 @@
 #define _Alignof(x) alignof(x)
 #endif /* C++11 */
 #else  /* __cplusplus */
-#define alignof(x) _Alignof(x)
 #if __STDC_VERSION__ + 0 < 201112
 #if __GNUC__ + _MSC_VER + 0 && !defined(__STRICT_ANSI__)
 #define _Alignof(x) __alignof(x)
@@ -53,8 +52,11 @@
 #endif
 #endif
 
-#if defined(__STRICT_ANSI__) || \
-    (!defined(__GNUC__) && !__has_builtin(unreachable))
+#ifdef _MSC_VER
+#define __builtin_unreachable() __assume(0)
+#elif defined(__STRICT_ANSI__) ||                           \
+    !((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 405 || \
+      defined(__clang__) || defined(__INTEL_COMPILER))
 #define __builtin_unreachable() \
   for (;;) {                    \
   }
@@ -67,8 +69,8 @@
   } while (0)
 #endif
 
-#if __STDC_VERSION__ + 0 < 201112 && defined(__x86__)
-#define _Atomic(TYPE) TYPE
+#if __STDC_VERSION__ + 0 < 201112
+#define _Atomic(TYPE) TYPE volatile
 #endif
 
 #ifdef __llvm__
@@ -85,6 +87,7 @@
 #endif
 
 #ifndef __cplusplus
+#define HAVE_STDBOOL_H 1
 #if __STDC_VERSION__ + 0 >= 201112
 typedef _Bool bool;
 #define true ((bool)+1)
@@ -102,6 +105,8 @@ typedef __CHAR16_TYPE__ char16_t;
 typedef __CHAR32_TYPE__ char32_t;
 #endif
 
+#define _LIBCPP_STDINT_H
+
 typedef int errno_t;
 typedef __SIZE_TYPE__ size_t;
 typedef __PTRDIFF_TYPE__ ssize_t;
@@ -118,29 +123,19 @@ typedef __INT32_TYPE__ int32_t;
 typedef __UINT32_TYPE__ uint32_t;
 typedef __INT64_TYPE__ int64_t;
 typedef __UINT64_TYPE__ uint64_t;
+typedef __INTMAX_TYPE__ intmax_t;
+typedef __UINTMAX_TYPE__ uintmax_t;
+
+#if ((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 406 || \
+     defined(__llvm__)) &&                                 \
+    !defined(__STRICT_ANSI__)
+typedef signed __int128 int128_t;
+typedef unsigned __int128 uint128_t;
+#endif
 
 typedef struct {
   intptr_t ax, dx;
 } axdx_t;
-
-#ifdef __SIZEOF_INTMAX__
-#undef __SIZEOF_INTMAX__
-#endif
-#if !defined(__STRICT_ANSI__) && __SIZEOF_POINTER__ == 8 && \
-    ((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 406 || defined(__llvm__))
-#define __SIZEOF_INTMAX__ 16
-#else
-#define __SIZEOF_INTMAX__ __SIZEOF_POINTER__
-#endif
-#if __SIZEOF_INTMAX__ == 16
-typedef signed __int128 int128_t;
-typedef unsigned __int128 uint128_t;
-typedef int128_t intmax_t;
-typedef uint128_t uintmax_t;
-#elif __SIZEOF_INTMAX__ == 8
-typedef int64_t intmax_t;
-typedef uint64_t uintmax_t;
-#endif
 
 #ifndef __chibicc__
 #define va_list            __builtin_va_list
@@ -152,11 +147,11 @@ typedef uint64_t uintmax_t;
 #include "libc/integral/lp64arg.inc"
 #endif
 
-#define libcesque   nothrow nocallback
+#define libcesque   dontthrow nocallback
 #define memcpyesque libcesque
 #define strlenesque libcesque nosideeffect paramsnonnull()
 #define vallocesque \
-  libcesque nodiscard returnsaligned((PAGESIZE)) returnspointerwithnoaliases
+  libcesque dontdiscard returnsaligned((GUARDSIZE)) returnspointerwithnoaliases
 #define reallocesque libcesque returnsaligned((16))
 #define mallocesque  reallocesque returnspointerwithnoaliases
 #define interruptfn  nocallersavedregisters forcealignargpointer
@@ -193,21 +188,21 @@ typedef uint64_t uintmax_t;
 #define strftimeesque(n)
 #endif
 
-#ifndef hidden
+#ifndef _Hide
 #if !defined(__STRICT_ANSI__) && \
     (__has_attribute(__visibility__) || defined(__GNUC__)) && !defined(_WIN32)
-#define hidden __attribute__((__visibility__("hidden")))
+#define _Hide __attribute__((__visibility__("hidden")))
 #else
-#define hidden
+#define _Hide
 #endif
 #endif
 
 #ifndef privileged
 #if !defined(__STRICT_ANSI__) && \
     (__has_attribute(__visibility__) || defined(__GNUC__))
-#define privileged _Section(".privileged") noinstrument
+#define privileged _Section(".privileged")
 #else
-#define privileged _Section(".privileged") noinstrument
+#define privileged _Section(".privileged")
 #endif
 #endif
 
@@ -242,7 +237,9 @@ typedef uint64_t uintmax_t;
 #endif
 
 #ifndef dontinline
-#if !defined(__STRICT_ANSI__) &&      \
+#ifdef _MSC_VER
+#define dontinline __declspec(noinline)
+#elif !defined(__STRICT_ANSI__) &&    \
     (__has_attribute(__noinline__) || \
      (__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 301)
 #define dontinline __attribute__((__noinline__))
@@ -276,9 +273,9 @@ typedef uint64_t uintmax_t;
   static __inline __attribute__((__always_inline__, __gnu_inline__, \
                                  __no_instrument_function__, __unused__))
 #else
-#define forceinline              \
-  static __inline __attribute__( \
-      (__always_inline__, __no_instrument_function__, __unused__))
+#define forceinline                                 \
+  static __inline __attribute__((__always_inline__, \
+                                 __no_instrument_function__, __unused__))
 #endif /* __GNUC_STDC_INLINE__ */
 #endif /* GCC >= 4.3 */
 #elif defined(_MSC_VER)
@@ -299,13 +296,13 @@ typedef uint64_t uintmax_t;
 #endif
 #endif
 
-#ifndef nodiscard
+#ifndef dontdiscard
 #if !defined(__STRICT_ANSI__) &&                           \
     ((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 304 || \
      __has_attribute(__warn_unused_result__))
-#define nodiscard __attribute__((__warn_unused_result__))
+#define dontdiscard __attribute__((__warn_unused_result__))
 #else
-#define nodiscard
+#define dontdiscard
 #endif
 #endif
 
@@ -408,15 +405,15 @@ typedef uint64_t uintmax_t;
 #endif
 #endif
 
-#ifndef nothrow
+#ifndef dontthrow
 #if defined(__cplusplus) && !defined(__STRICT_ANSI__) && \
-    (__has_attribute(nothrow) ||                         \
+    (__has_attribute(dontthrow) ||                       \
      (__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 303)
-#define nothrow __attribute__((__nothrow__))
+#define dontthrow __attribute__((__nothrow__))
 #elif defined(_MSC_VER)
-#define nothrow __declspec(nothrow)
+#define dontthrow __declspec(nothrow)
 #else
-#define nothrow
+#define dontthrow
 #endif
 #endif
 
@@ -453,6 +450,16 @@ typedef uint64_t uintmax_t;
 #define optimizespeed __attribute__((__optimize__(3)))
 #else
 #define optimizespeed
+#endif
+#endif
+
+#ifndef unrollloops
+#if !defined(__STRICT_ANSI__) &&                           \
+    ((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 407 || \
+     __has_attribute(__optimize__))
+#define unrollloops __attribute__((__optimize__("unroll-loops")))
+#else
+#define unrollloops
 #endif
 #endif
 
@@ -601,12 +608,17 @@ typedef uint64_t uintmax_t;
 #endif
 #endif
 
+#define notpossible           \
+  do {                        \
+    asm("nop\n\tud2\n\tnop"); \
+    unreachable;              \
+  } while (0)
+
 #define donothing \
   do {            \
   } while (0)
 
 #ifndef __STRICT_ANSI__
-#define testonly    dontinline _Section(".test")
 #define textstartup _Section(".text.startup") noinstrument
 #define textexit    _Section(".text.exit") noinstrument
 #define textreal    _Section(".text.real")
@@ -614,7 +626,6 @@ typedef uint64_t uintmax_t;
 #define textwindows _Section(".text.windows")
 #define antiquity   _Section(".text.antiquity")
 #else
-#define testonly
 #define textstartup
 #define textexit
 #define textreal
@@ -664,21 +675,25 @@ typedef uint64_t uintmax_t;
 
 #ifndef __STRICT_ANSI__
 #if defined(__GNUC__) || defined(__llvm__)
-#pragma GCC diagnostic ignored "-Wsign-compare" /* lint needs to change  */
-#pragma GCC diagnostic ignored "-Wtype-limits" /* makes macros unsafe  */
-#pragma GCC diagnostic ignored "-Woverflow" /* also breaks macros  */
-#pragma GCC diagnostic ignored "-Wformat" /* forces only gnu pf */
+#pragma GCC diagnostic ignored \
+    "-Wundef" /* complaints about __ASSEMBLER__/__LINKER__  */
+#pragma GCC diagnostic ignored "-Wsign-compare"     /* lint needs to change  */
+#pragma GCC diagnostic ignored "-Wtype-limits"      /* makes macros unsafe  */
+#pragma GCC diagnostic ignored "-Woverflow"         /* also breaks macros  */
+#pragma GCC diagnostic ignored "-Wformat"           /* forces only gnu pf */
 #pragma GCC diagnostic ignored "-Wunused-parameter" /* extreme prejudice */
-#pragma GCC diagnostic ignored "-Wunused-function" /* contradicts dce! */
-#pragma GCC diagnostic ignored "-Wunused-const-variable" /* let me dce */
-#pragma GCC diagnostic ignored "-Wunused-variable" /* belongs in tidy */
-#pragma GCC diagnostic ignored "-Wformat-extra-args" /* is also broken */
-#pragma GCC diagnostic ignored "-Wparentheses" /* annoying tidy */
-#pragma GCC diagnostic ignored "-Wdangling-else" /* come on tidy */
-#pragma GCC diagnostic ignored "-Wformat-security" /* come on tidy */
-#pragma GCC diagnostic ignored "-Wunused-value" /* breaks macros */
+#pragma GCC diagnostic ignored "-Wunused-function"  /* contradicts dce! */
+#pragma GCC diagnostic ignored "-Wunused-const-variable"   /* let me dce */
+#pragma GCC diagnostic ignored "-Wunused-variable"         /* belongs in tidy */
+#pragma GCC diagnostic ignored "-Wformat-extra-args"       /* is also broken */
+#pragma GCC diagnostic ignored "-Wparentheses"             /* annoying tidy */
+#pragma GCC diagnostic ignored "-Wdangling-else"           /* come on tidy */
+#pragma GCC diagnostic ignored "-Wformat-security"         /* come on tidy */
+#pragma GCC diagnostic ignored "-Wunused-value"            /* breaks macros */
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations" /* libcxx */
 #ifndef __cplusplus
 #pragma GCC diagnostic ignored "-Wimplicit-int"
+#pragma GCC diagnostic ignored "-Wc++-compat"
 #endif /* C++ */
 #endif /* GCC || LLVM */
 #if defined(__GNUC__) && !defined(__llvm__)
@@ -694,7 +709,7 @@ typedef uint64_t uintmax_t;
 #if __GNUC__ >= 8
 #pragma GCC diagnostic ignored "-Wstringop-truncation"
 #pragma GCC diagnostic ignored "-Wstringop-overflow" /* breaks strndup */
-#endif /* GCC8+ */
+#endif                                               /* GCC8+ */
 #if __GNUC__ + 0 >= 9
 #pragma GCC diagnostic ignored /* "always true" breaks dce */ "-Waddress"
 #endif /* GCC9+ */
@@ -705,8 +720,8 @@ typedef uint64_t uintmax_t;
     "-Wincompatible-pointer-types-discards-qualifiers"
 #pragma clang diagnostic ignored "-Wbuiltin-requires-header"
 #pragma clang diagnostic ignored "-Wparentheses-equality" /*-save-temps*/
-#pragma clang diagnostic ignored "-Wunused-value" /*({-save-temps})*/
-#pragma clang diagnostic ignored "-Wstring-plus-int" /* special ed */
+#pragma clang diagnostic ignored "-Wunused-value"         /*({-save-temps})*/
+#pragma clang diagnostic ignored "-Wstring-plus-int"      /* special ed */
 #pragma clang diagnostic ignored "-Wunused-value" /* extreme prejudice */
 #pragma clang diagnostic ignored "-Wbuiltin-requires-header"
 #pragma clang diagnostic ignored \
@@ -720,7 +735,6 @@ typedef uint64_t uintmax_t;
 #pragma GCC diagnostic error "-Wpointer-arith"
 #pragma GCC diagnostic error "-Wnonnull"
 #pragma GCC diagnostic error "-Wunused-result"
-#pragma GCC diagnostic error "-Wuninitialized"
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 #pragma GCC diagnostic error "-Wshift-negative-value"
 #ifndef __cplusplus
@@ -739,12 +753,10 @@ typedef uint64_t uintmax_t;
 #if defined(__GNUC__) && !defined(__llvm__)
 #pragma GCC diagnostic error "-Wwrite-strings"
 #pragma GCC diagnostic error "-Wtrampolines"
-#pragma GCC diagnostic error "-Wmaybe-uninitialized"
-#pragma GCC diagnostic error "-Wredundant-decls"
 #if __GNUC__ >= 6
 #pragma GCC diagnostic error "-Wnonnull-compare"
 #if defined(COSMO) && !defined(MODE_DBG) && !defined(STACK_FRAME_UNLIMITED)
-#pragma GCC diagnostic error "-Wframe-larger-than=4096"
+#pragma GCC diagnostic error "-Wframe-larger-than=16384"
 #if __GNUC__ >= 9
 #pragma GCC diagnostic error "-Walloca-larger-than=1024"
 #pragma GCC diagnostic error "-Wvla-larger-than=1024"

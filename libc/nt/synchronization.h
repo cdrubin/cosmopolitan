@@ -5,6 +5,7 @@
 #include "libc/nt/struct/linkedlist.h"
 #include "libc/nt/struct/securityattributes.h"
 #include "libc/nt/struct/systemtime.h"
+#include "libc/nt/thunk/msabi.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*                            ░░░░
@@ -53,6 +54,11 @@ typedef void (*NtTimerapcroutine)(void *lpArgToCompletionRoutine,
 typedef void (*NtWaitOrTimerCallback)(void *lpParameter,
                                       bool32 TimerOrWaitFired);
 
+void WakeByAddressAll(void *Address);
+void WakeByAddressSingle(void *Address);
+bool32 WaitOnAddress(volatile void *Address, void *CompareAddress,
+                     size_t AddressSize, uint32_t opt_dwMilliseconds);
+
 void Sleep(uint32_t dwMilliseconds);
 uint32_t SleepEx(uint32_t dwMilliseconds, bool32 bAlertable);
 
@@ -80,6 +86,10 @@ int64_t CreateWaitableTimer(struct NtSecurityAttributes *lpTimerAttributes,
 bool32 SetWaitableTimer(int64_t hTimer, const int64_t *lpDueTimeAsFtOrNegRela,
                         int32_t opt_lPeriodMs, NtTimerapcroutine opt_callback,
                         void *lpArgToCallback, bool32 fUnsleepSystem);
+
+int64_t CreateSemaphore(struct NtSecurityAttributes *opt_lpSemaphoreAttributes,
+                        uint32_t lInitialCount, uint32_t lMaximumCount,
+                        const char16_t *opt_lpName);
 
 int32_t SetEvent(int64_t hEvent);
 int32_t ResetEvent(int64_t hEvent);
@@ -115,6 +125,9 @@ bool32 GetSystemTimeAdjustment(uint32_t *lpTimeAdjustment,
                                uint32_t *lpTimeIncrement,
                                bool32 *lpTimeAdjustmentDisabled);
 
+#if ShouldUseMsabiAttribute()
+#include "libc/nt/thunk/synchronization.inc"
+#endif /* ShouldUseMsabiAttribute() */
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_NT_SYNCHRONIZATION_H_ */

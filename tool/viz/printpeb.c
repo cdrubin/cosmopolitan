@@ -16,11 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/log.h"
+#include "libc/mem/copyfd.internal.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/filetype.h"
 #include "libc/nt/enum/startf.h"
@@ -38,6 +39,7 @@
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/time/time.h"
 #include "tool/decode/lib/flagger.h"
 #include "tool/decode/lib/idname.h"
 
@@ -55,7 +57,7 @@ int NextBestThing(void) {
   int64_t fd = open("/proc/self/maps", O_RDONLY);
   posix_fadvise(fd, 0, 0, MADV_SEQUENTIAL);
   ssize_t wrote;
-  while ((wrote = copyfd(fd, NULL, 1, NULL, 1024 * 64, 0)) != -1) {
+  while ((wrote = _copyfd(fd, 1, -1)) != -1) {
     if (wrote == 0) break;
   }
   close(fd);
@@ -382,8 +384,8 @@ void PrintModulesLoadOrder(void) {
       /* struct NtLinkedList InLoadOrderLinks; /\* msdn:reserved *\/ */
       /* struct NtLinkedList InMemoryOrderLinks; */
       /* struct NtLinkedList InInitOrderLinks; /\* msdn:reserved *\/ */
-      printf("0x%p\n", ldr);
-      printf("0x%p vs. 0x%p\n", dll, GetModuleHandleW(dll->FullDllName.Data));
+      printf("%p\n", ldr);
+      printf("%p vs. %p\n", dll, GetModuleHandleW(dll->FullDllName.Data));
       printf("0x%04x: %-40s = 0x%lx\n",
              offsetof(struct NtLdrDataTableEntry, DllBase), "DllBase",
              dll->DllBase);
@@ -456,7 +458,7 @@ void PrintModulesMemoryOrder(void) {
       /* struct NtLinkedList InLoadOrderLinks; /\* msdn:reserved *\/ */
       /* struct NtLinkedList InMemoryOrderLinks; */
       /* struct NtLinkedList InInitOrderLinks; /\* msdn:reserved *\/ */
-      printf("0x%p\n", dll);
+      printf("%p\n", dll);
       printf("0x%04x: %-40s = 0x%lx\n",
              offsetof(struct NtLdrDataTableEntry, DllBase), "DllBase",
              dll->DllBase);
@@ -518,7 +520,6 @@ void PrintModulesMemoryOrder(void) {
 }
 
 int main(int argc, char *argv[]) {
-  showcrashreports();
   if (IsLinux()) {
     return NextBestThing();
   }

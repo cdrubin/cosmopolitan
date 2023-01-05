@@ -16,16 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/log/check.h"
 #include "libc/nexgen32e/x86feature.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "third_party/mbedtls/bignum_internal.h"
 #include "third_party/mbedtls/ecp.h"
 #include "third_party/mbedtls/ecp_internal.h"
 #include "third_party/mbedtls/error.h"
 #include "third_party/mbedtls/math.h"
 #include "third_party/mbedtls/profile.h"
+#include "third_party/mbedtls/select.h"
 /* clang-format off */
 
 static bool
@@ -53,17 +53,23 @@ static int
 mbedtls_p256_cmp( const uint64_t a[5],
                   const uint64_t b[5] )
 {
-    if ( (int64_t)a[4] < (int64_t)b[4] ) return -1;
-    if ( (int64_t)a[4] > (int64_t)b[4] ) return +1;
-    if ( a[3] < b[3] ) return -1;
-    if ( a[3] > b[3] ) return +1;
-    if ( a[2] < b[2] ) return -1;
-    if ( a[2] > b[2] ) return +1;
-    if ( a[1] < b[1] ) return -1;
-    if ( a[1] > b[1] ) return +1;
-    if ( a[0] < b[0] ) return -1;
-    if ( a[0] > b[0] ) return +1;
-    return 0;
+    int i, x, y, done = 0;
+    // return -1 if a[4] < b[4]
+    x = -((int64_t)a[4] < (int64_t)b[4]);
+    done = x;
+    // return +1 if a[4] > b[4]
+    y = (int64_t)a[4] > (int64_t)b[4];
+    x = Select(x, y, done);
+    done |= -y;
+    for (i = 4; i--;) {
+        y = -(a[i] < b[i]);
+        x = Select(x, y, done);
+        done |= y;
+        y = a[i] > b[i];
+        x = Select(x, y, done);
+        done |= -y;
+    }
+    return x;
 }
 
 static void
@@ -252,7 +258,7 @@ mbedtls_p256_add( uint64_t X[5],
     ADC( X[3], A[3], B[3], c, X[4] );
 #endif
     mbedtls_p256_rum( X );
-    DCHECK_EQ( 0, X[4] );
+    MBEDTLS_ASSERT( 0 == X[4] );
 }
 
 static void
@@ -289,7 +295,7 @@ mbedtls_p256_sub( uint64_t X[5],
 #endif
     while( (int64_t)X[4] < 0 )
         mbedtls_p256_gro( X );
-    DCHECK_EQ( 0, X[4] );
+    MBEDTLS_ASSERT( 0 == X[4] );
 }
 
 static void
@@ -313,7 +319,7 @@ mbedtls_p256_hub( uint64_t A[5],
         : "rax", "rcx", "memory", "cc");
     while( (int64_t)A[4] < 0 )
         mbedtls_p256_gro( A );
-    DCHECK_EQ( 0, A[4] );
+    MBEDTLS_ASSERT( 0 == A[4] );
 #else
     mbedtls_p256_sub( A, A, B );
 #endif
@@ -359,9 +365,9 @@ int mbedtls_p256_double_jac( const mbedtls_ecp_group *G,
     s.Xn = mbedtls_mpi_limbs( &P->X );
     s.Yn = mbedtls_mpi_limbs( &P->Y );
     s.Zn = mbedtls_mpi_limbs( &P->Z );
-    CHECK_LE( s.Xn, 4 );
-    CHECK_LE( s.Yn, 4 );
-    CHECK_LE( s.Zn, 4 );
+    MBEDTLS_ASSERT( s.Xn <= 4 );
+    MBEDTLS_ASSERT( s.Yn <= 4 );
+    MBEDTLS_ASSERT( s.Zn <= 4 );
     memcpy( s.X, P->X.p, s.Xn * 8 );
     memcpy( s.Y, P->Y.p, s.Yn * 8 );
     memcpy( s.Z, P->Z.p, s.Zn * 8 );
@@ -415,11 +421,11 @@ int mbedtls_p256_add_mixed( const mbedtls_ecp_group *G,
     s.Zn  = mbedtls_mpi_limbs( &P->Z );
     s.QXn = mbedtls_mpi_limbs( &Q->X );
     s.QYn = mbedtls_mpi_limbs( &Q->Y );
-    CHECK_LE( s.Xn,  4 );
-    CHECK_LE( s.Yn,  4 );
-    CHECK_LE( s.Zn,  4 );
-    CHECK_LE( s.QXn, 4 );
-    CHECK_LE( s.QYn, 4 );
+    MBEDTLS_ASSERT( s.Xn  <= 4 );
+    MBEDTLS_ASSERT( s.Yn  <= 4 );
+    MBEDTLS_ASSERT( s.Zn  <= 4 );
+    MBEDTLS_ASSERT( s.QXn <= 4 );
+    MBEDTLS_ASSERT( s.QYn <= 4 );
     memcpy( s.X, P->X.p, s.Xn * 8 );
     memcpy( s.Y, P->Y.p, s.Yn * 8 );
     memcpy( s.Z, P->Z.p, s.Zn * 8 );

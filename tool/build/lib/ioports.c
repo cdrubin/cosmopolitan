@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/struct/iovec.h"
 #include "libc/nexgen32e/uart.internal.h"
 #include "libc/sysv/consts/fileno.h"
+#include "libc/sysv/consts/poll.h"
 #include "tool/build/lib/ioports.h"
 
 static int OpE9Read(struct Machine *m) {
@@ -42,7 +42,21 @@ static void OpE9Write(struct Machine *m, uint8_t b) {
   m->fds.p[fd].cb->writev(m->fds.p[fd].fd, &(struct iovec){&b, 1}, 1);
 }
 
+static int OpE9Poll(struct Machine *m) {
+  int fd, rc;
+  struct pollfd pf;
+  fd = STDIN_FILENO;
+  if (fd >= m->fds.i) return -1;
+  if (!m->fds.p[fd].cb) return -1;
+  pf.fd = m->fds.p[fd].fd;
+  pf.events = POLLIN | POLLOUT;
+  rc = m->fds.p[fd].cb->poll(&pf, 1, 20);
+  if (rc <= 0) return rc;
+  return pf.revents;
+}
+
 static int OpSerialIn(struct Machine *m, int r) {
+  int p, s;
   switch (r) {
     case UART_DLL:
       if (!m->dlab) {
@@ -51,7 +65,11 @@ static int OpSerialIn(struct Machine *m, int r) {
         return 0x01;
       }
     case UART_LSR:
-      return UART_TTYDA | UART_TTYTXR | UART_TTYIDL;
+      if ((p = OpE9Poll(m)) == -1) return -1;
+      s = UART_TTYIDL;
+      if (p & POLLIN) s |= UART_TTYDA;
+      if (p & POLLOUT) s |= UART_TTYTXR;
+      return s;
     default:
       return 0;
   }

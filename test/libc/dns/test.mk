@@ -33,7 +33,6 @@ TEST_LIBC_DNS_DIRECTDEPS =				\
 	LIBC_RUNTIME					\
 	LIBC_SOCK					\
 	LIBC_STDIO					\
-	LIBC_RAND					\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_SYSV					\
@@ -53,7 +52,7 @@ o/$(MODE)/test/libc/dns/%.com.dbg:			\
 		o/$(MODE)/test/libc/dns/dns.pkg	\
 		$(LIBC_TESTMAIN)			\
 		$(CRT)					\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 .PHONY: o/$(MODE)/test/libc/dns

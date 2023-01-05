@@ -17,11 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/cp.internal.h"
+#include "libc/calls/struct/rusage.internal.h"
 #include "libc/calls/wait4.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -34,25 +35,30 @@
  * @param options can have WNOHANG, WUNTRACED, WCONTINUED, etc.
  * @param opt_out_rusage optionally returns accounting data
  * @return process id of terminated child or -1 w/ errno
+ * @cancellationpoint
  * @asyncsignalsafe
+ * @restartable
  */
 int wait4(int pid, int *opt_out_wstatus, int options,
           struct rusage *opt_out_rusage) {
-  int rc, ws;
+  int rc, ws = 0;
+  BEGIN_CANCELLATION_POINT;
+
   if (IsAsan() &&
       ((opt_out_wstatus &&
         !__asan_is_valid(opt_out_wstatus, sizeof(*opt_out_wstatus))) ||
        (opt_out_rusage &&
         !__asan_is_valid(opt_out_rusage, sizeof(*opt_out_rusage))))) {
-    return efault();
-  }
-  ws = 0;
-  if (!IsWindows()) {
+    rc = efault();
+  } else if (!IsWindows()) {
     rc = sys_wait4(pid, &ws, options, opt_out_rusage);
   } else {
     rc = sys_wait4_nt(pid, &ws, options, opt_out_rusage);
   }
-  SYSDEBUG("waitpid(%d, [0x%x], %d) -> [%d]", pid, ws, options, rc);
-  if (opt_out_wstatus) *opt_out_wstatus = ws;
+  if (rc != -1 && opt_out_wstatus) *opt_out_wstatus = ws;
+
+  END_CANCELLATION_POINT;
+  STRACE("wait4(%d, [%#x], %d, %p) → %d% m", pid, ws, options, opt_out_rusage,
+         rc);
   return rc;
 }

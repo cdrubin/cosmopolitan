@@ -21,14 +21,14 @@
 #include "dsp/core/ituround.h"
 #include "dsp/core/q.h"
 #include "dsp/core/twixt8.h"
+#include "libc/intrin/bsr.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
@@ -101,7 +101,7 @@ struct SamplingSolution *ComputeSamplingSolution(long dn, long sn, double dar,
   if (!off) off = (dar - 1) / 2;
   f = dar < 1 ? 1 / dar : dar;
   s = 3 * f + 4;
-  fweights = gc(xcalloc(s, sizeof(double)));
+  fweights = gc(xcalloc(s + /*xxx*/ 2, sizeof(double)));
   res = NewSamplingSolution(dn, s);
   weights = res->weights;
   indices = res->indices;
@@ -203,8 +203,8 @@ void *Gyarados(long dyw, long dxw, int dst[dyw][dxw], long syw, long sxw,
       CHECK_LE(sxn, sxw);
       CHECK_LE(dyn, dyw);
       CHECK_LE(dxn, dxw);
-      CHECK_LT(bsrl(syn) + bsrl(sxn), 32);
-      CHECK_LT(bsrl(dyn) + bsrl(dxn), 32);
+      CHECK_LT(_bsrl(syn) + _bsrl(sxn), 32);
+      CHECK_LT(_bsrl(dyn) + _bsrl(dxn), 32);
       CHECK_LE(dyw, 0x7fff);
       CHECK_LE(dxw, 0x7fff);
       CHECK_LE(syw, 0x7fff);

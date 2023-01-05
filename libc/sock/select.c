@@ -16,20 +16,53 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/cp.internal.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sock/internal.h"
-#include "libc/sock/sock.h"
+#include "libc/sock/select.h"
+#include "libc/sysv/errfuns.h"
 
 /**
- * Does what poll() does except with a complicated bitset API.
- * @note windows nt is limited to first 64 socket descriptors
+ * Does what poll() does except with bitset API.
+ *
+ * This system call is supported on all platforms. However, on Windows,
+ * this is polyfilled to translate into poll(). So it's recommended that
+ * poll() be used instead.
+ *
+ * @raise ECANCELED if thread was cancelled in masked mode
+ * @raise EINTR if signal was delivered
+ * @cancellationpoint
+ * @asyncsignalsafe
+ * @threadsafe
+ * @norestart
  */
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
            struct timeval *timeout) {
-  if (!IsWindows()) {
-    return sys_select(nfds, readfds, writefds, exceptfds, timeout);
+  int rc;
+  POLLTRACE("select(%d, %p, %p, %p, %s) → ...", nfds, readfds, writefds,
+            exceptfds, DescribeTimeval(0, timeout));
+
+  BEGIN_CANCELLATION_POINT;
+  if (nfds < 0) {
+    rc = einval();
+  } else if (IsAsan() &&
+             ((readfds && !__asan_is_valid(readfds, FD_SIZE(nfds))) ||
+              (writefds && !__asan_is_valid(writefds, FD_SIZE(nfds))) ||
+              (exceptfds && !__asan_is_valid(exceptfds, FD_SIZE(nfds))) ||
+              (timeout && !__asan_is_valid(timeout, sizeof(*timeout))))) {
+    rc = efault();
+  } else if (!IsWindows()) {
+    rc = sys_select(nfds, readfds, writefds, exceptfds, timeout);
   } else {
-    return sys_select_nt(nfds, readfds, writefds, exceptfds, timeout);
+    rc = sys_select_nt(nfds, readfds, writefds, exceptfds, timeout, 0);
   }
+  END_CANCELLATION_POINT;
+
+  POLLTRACE("select(%d, %p, %p, %p, [%s]) → %d% m", nfds, readfds, writefds,
+            exceptfds, DescribeTimeval(rc, timeout), rc);
+  return rc;
 }

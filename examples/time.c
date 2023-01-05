@@ -12,10 +12,11 @@
 #include "libc/fmt/itoa.h"
 #include "libc/log/log.h"
 #include "libc/math.h"
+#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/time/time.h"
-#include "libc/x/x.h"
+#include "libc/x/xspawn.h"
 
 /**
  * @fileoverview command for showing how long a command takes
@@ -47,8 +48,8 @@ void PrintMetric(const char *name, long double d) {
   mils = fmodl(d * 1000, 1000);
   mics = fmodl(d * 1000000, 1000);
   p = stpcpy(p, name), *p++ = '\t';
-  p += int64toarray_radix10(mins, p), *p++ = 'm';
-  p += int64toarray_radix10(secs, p), *p++ = '.';
+  p = FormatInt64(p, mins), *p++ = 'm';
+  p = FormatInt64(p, secs), *p++ = '.';
   *p++ = '0' + mils / 100;
   *p++ = '0' + mils / 10 % 10;
   *p++ = '0' + mils % 10;
@@ -69,7 +70,7 @@ int main(int argc, char *argv[]) {
   long double real;
   char exebuf[PATH_MAX];
   if (argc >= 2) {
-    if ((exepath = commandv(argv[1], exebuf))) {
+    if ((exepath = commandv(argv[1], exebuf, sizeof(exebuf)))) {
       real = nowl();
       argv[1] = exepath;
       if ((ws = xvspawn(OnChild, argv + 1, &r)) != -1) {

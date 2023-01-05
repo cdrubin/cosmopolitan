@@ -28,10 +28,10 @@
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/madv.h"
@@ -192,7 +192,7 @@ static void *MagikarpY(CHAR w, unsigned char p[1u << w][1u << w], char yw,
   long y, x, yn, xn, ym;
   unsigned char(*t)[(1u << w) + 2][1u << w];
   t = memalign(64, ((1u << w) + 2) * (1u << w));
-  memset(t, 0, ((1u << w) + 2) * (1u << w));
+  bzero(t, ((1u << w) + 2) * (1u << w));
   yn = 1u << yw;
   xn = 1u << xw;
   ym = yn >> 1;
@@ -241,7 +241,7 @@ static void ProcessImageVerbatim(LONG yn, LONG xn,
                                  unsigned char img[yn][xn][4]) {
   CHAR w;
   void *R, *G, *B, *A;
-  w = roundup2log(MAX(yn, xn));
+  w = _roundup2log(MAX(yn, xn));
   R = xvalloc((1u << w) * (1u << w));
   G = xvalloc((1u << w) * (1u << w));
   B = xvalloc((1u << w) * (1u << w));
@@ -256,7 +256,7 @@ static void ProcessImageVerbatim(LONG yn, LONG xn,
 static void ProcessImageDouble(LONG yn, LONG xn, unsigned char img[yn][xn][4]) {
   CHAR w;
   void *t, *R, *G, *B, *A;
-  w = roundup2log(MAX(yn, xn)) + 1;
+  w = _roundup2log(MAX(yn, xn)) + 1;
   t = xvalloc((1u << w) * (1u << w));
   R = xvalloc((1u << w) * (1u << w));
   G = xvalloc((1u << w) * (1u << w));
@@ -277,7 +277,7 @@ static void ProcessImageDouble(LONG yn, LONG xn, unsigned char img[yn][xn][4]) {
 static void ProcessImageHalf(LONG yn, LONG xn, unsigned char img[yn][xn][4]) {
   CHAR w;
   void *R, *G, *B, *A;
-  w = roundup2log(MAX(yn, xn));
+  w = _roundup2log(MAX(yn, xn));
   R = xvalloc((1u << w) * (1u << w));
   G = xvalloc((1u << w) * (1u << w));
   B = xvalloc((1u << w) * (1u << w));
@@ -300,7 +300,7 @@ static void ProcessImageHalf(LONG yn, LONG xn, unsigned char img[yn][xn][4]) {
 static void ProcessImageHalfY(LONG yn, LONG xn, unsigned char img[yn][xn][4]) {
   CHAR w;
   void *R, *G, *B, *A;
-  w = roundup2log(MAX(yn, xn));
+  w = _roundup2log(MAX(yn, xn));
   R = xvalloc((1u << w) * (1u << w));
   G = xvalloc((1u << w) * (1u << w));
   B = xvalloc((1u << w) * (1u << w));
@@ -322,7 +322,7 @@ static void ProcessImageHalfLanczos(LONG yn, LONG xn,
   void *t, *R, *G, *B, *A;
   t = xvalloc((yn >> 1) * (xn >> 1) * 4);
   lanczos1b(yn >> 1, xn >> 1, t, yn, xn, &img[0][0][0]);
-  w = roundup2log(MAX(yn >> 1, xn >> 1));
+  w = _roundup2log(MAX(yn >> 1, xn >> 1));
   R = xvalloc((1u << w) * (1u << w));
   G = xvalloc((1u << w) * (1u << w));
   B = xvalloc((1u << w) * (1u << w));
@@ -338,7 +338,7 @@ static void ProcessImageHalfLanczos(LONG yn, LONG xn,
 static void ProcessImageWash(LONG yn, LONG xn, unsigned char img[yn][xn][4]) {
   long w;
   void *R, *G, *B, *A, *t;
-  w = roundup2log(MAX(yn, xn)) + 1;
+  w = _roundup2log(MAX(yn, xn)) + 1;
   t = xvalloc((1u << w) * (1u << w));
   R = xvalloc((1u << w) * (1u << w));
   G = xvalloc((1u << w) * (1u << w));
@@ -443,7 +443,7 @@ static void ProcessImageMagikarp(LONG syn, LONG sxn,
   LONG dyn, dxn;
   dyn = syn >> 1;
   dxn = sxn >> 1;
-  sw = roundup2log(MAX(syn, sxn));
+  sw = _roundup2log(MAX(syn, sxn));
   ProcessImageMagikarpImpl(sw, gc(xvalloc((1u << sw) * (1u << sw) * 5)), syn,
                            sxn, img, dyn, dxn);
 }
@@ -465,8 +465,8 @@ static unsigned char Opacify2(unsigned yw, unsigned xw,
 }
 
 static dontinline void PrintImage2(unsigned yw, unsigned xw,
-                                 unsigned char img[4][yw][xw], unsigned yn,
-                                 unsigned xn) {
+                                   unsigned char img[4][yw][xw], unsigned yn,
+                                   unsigned xn) {
   bool didhalfy;
   unsigned y, x;
   didhalfy = false;
@@ -501,8 +501,8 @@ static dontinline void PrintImage2(unsigned yw, unsigned xw,
 }
 
 static dontinline void *DeblinterlaceRgba2(unsigned yn, unsigned xn,
-                                         unsigned char D[4][yn][xn],
-                                         const unsigned char S[yn][xn][4]) {
+                                           unsigned char D[4][yn][xn],
+                                           const unsigned char S[yn][xn][4]) {
   unsigned y, x;
   for (y = 0; y < yn; ++y) {
     for (x = 0; x < xn; ++x) {
@@ -588,8 +588,8 @@ void ProcessImageMagikarp(unsigned yn, unsigned xn,
 }
 
 dontinline void WithImageFile(const char *path,
-                            void fn(unsigned yn, unsigned xn,
-                                    unsigned char img[yn][xn][4])) {
+                              void fn(unsigned yn, unsigned xn,
+                                      unsigned char img[yn][xn][4])) {
   struct stat st;
   int fd, yn, xn;
   void *map, *data;
@@ -634,7 +634,7 @@ int main(int argc, char *argv[]) {
         break;
     }
   }
-  showcrashreports();
+  ShowCrashReports();
   for (i = optind; i < argc; ++i) {
     WithImageFile(argv[i], scaler);
   }

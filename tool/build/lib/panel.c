@@ -16,12 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "libc/str/tpdecode.internal.h"
-#include "libc/unicode/unicode.h"
+#include "libc/str/unicode.h"
 #include "tool/build/lib/buffer.h"
 #include "tool/build/lib/panel.h"
 
@@ -57,6 +57,7 @@ ssize_t PrintPanels(int fd, long pn, struct Panel *p, long tyn, long txn) {
           AppendChar(&b, ' ');
           x += 1;
         }
+        AppendFmt(&b, "\e[%d;%dH", y + 1, x + 1);  // bsd utf-8 :(
         while (x < p[i].right || j < l->i) {
           wc = '\0';
           width = 0;

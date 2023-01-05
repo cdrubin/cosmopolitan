@@ -17,7 +17,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/inttypes.h"
 #include "libc/nexgen32e/crc32.h"
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/highwayhash64.h"
 #include "libc/str/str.h"
@@ -96,7 +96,7 @@ TEST(highwayhash64, test) {
 
 BENCH(highwayhash64, newbench) {
   char fun[256];
-  rngset(fun, 256, rand64, -1);
+  rngset(fun, 256, _rand64, -1);
   EZBENCH_N("highwayhash64", 0, HighwayHash64(0, 0, kTestKey1));
   EZBENCH_N("highwayhash64", 8, HighwayHash64("helloooo", 8, kTestKey1));
   EZBENCH_N("highwayhash64", 31, HighwayHash64(fun, 31, kTestKey1));

@@ -17,17 +17,18 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 #include "third_party/getopt/getopt.h"
 #include "third_party/python/Include/bytesobject.h"
 #include "third_party/python/Include/compile.h"
@@ -119,15 +120,15 @@ main(int argc, char *argv[])
     GetOpts(argc, argv);
     marshalled = 0;
     if (stat(inpath, &st) == -1) perror(inpath), exit(1);
-    CHECK_NOTNULL((p = gc(xslurp(inpath, &n))));
+    CHECK_NOTNULL((p = _gc(xslurp(inpath, &n))));
     Py_NoUserSiteDirectory++;
     Py_NoSiteFlag++;
     Py_IgnoreEnvironmentFlag++;
     Py_FrozenFlag++;
     /* Py_VerboseFlag++; */
-    Py_SetProgramName(gc(utf8toutf32(argv[0], -1, 0)));
+    Py_SetProgramName(_gc(utf8to32(argv[0], -1, 0)));
     _Py_InitializeEx_Private(1, 0);
-    name = gc(xjoinpaths("/zip/.python", StripComponents(inpath, 3)));
+    name = _gc(xjoinpaths("/zip/.python", StripComponents(inpath, 3)));
     code = Py_CompileStringExFlags(p, name, Py_file_input, NULL, optimize);
     if (!code) goto error;
     marshalled = PyMarshal_WriteObjectToString(code, Py_MARSHAL_VERSION);
@@ -137,7 +138,7 @@ main(int argc, char *argv[])
     p = PyBytes_AS_STRING(marshalled);
     n = PyBytes_GET_SIZE(marshalled);
     CHECK_NE(-1, (fd = open(outpath, O_CREAT|O_TRUNC|O_WRONLY, 0644)));
-    WRITE16LE(m+0, 3379); /* Python 3.6rc1 */
+    WRITE16LE(m+0, 3390); /* Python 3.7a1 */
     WRITE16LE(m+2, READ16LE("\r\n"));
     WRITE32LE(m+4, st.st_mtim.tv_sec); /* tsk tsk y2038 */
     WRITE32LE(m+8, n);

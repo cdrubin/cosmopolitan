@@ -16,9 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -26,14 +29,20 @@
  *
  * This does *not* update the `PWD` environment variable.
  *
+ * @return 0 on success, or -1 w/ errno
  * @asyncsignalsafe
  * @see fchdir()
  */
 int chdir(const char *path) {
-  if (IsAsan() && !__asan_is_valid(path, 1)) return efault();
-  if (!IsWindows()) {
-    return sys_chdir(path);
+  int rc;
+  GetProgramExecutableName();  // XXX: ugly workaround
+  if (!path || (IsAsan() && !__asan_is_valid_str(path))) {
+    rc = efault();
+  } else if (!IsWindows()) {
+    rc = sys_chdir(path);
   } else {
-    return sys_chdir_nt(path);
+    rc = sys_chdir_nt(path);
   }
+  STRACE("%s(%#s) → %d% m", "chdir", path, rc);
+  return rc;
 }

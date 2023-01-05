@@ -17,11 +17,16 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/conv.h"
+#include "libc/mem/mem.h"
 #include "libc/x/x.h"
 
 /**
  * Returns directory portion of path.
  */
 char *xdirname(const char *path) {
-  return dirname(xstrdup(path));
+  char *dirp;
+  path = xstrdup(path);
+  dirp = xstrdup(dirname(path));
+  free(path);
+  return dirp;
 }

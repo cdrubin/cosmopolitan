@@ -16,19 +16,71 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/sigbits.h"
+#include "libc/assert.h"
+#include "libc/calls/calls.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/sigaltstack.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/log/internal.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/runtime/stack.h"
+#include "libc/runtime/symbols.internal.h"
+#include "libc/str/str.h"
+#include "libc/sysv/consts/map.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/ss.h"
 
-STATIC_YOINK("__die");
+STATIC_YOINK("zipos");                       // for symtab
+STATIC_YOINK("__die");                       // for backtracing
+STATIC_YOINK("ShowBacktrace");               // for backtracing
+STATIC_YOINK("GetSymbolTable");              // for backtracing
+STATIC_YOINK("PrintBacktraceUsingSymbols");  // for backtracing
+STATIC_YOINK("malloc_inspect_all");          // for asan memory origin
+STATIC_YOINK("GetSymbolByAddr");             // for asan memory origin
 
+static struct sigaction g_oldcrashacts[8];
 extern const unsigned char __oncrash_thunks[8][11];
+
+static void InstallCrashHandlers(int extraflags) {
+  int e;
+  size_t i;
+  struct sigaction sa;
+  bzero(&sa, sizeof(sa));
+  sigfillset(&sa.sa_mask);
+  sa.sa_flags = SA_SIGINFO | SA_NODEFER | extraflags;
+  for (i = 0; i < ARRAYLEN(kCrashSigs); ++i) {
+    sigdelset(&sa.sa_mask, kCrashSigs[i]);
+  }
+  for (i = 0; i < ARRAYLEN(kCrashSigs); ++i) {
+    if (kCrashSigs[i]) {
+      sa.sa_sigaction = (sigaction_f)__oncrash_thunks[i];
+      e = errno;
+      sigaction(kCrashSigs[i], &sa, &g_oldcrashacts[i]);
+      errno = e;
+    }
+  }
+}
+
+relegated void RestoreDefaultCrashSignalHandlers(void) {
+  int e;
+  size_t i;
+  sigset_t ss;
+  strace_enabled(-1);
+  sigemptyset(&ss);
+  sigprocmask(SIG_SETMASK, &ss, NULL);
+  for (i = 0; i < ARRAYLEN(kCrashSigs); ++i) {
+    if (kCrashSigs[i]) {
+      e = errno;
+      sigaction(kCrashSigs[i], &g_oldcrashacts[i], NULL);
+      errno = e;
+    }
+  }
+  strace_enabled(+1);
+}
 
 /**
  * Installs crash signal handlers.
@@ -44,13 +96,10 @@ extern const unsigned char __oncrash_thunks[8][11];
  * Another trick this function enables, is you can press CTRL+\ to open
  * the debugger GUI at any point while the program is running. It can be
  * useful, for example, if a program is caught in an infinite loop.
- *
- * @see callexitontermination()
  */
 void ShowCrashReports(void) {
-  size_t i;
-  struct sigaction sa;
   struct sigaltstack ss;
+  _wantcrashreports = true;
   /* <SYNC-LIST>: showcrashreports.c, oncrashthunks.S, oncrash.c */
   kCrashSigs[0] = SIGQUIT; /* ctrl+\ aka ctrl+break */
   kCrashSigs[1] = SIGFPE;  /* 1 / 0 */
@@ -59,23 +108,18 @@ void ShowCrashReports(void) {
   kCrashSigs[4] = SIGTRAP; /* bad system call */
   kCrashSigs[5] = SIGABRT; /* abort() called */
   kCrashSigs[6] = SIGBUS;  /* misaligned, noncanonical ptr, etc. */
-  kCrashSigs[7] = SIGPIPE; /* write to closed thing */
+  kCrashSigs[7] = SIGURG;  /* placeholder */
   /* </SYNC-LIST>: showcrashreports.c, oncrashthunks.S, oncrash.c */
-  bzero(&sa, sizeof(sa));
-  ss.ss_flags = 0;
-  ss.ss_size = SIGSTKSZ;
-  ss.ss_sp = malloc(SIGSTKSZ);
-  __cxa_atexit(free, ss.ss_sp, 0);
-  sa.sa_flags = SA_SIGINFO | SA_NODEFER | SA_ONSTACK;
-  sigfillset(&sa.sa_mask);
-  for (i = 0; i < ARRAYLEN(kCrashSigs); ++i) {
-    sigdelset(&sa.sa_mask, kCrashSigs[i]);
+  if (!IsWindows()) {
+    ss.ss_flags = 0;
+    ss.ss_size = GetStackSize();
+    // FreeBSD sigaltstack() will EFAULT if we use MAP_STACK here
+    // OpenBSD sigaltstack() auto-applies MAP_STACK to the memory
+    _npassert((ss.ss_sp = _mapanon(GetStackSize())));
+    _npassert(!sigaltstack(&ss, 0));
+    InstallCrashHandlers(SA_ONSTACK);
+  } else {
+    InstallCrashHandlers(0);
   }
-  sigaltstack(&ss, 0);
-  for (i = 0; i < ARRAYLEN(kCrashSigs); ++i) {
-    if (kCrashSigs[i]) {
-      sa.sa_sigaction = (sigaction_f)__oncrash_thunks[i];
-      sigaction(kCrashSigs[i], &sa, &g_oldcrashacts[i]);
-    }
-  }
+  GetSymbolTable();
 }

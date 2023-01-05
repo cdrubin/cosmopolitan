@@ -16,7 +16,6 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/zipos/zipos.internal.h"
@@ -28,18 +27,21 @@
  * @asyncsignalsafe
  */
 int __zipos_stat(const struct ZiposUri *name, struct stat *st) {
+  int rc;
   ssize_t cf;
   struct Zipos *zipos;
-  if (!st) return efault();
-  if ((zipos = __zipos_get())) {
-    if ((cf = __zipos_find(zipos, name)) != -1) {
-      return __zipos_stat_impl(zipos, cf, st);
+  if (st) {
+    if ((zipos = __zipos_get())) {
+      if ((cf = __zipos_find(zipos, name)) != -1) {
+        rc = __zipos_stat_impl(zipos, cf, st);
+      } else {
+        rc = enoent();
+      }
     } else {
-      ZTRACE("__zipos_stat(%.*s) -> enoent", name->len, name->path);
-      return enoent();
+      rc = enoexec();
     }
   } else {
-    ZTRACE("__zipos_stat(%.*s) → enoexec", name->len, name->path);
-    return enoexec();
+    rc = efault();
   }
+  return rc;
 }

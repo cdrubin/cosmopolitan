@@ -16,10 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/fmt/fmt.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/securityimpersonationlevel.h"
@@ -31,6 +34,7 @@
 #include "libc/nt/struct/privilegeset.h"
 #include "libc/nt/struct/securitydescriptor.h"
 #include "libc/runtime/runtime.h"
+#include "libc/sock/internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ok.h"
 #include "libc/sysv/errfuns.h"
@@ -87,37 +91,38 @@ TryAgain:
           if (result || flags == F_OK) {
             rc = 0;
           } else {
-            SYSDEBUG("ntaccesscheck finale failed %d %d", result, flags);
+            STRACE("ntaccesscheck finale failed %d %d", result, flags);
             rc = eacces();
           }
         } else {
           rc = __winerr();
-          SYSDEBUG("AccessCheck failed: %m");
+          STRACE("%s(%#hs) failed: %m", "AccessCheck", pathname);
         }
       } else {
         rc = __winerr();
-        SYSDEBUG("DuplicateToken failed: %m");
+        STRACE("%s(%#hs) failed: %m", "DuplicateToken", pathname);
       }
     } else {
       rc = __winerr();
-      SYSDEBUG("OpenProcessToken failed: %m");
+      STRACE("%s(%#hs) failed: %m", "OpenProcessToken", pathname);
     }
   } else {
     e = GetLastError();
-    SYSDEBUG("GetFileSecurity failed: %d %d", e, secsize);
     if (!IsTiny() && e == kNtErrorInsufficientBuffer) {
-      if (!freeme && weaken(malloc) && (freeme = weaken(malloc)(secsize))) {
+      if (!freeme && _weaken(malloc) && (freeme = _weaken(malloc)(secsize))) {
         s = freeme;
         goto TryAgain;
       } else {
         rc = enomem();
+        STRACE("%s(%#hs) failed: %m", "GetFileSecurity", pathname);
       }
     } else {
       errno = e;
+      STRACE("%s(%#hs) failed: %m", "GetFileSecurity", pathname);
       rc = -1;
     }
   }
-  if (freeme && weaken(free)) weaken(free)(freeme);
+  if (freeme && _weaken(free)) _weaken(free)(freeme);
   if (hImpersonatedToken != -1) CloseHandle(hImpersonatedToken);
   if (hToken != -1) CloseHandle(hToken);
   return rc;

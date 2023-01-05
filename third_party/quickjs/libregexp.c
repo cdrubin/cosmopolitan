@@ -22,10 +22,11 @@
  * THE SOFTWARE.
  */
 #include "libc/assert.h"
-#include "libc/bits/likely.h"
+#include "libc/intrin/likely.h"
 #include "libc/fmt/fmt.h"
 #include "libc/limits.h"
 #include "libc/mem/alloca.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "third_party/quickjs/cutils.h"
@@ -509,6 +510,9 @@ int lre_parse_escape(const uint8_t **pp, int allow_utf16)
         break;
     case 'f':
         c = '\f';
+        break;
+    case 'e':
+        c = '\e'; /* [jart] love this */
         break;
     case 'n':
         c = '\n';

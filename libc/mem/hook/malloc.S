@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
-.source	__FILE__
 
 	.initbss 202,_init_malloc
 hook_malloc:
@@ -29,5 +28,5 @@ hook_malloc:
 	.hidden	dlmalloc
 	ezlea	dlmalloc,ax
 	stosq
-	yoink	free
+	.yoink	free
 	.init.end 202,_init_malloc

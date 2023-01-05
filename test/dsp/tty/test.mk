@@ -25,8 +25,8 @@ TEST_DSP_TTY_DIRECTDEPS =				\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
+	LIBC_STDIO					\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_TINYMATH					\
@@ -45,7 +45,7 @@ o/$(MODE)/test/dsp/tty/%.com.dbg:			\
 		o/$(MODE)/test/dsp/tty/tty.pkg		\
 		$(LIBC_TESTMAIN)			\
 		$(CRT)					\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 .PHONY: o/$(MODE)/test/dsp/tty

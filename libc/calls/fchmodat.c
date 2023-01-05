@@ -16,12 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/zipos/zipos.internal.h"
 
@@ -35,21 +37,24 @@
  * @param path must exist
  * @param mode contains octal flags (base 8)
  * @param flags can have `AT_SYMLINK_NOFOLLOW`
+ * @raise ENOTSUP if `dirfd` or `path` use zip file system
  * @errors ENOENT, ENOTDIR, ENOSYS
  * @asyncsignalsafe
  * @see fchmod()
  */
 int fchmodat(int dirfd, const char *path, uint32_t mode, int flags) {
   int rc;
-  if (IsAsan() && !__asan_is_valid(path, 1)) return efault();
-  if (weaken(__zipos_notat) && weaken(__zipos_notat)(dirfd, path) == -1) {
-    rc = -1; /* TODO(jart): implement me */
+  if (IsAsan() && !__asan_is_valid_str(path)) {
+    rc = efault();
+  } else if (_weaken(__zipos_notat) &&
+             (rc = __zipos_notat(dirfd, path)) == -1) {
+    rc = enotsup();
   } else if (!IsWindows()) {
     rc = sys_fchmodat(dirfd, path, mode, flags);
   } else {
     rc = sys_fchmodat_nt(dirfd, path, mode, flags);
   }
-  SYSDEBUG("fchmodat(%d, %s, %o, %d) -> %d %s", (long)dirfd, path, mode, flags,
-           rc != -1 ? "" : strerror(errno));
+  STRACE("fchmodat(%s, %#s, %#o, %d) → %d% m", DescribeDirfd(dirfd), path, mode,
+         flags, rc);
   return rc;
 }

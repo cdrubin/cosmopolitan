@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/gdb.h"
@@ -26,7 +26,7 @@
 #include "libc/runtime/symbols.internal.h"
 
 /**
- * Attachs GDB temporarilly, to do something like print a variable.
+ * Attaches GDB temporarily, to do something like print a variable.
  */
 privileged int(gdbexec)(const char *cmd) {
   struct StackFrame *bp;

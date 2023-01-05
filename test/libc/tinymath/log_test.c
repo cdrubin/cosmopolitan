@@ -17,7 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
@@ -53,4 +54,13 @@ TEST(logf, test) {
   EXPECT_STREQ("-INFINITY", gc(xdtoaf(logf(-0.))));
   EXPECT_STREQ("-NAN", gc(xdtoaf(logf(-1))));
   EXPECT_STREQ("-NAN", gc(xdtoaf(logf(-2))));
+}
+
+BENCH(logl, bench) {
+  double _log(double) asm("log");
+  float _logf(float) asm("logf");
+  long double _logl(long double) asm("logl");
+  EZBENCH2("log", donothing, _log(.7));   /*  ~9ns */
+  EZBENCH2("logf", donothing, _logf(.7)); /* ~20ns */
+  EZBENCH2("logl", donothing, _logl(.7)); /* ~20ns */
 }

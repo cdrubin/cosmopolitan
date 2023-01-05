@@ -16,25 +16,41 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/errno.h"
+#include "libc/intrin/weaken.h"
 #include "libc/nt/enum/filetype.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/sysv/consts/o.h"
 
-textwindows int sys_close_nt(struct Fd *fd) {
-  bool32 ok;
-  if (fd->kind == kFdFile && GetFileType(fd->handle) == kNtFileTypeDisk) {
-    /*
-     * Like Linux, closing a file on Windows doesn't guarantee it's
-     * immediately synced to disk. But unlike Linux, this could cause
-     * subsequent operations, e.g. unlink() to break w/ access error.
-     */
+void sys_fcntl_nt_lock_cleanup(int) _Hide;
+
+textwindows int sys_close_nt(struct Fd *fd, int fildes) {
+  int e;
+  bool ok = true;
+
+  if (_weaken(sys_fcntl_nt_lock_cleanup)) {
+    _weaken(sys_fcntl_nt_lock_cleanup)(fildes);
+  }
+
+  if (fd->kind == kFdFile && ((fd->flags & O_ACCMODE) != O_RDONLY &&
+                              GetFileType(fd->handle) == kNtFileTypeDisk)) {
+    // Like Linux, closing a file on Windows doesn't guarantee it's
+    // immediately synced to disk. But unlike Linux, this could cause
+    // subsequent operations, e.g. unlink() to break w/ access error.
+    e = errno;
     FlushFileBuffers(fd->handle);
+    errno = e;
   }
-  ok = CloseHandle(fd->handle);
+
+  // if this file descriptor is wrapped in a named pipe worker thread
+  // then we need to close our copy of the worker thread handle. it's
+  // also required that whatever install a worker use malloc, so free
+  if (!CloseHandle(fd->handle)) ok = false;
   if (fd->kind == kFdConsole && fd->extra && fd->extra != -1) {
-    ok &= CloseHandle(fd->extra);
+    if (!CloseHandle(fd->extra)) ok = false;
   }
-  return ok ? 0 : __winerr();
+
+  return ok ? 0 : -1;
 }

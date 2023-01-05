@@ -16,13 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/pushpop.h"
-#include "libc/bits/weaken.h"
-#include "libc/dce.h"
-#include "libc/nt/console.h"
-#include "libc/nt/enum/consolemodeflags.h"
-#include "libc/nt/pedef.internal.h"
-#include "libc/nt/runtime.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 
@@ -31,7 +26,10 @@
  *
  * This calls functions registered by atexit() before terminating
  * the current process, and any associated threads. It also calls
- * all the legacy linker registered destructors in reeverse order
+ * all the legacy linker registered destructors in reversed order
+ *
+ * This implementation allows exit() to be called recursively via
+ * atexit() handlers.
  *
  * @param exitcode is masked with 255
  * @see _Exit()
@@ -39,17 +37,12 @@
  */
 wontreturn void exit(int exitcode) {
   const uintptr_t *p;
-  if (weaken(__cxa_finalize)) {
-    weaken(__cxa_finalize)(NULL);
+  STRACE("exit(%d)", exitcode);
+  if (_weaken(__cxa_finalize)) {
+    _weaken(__cxa_finalize)(NULL);
   }
   for (p = __fini_array_end; p > __fini_array_start;) {
     ((void (*)(void))(*--p))();
   }
-  if (SupportsWindows() && __ntconsolemode) {
-    SetConsoleMode(GetStdHandle(pushpop(kNtStdInputHandle)), __ntconsolemode);
-    SetConsoleMode(GetStdHandle(pushpop(kNtStdOutputHandle)),
-                   kNtEnableProcessedOutput | kNtEnableWrapAtEolOutput |
-                       kNtEnableVirtualTerminalProcessing);
-  }
-  _Exit(exitcode);
+  _Exitr(exitcode);
 }

@@ -17,27 +17,20 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
-
-static inline noasan uint64_t WildRead64(const signed char *p) {
-  return (uint64_t)(255 & p[7]) << 070 | (uint64_t)(255 & p[6]) << 060 |
-         (uint64_t)(255 & p[5]) << 050 | (uint64_t)(255 & p[4]) << 040 |
-         (uint64_t)(255 & p[3]) << 030 | (uint64_t)(255 & p[2]) << 020 |
-         (uint64_t)(255 & p[1]) << 010 | (uint64_t)(255 & p[0]) << 000;
-}
 
 /**
  * Computes Phil Katz CRC-32 used by zip/zlib/gzip/etc.
  *
  *     x^32+x^26+x^23+x^22+x^16+x^12+x^11+x^10+x^8+x^7+x^5+x^4+x^2+x+1
  *     0b100000100110000010001110110110111
- *     bitreverse32(0x104c11db7)
+ *     _bitreverse32(0x104c11db7)
  *
  * This implementation takes 32 picoseconds per byte or 30 gibibyte/s.
  *

@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/sockaddr.h"
 
 /**
  * Creates client socket file descriptor for incoming connection.
@@ -25,8 +26,10 @@
  * @param out_addr will receive the remote address
  * @param inout_addrsize provides and receives addr's byte length
  * @return client fd which needs close(), or -1 w/ errno
+ * @cancellationpoint
  * @asyncsignalsafe
+ * @restartable (unless SO_RCVTIMEO)
  */
-int accept(int fd, void *out_addr, uint32_t *inout_addrsize) {
+int accept(int fd, struct sockaddr *out_addr, uint32_t *inout_addrsize) {
   return accept4(fd, out_addr, inout_addrsize, 0);
 }

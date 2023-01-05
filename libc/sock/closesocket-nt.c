@@ -16,8 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/log/backtrace.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/sock/internal.h"
+#include "libc/sock/syscall_fd.internal.h"
 
 /**
  * Closes socket on Windows.
@@ -27,7 +29,6 @@
 textwindows int sys_closesocket_nt(struct Fd *fd) {
   struct SockFd *sockfd;
   sockfd = (struct SockFd *)fd->extra;
-  WSACloseEvent(sockfd->event);
   free(sockfd);
   if (__sys_closesocket_nt(fd->handle) != -1) {
     return 0;

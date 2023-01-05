@@ -22,7 +22,7 @@
 
 TEST(GetDosArgv, empty) {
   size_t max = 4;
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(0, GetDosArgv(u"", buf, size, argv, max));
@@ -33,7 +33,7 @@ TEST(GetDosArgv, empty) {
 
 TEST(GetDosArgv, emptyish) {
   size_t max = 4;
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(0, GetDosArgv(u"  ", buf, size, argv, max));
@@ -44,7 +44,7 @@ TEST(GetDosArgv, emptyish) {
 
 TEST(GetDosArgv, basicUsage) {
   size_t max = 4;
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(3, GetDosArgv(u"a\t \"b  c\"  d ", buf, size, argv, max));
@@ -58,7 +58,7 @@ TEST(GetDosArgv, basicUsage) {
 
 TEST(GetDosArgv, advancedUsage) {
   size_t max = 4;
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(2, GetDosArgv(u"(╯°□°)╯︵ ┻━┻", buf, size, argv, max));
@@ -71,7 +71,7 @@ TEST(GetDosArgv, advancedUsage) {
 
 TEST(GetDosArgv, testAegeanGothicSupplementaryPlanes) {
   size_t max = 4; /* these symbols are almost as old as dos */
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(2, GetDosArgv(u"𐄷𐄸𐄹𐄺𐄻𐄼 𐌰𐌱𐌲𐌳𐌴𐌵𐌶𐌷", buf, size, argv, max));
@@ -84,7 +84,7 @@ TEST(GetDosArgv, testAegeanGothicSupplementaryPlanes) {
 
 TEST(GetDosArgv, realWorldUsage) {
   size_t max = 512;
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(5, GetDosArgv(u"C:\\Users\\jtunn\\printargs.com oh yes yes yes",
@@ -145,7 +145,7 @@ TEST(GetDosArgv, quoteInMiddleOfArg_wontSplitArg) {
 
 TEST(GetDosArgv, waqQuoting1) {
   size_t max = 4;
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(2,
@@ -159,13 +159,28 @@ TEST(GetDosArgv, waqQuoting1) {
 
 TEST(GetDosArgv, waqQuoting2) {
   size_t max = 4;
-  size_t size = ARG_MAX;
+  size_t size = ARG_MAX / 2;
   char *buf = malloc(size * sizeof(char));
   char **argv = malloc(max * sizeof(char *));
   EXPECT_EQ(2, GetDosArgv(u"\"a\\\"b c\" d", buf, size, argv, max));
   EXPECT_STREQ("a\"b c", argv[0]);
   EXPECT_STREQ("d", argv[1]);
   EXPECT_EQ(NULL, argv[2]);
+  free(argv);
+  free(buf);
+}
+
+TEST(GetDosArgv, cmdToil) {
+  size_t max = 4;
+  size_t size = ARG_MAX / 2;
+  char *buf = malloc(size * sizeof(char));
+  char **argv = malloc(max * sizeof(char *));
+  EXPECT_EQ(3, GetDosArgv(u"cmd.exe /C \"echo hi >\"\"\"𝑓𝑜𝑜 bar.txt\"\"\"\"",
+                          buf, size, argv, max));
+  EXPECT_STREQ("cmd.exe", argv[0]);
+  EXPECT_STREQ("/C", argv[1]);
+  EXPECT_STREQ("echo hi >\"𝑓𝑜𝑜 bar.txt\"", argv[2]);
+  EXPECT_EQ(NULL, argv[3]);
   free(argv);
   free(buf);
 }

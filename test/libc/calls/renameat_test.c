@@ -24,6 +24,24 @@
 
 char testlib_enable_tmp_setup_teardown;
 
+void SetUpOnce(void) {
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+}
+
+TEST(rename, enoent) {
+  EXPECT_SYS(ENOENT, -1, rename("foo", ""));
+  EXPECT_SYS(ENOENT, -1, rename("", "foo"));
+  EXPECT_SYS(ENOENT, -1, rename("foo", "o/bar"));
+  EXPECT_SYS(ENOENT, -1, rename("o/bar", "foo"));
+}
+
+TEST(renameat, enotdir) {
+  EXPECT_SYS(0, 0, close(creat("yo", 0644)));
+  EXPECT_SYS(ENOTDIR, -1, rename("yo/there", "hrcue"));
+  // this test makes platforms crazy
+  // EXPECT_SYS(ENOTDIR, -1, rename("zoo", "yo/there"));
+}
+
 TEST(renameat, testNull_returnsEfault) {
   ASSERT_SYS(0, 0, close(creat("hello", 0644)));
   EXPECT_SYS(EFAULT, -1, renameat(AT_FDCWD, 0, AT_FDCWD, 0));

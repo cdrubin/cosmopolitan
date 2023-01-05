@@ -16,7 +16,6 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/internal.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/zipos/zipos.internal.h"
@@ -25,7 +24,6 @@ int __zipos_notat(int dirfd, const char *path) {
   struct ZiposUri zipname;
   if (!path) return efault();
   if (__isfdkind(dirfd, kFdZip) || __zipos_parseuri(path, &zipname) != -1) {
-    ZTRACE("__zipos_notat(%d, %s) → EINVAL", dirfd, path);
     return einval();
   }
   return 0;

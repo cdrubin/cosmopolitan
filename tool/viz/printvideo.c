@@ -23,16 +23,10 @@
 #include "dsp/scale/scale.h"
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
-#include "libc/alg/alg.h"
-#include "libc/alg/arraylist.internal.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
-#include "libc/bits/xchg.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/ioctl.h"
-#include "libc/calls/sigbits.h"
 #include "libc/calls/struct/framebufferfixedscreeninfo.h"
 #include "libc/calls/struct/framebuffervirtualscreeninfo.h"
 #include "libc/calls/struct/iovec.h"
@@ -40,6 +34,7 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/ucontext.h"
 #include "libc/dns/dns.h"
@@ -47,23 +42,30 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/xchg.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/alg.h"
+#include "libc/mem/arraylist.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/bench.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nt/console.h"
 #include "libc/nt/runtime.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/buffer.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/runtime/buffer.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/internal.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/str/strwidth.h"
+#include "libc/str/unicode.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/clock.h"
@@ -89,8 +91,7 @@
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/time/time.h"
-#include "libc/unicode/unicode.h"
-#include "libc/x/x.h"
+#include "libc/x/xsigaction.h"
 #include "third_party/getopt/getopt.h"
 #include "third_party/stb/stb_image_resize.h"
 #include "tool/viz/lib/graphic.h"
@@ -169,10 +170,10 @@ mode.\n\
 #define ARGZ(...) ((char *const[]){__VA_ARGS__, NULL})
 #define MOD(X, Y) ((X) - (ABS(Y)) * ((X) / ABS(Y)))
 
-#define BALLOC(B, A, N, NAME)              \
-  ({                                       \
+#define BALLOC(B, A, N, NAME)               \
+  ({                                        \
     INFOF("balloc/%s %,zu bytes", NAME, N); \
-    balloc(B, A, N);                       \
+    balloc(B, A, N);                        \
   })
 
 #define TIMEIT(OUT_NANOS, FORM)                        \
@@ -230,7 +231,7 @@ static const struct itimerval kTimerDisarm = {
     {0, 0},
 };
 
-static const struct itimerval kTimerHalfSecordSingleShot = {
+static const struct itimerval kTimerHalfSecondSingleShot = {
     {0, 0},
     {0, 500000},
 };
@@ -347,7 +348,6 @@ static bool CloseSpeaker(void) {
   int rc, wstatus;
   rc = 0;
   sched_yield();
-  INFOF("CloseSpeaker");
   if (playfd_) {
     rc |= close(playfd_);
     playfd_ = -1;
@@ -355,7 +355,7 @@ static bool CloseSpeaker(void) {
   if (playpid_) {
     kill(playpid_, SIGTERM);
     xsigaction(SIGALRM, StrikeDownCrapware, SA_RESETHAND, 0, 0);
-    setitimer(ITIMER_REAL, &kTimerHalfSecordSingleShot, NULL);
+    setitimer(ITIMER_REAL, &kTimerHalfSecondSingleShot, NULL);
     while (playpid_) {
       if (waitpid(playpid_, &wstatus, 0) != -1) {
         rc |= WEXITSTATUS(wstatus);
@@ -428,7 +428,7 @@ static void DimensionDisplay(void) {
       wsize_.ws_row = 25;
       wsize_.ws_col = 80;
       wsize_ = (struct winsize){.ws_row = 40, .ws_col = 80};
-      if (getttysize(outfd_, &wsize_) == -1) getttysize(0, &wsize_);
+      if (_getttysize(outfd_, &wsize_) == -1) _getttysize(0, &wsize_);
       dh_ = wsize_.ws_row * 2;
       dw_ = wsize_.ws_col * 2;
     }
@@ -444,8 +444,8 @@ static void DimensionDisplay(void) {
     xn = ROUNDDOWN(xn, 2);
     g2_ = resizegraphic(&graphic_[1], yn, xn);
     INFOF("%s 𝑑(%hu×%hu)×(%d,%d): 𝑔₁(%zu×%zu,r=%f) → 𝑔₂(%zu×%zu)",
-         "DimensionDisplay", wsize_.ws_row, wsize_.ws_col, g1_->yn, g1_->xn,
-         ratio, yn, xn);
+          "DimensionDisplay", wsize_.ws_row, wsize_.ws_col, g1_->yn, g1_->xn,
+          ratio, yn, xn);
     BALLOC(&xtcodes_, 64, ((g2_->yn) * g2_->xn + 8) * sizeof(struct TtyRgb),
            "xtcodes_");
     ResizeVtFrame(&vtframe_[0], (g2_->yn), g2_->xn);
@@ -522,7 +522,8 @@ static bool OpenSpeaker(void) {
     if (sox_) tryspeakerfns_[i++] = TrySox;
   }
   snprintf(fifopath_, sizeof(fifopath_), "%s%s.%d.%d.wav", kTmpPath,
-           program_invocation_short_name, getpid(), count);
+           firstnonnull(program_invocation_short_name, "unknown"), getpid(),
+           count);
   for (i = 0; i < ARRAYLEN(tryspeakerfns_); ++i) {
     if (tryspeakerfns_[i]) {
       if (++speakerfails_ <= 2 && tryspeakerfns_[i]()) {
@@ -752,7 +753,7 @@ static void RasterIt(void) {
   static bool once;
   static void *buf;
   if (!once) {
-    buf = mapanon(ROUNDUP(fb0_.size, FRAMESIZE));
+    buf = _mapanon(ROUNDUP(fb0_.size, FRAMESIZE));
     once = true;
   }
   WriteToFrameBuffer(fb0_.vscreen.yres_virtual, fb0_.vscreen.xres_virtual, buf,
@@ -858,8 +859,8 @@ static void OpenVideo(void) {
   plm_set_video_decode_callback(plm_, OnVideo, NULL);
   plm_set_audio_decode_callback(plm_, OnAudio, NULL);
   plm_set_loop(plm_, false);
-  int64toarray_radix10((chans_ = 2), chansstr_);
-  int64toarray_radix10((srate_ = plm_get_samplerate(plm_)), sratestr_);
+  FormatInt64(chansstr_, (chans_ = 2));
+  FormatInt64(sratestr_, (srate_ = plm_get_samplerate(plm_)));
   if (plm_get_num_audio_streams(plm_) && OpenSpeaker()) {
     plm_set_audio_enabled(plm_, true, 0);
   } else {
@@ -1364,7 +1365,7 @@ static void PrintUsage(int rc, FILE *f) {
 static void GetOpts(int argc, char *argv[]) {
   int opt;
   snprintf(logpath_, sizeof(logpath_), "%s%s.log", kTmpPath,
-           program_invocation_short_name);
+           firstnonnull(program_invocation_short_name, "unknown"));
   while ((opt = getopt(argc, argv, "?34AGSTVYabdfhnpstxyzvL:")) != -1) {
     switch (opt) {
       case 'y':
@@ -1396,8 +1397,8 @@ static void OnExit(void) {
   YCbCrFree(&ycbcr_);
   RestoreTty();
   ttyidentclear(&ti_);
-  close_s(&infd_);
-  close_s(&outfd_);
+  close(infd_), infd_ = -1;
+  close(outfd_), outfd_ = -1;
   bfree(&graphic_[0].b);
   bfree(&graphic_[1].b);
   bfree(&vtframe_[0].b);
@@ -1409,7 +1410,7 @@ static void OnExit(void) {
 
 static void MakeLatencyLittleLessBad(void) {
   _peekall();
-  LOGIFNEG1(mlockall(MCL_CURRENT));
+  LOGIFNEG1(sys_mlockall(MCL_CURRENT));
   LOGIFNEG1(nice(-5));
 }
 
@@ -1427,7 +1428,7 @@ static void PickDefaults(void) {
 }
 
 static void RenounceSpecialPrivileges(void) {
-  if (getauxval(AT_SECURE)) {
+  if (issetugid()) {
     setegid(getgid());
     seteuid(getuid());
   }
@@ -1473,8 +1474,10 @@ static void TryToOpenFrameBuffer(void) {
     INFOF("ioctl(%s) → %d", "FBIOGET_VSCREENINFO", rc);
     INFOF("%s.%s=%u", "fb0_.vscreen", "xres", fb0_.vscreen.xres);
     INFOF("%s.%s=%u", "fb0_.vscreen", "yres", fb0_.vscreen.yres);
-    INFOF("%s.%s=%u", "fb0_.vscreen", "xres_virtual", fb0_.vscreen.xres_virtual);
-    INFOF("%s.%s=%u", "fb0_.vscreen", "yres_virtual", fb0_.vscreen.yres_virtual);
+    INFOF("%s.%s=%u", "fb0_.vscreen", "xres_virtual",
+          fb0_.vscreen.xres_virtual);
+    INFOF("%s.%s=%u", "fb0_.vscreen", "yres_virtual",
+          fb0_.vscreen.yres_virtual);
     INFOF("%s.%s=%u", "fb0_.vscreen", "xoffset", fb0_.vscreen.xoffset);
     INFOF("%s.%s=%u", "fb0_.vscreen", "yoffset", fb0_.vscreen.yoffset);
     INFOF("%s.%s=%u", "fb0_.vscreen", "bits_per_pixel",
@@ -1484,8 +1487,10 @@ static void TryToOpenFrameBuffer(void) {
     INFOF("%s.%s=%u", "fb0_.vscreen.red", "length", fb0_.vscreen.red.length);
     INFOF("%s.%s=%u", "fb0_.vscreen.red", "msb_right",
           fb0_.vscreen.red.msb_right);
-    INFOF("%s.%s=%u", "fb0_.vscreen.green", "offset", fb0_.vscreen.green.offset);
-    INFOF("%s.%s=%u", "fb0_.vscreen.green", "length", fb0_.vscreen.green.length);
+    INFOF("%s.%s=%u", "fb0_.vscreen.green", "offset",
+          fb0_.vscreen.green.offset);
+    INFOF("%s.%s=%u", "fb0_.vscreen.green", "length",
+          fb0_.vscreen.green.length);
     INFOF("%s.%s=%u", "fb0_.vscreen.green", "msb_right",
           fb0_.vscreen.green.msb_right);
     INFOF("%s.%s=%u", "fb0_.vscreen.blue", "offset", fb0_.vscreen.blue.offset);
@@ -1505,9 +1510,12 @@ static void TryToOpenFrameBuffer(void) {
     INFOF("%s.%s=%u", "fb0_.vscreen", "accel_flags", fb0_.vscreen.accel_flags);
     INFOF("%s.%s=%u", "fb0_.vscreen", "pixclock", fb0_.vscreen.pixclock);
     INFOF("%s.%s=%u", "fb0_.vscreen", "left_margin", fb0_.vscreen.left_margin);
-    INFOF("%s.%s=%u", "fb0_.vscreen", "right_margin", fb0_.vscreen.right_margin);
-    INFOF("%s.%s=%u", "fb0_.vscreen", "upper_margin", fb0_.vscreen.upper_margin);
-    INFOF("%s.%s=%u", "fb0_.vscreen", "lower_margin", fb0_.vscreen.lower_margin);
+    INFOF("%s.%s=%u", "fb0_.vscreen", "right_margin",
+          fb0_.vscreen.right_margin);
+    INFOF("%s.%s=%u", "fb0_.vscreen", "upper_margin",
+          fb0_.vscreen.upper_margin);
+    INFOF("%s.%s=%u", "fb0_.vscreen", "lower_margin",
+          fb0_.vscreen.lower_margin);
     INFOF("%s.%s=%u", "fb0_.vscreen", "hsync_len", fb0_.vscreen.hsync_len);
     INFOF("%s.%s=%u", "fb0_.vscreen", "vsync_len", fb0_.vscreen.vsync_len);
     INFOF("%s.%s=%u", "fb0_.vscreen", "sync", fb0_.vscreen.sync);
@@ -1530,7 +1538,7 @@ int main(int argc, char *argv[]) {
   sigaddset(&wut, SIGCHLD);
   sigaddset(&wut, SIGPIPE);
   sigprocmask(SIG_SETMASK, &wut, NULL);
-  showcrashreports();
+  ShowCrashReports();
   fullclear_ = true;
   GetOpts(argc, argv);
   if (!tuned_) PickDefaults();

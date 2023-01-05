@@ -1,7 +1,6 @@
 #ifndef COSMOPOLITAN_THIRD_PARTY_CHIBICC_CHIBICC_H_
 #define COSMOPOLITAN_THIRD_PARTY_CHIBICC_CHIBICC_H_
 #include "libc/assert.h"
-#include "libc/bits/popcnt.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/weirdtypes.h"
@@ -9,21 +8,20 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/popcnt.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsf.h"
-#include "libc/nexgen32e/bsr.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/stdio/temp.h"
 #include "libc/str/str.h"
+#include "libc/str/unicode.h"
 #include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
-#include "libc/unicode/unicode.h"
 #include "libc/x/x.h"
 #include "third_party/gdtoa/gdtoa.h"
 #include "tool/build/lib/javadown.h"
@@ -297,55 +295,71 @@ struct Relocation {
 };
 
 typedef enum {
-  ND_NULL_EXPR,   // Do nothing
-  ND_ADD,         // +
-  ND_SUB,         // -
-  ND_MUL,         // *
-  ND_DIV,         // /
-  ND_NEG,         // unary -
-  ND_REM,         // %
-  ND_BINAND,      // &
-  ND_BINOR,       // |
-  ND_BINXOR,      // ^
-  ND_SHL,         // <<
-  ND_SHR,         // >>
-  ND_EQ,          // ==
-  ND_NE,          // !=
-  ND_LT,          // <
-  ND_LE,          // <=
-  ND_ASSIGN,      // =
-  ND_COND,        // ?:
-  ND_COMMA,       // ,
-  ND_MEMBER,      // . (struct member access)
-  ND_ADDR,        // unary &
-  ND_DEREF,       // unary *
-  ND_NOT,         // !
-  ND_BITNOT,      // ~
-  ND_LOGAND,      // &&
-  ND_LOGOR,       // ||
-  ND_RETURN,      // "return"
-  ND_IF,          // "if"
-  ND_FOR,         // "for" or "while"
-  ND_DO,          // "do"
-  ND_SWITCH,      // "switch"
-  ND_CASE,        // "case"
-  ND_BLOCK,       // { ... }
-  ND_GOTO,        // "goto"
-  ND_GOTO_EXPR,   // "goto" labels-as-values
-  ND_LABEL,       // Labeled statement
-  ND_LABEL_VAL,   // [GNU] Labels-as-values
-  ND_FUNCALL,     // Function call
-  ND_EXPR_STMT,   // Expression statement
-  ND_STMT_EXPR,   // Statement expression
-  ND_VAR,         // Variable
-  ND_VLA_PTR,     // VLA designator
-  ND_NUM,         // Integer
-  ND_CAST,        // Type cast
-  ND_MEMZERO,     // Zero-clear a stack variable
-  ND_ASM,         // "asm"
-  ND_CAS,         // Atomic compare-and-swap
-  ND_EXCH,        // Atomic exchange
-  ND_FPCLASSIFY,  // floating point classify
+  ND_NULL_EXPR,    // Do nothing
+  ND_ADD,          // +
+  ND_SUB,          // -
+  ND_MUL,          // *
+  ND_DIV,          // /
+  ND_NEG,          // unary -
+  ND_REM,          // %
+  ND_BINAND,       // &
+  ND_BINOR,        // |
+  ND_BINXOR,       // ^
+  ND_SHL,          // <<
+  ND_SHR,          // >>
+  ND_EQ,           // ==
+  ND_NE,           // !=
+  ND_LT,           // <
+  ND_LE,           // <=
+  ND_ASSIGN,       // =
+  ND_COND,         // ?:
+  ND_COMMA,        // ,
+  ND_MEMBER,       // . (struct member access)
+  ND_ADDR,         // unary &
+  ND_DEREF,        // unary *
+  ND_NOT,          // !
+  ND_BITNOT,       // ~
+  ND_LOGAND,       // &&
+  ND_LOGOR,        // ||
+  ND_RETURN,       // "return"
+  ND_IF,           // "if"
+  ND_FOR,          // "for" or "while"
+  ND_DO,           // "do"
+  ND_SWITCH,       // "switch"
+  ND_CASE,         // "case"
+  ND_BLOCK,        // { ... }
+  ND_GOTO,         // "goto"
+  ND_GOTO_EXPR,    // "goto" labels-as-values
+  ND_LABEL,        // Labeled statement
+  ND_LABEL_VAL,    // [GNU] Labels-as-values
+  ND_FUNCALL,      // Function call
+  ND_EXPR_STMT,    // Expression statement
+  ND_STMT_EXPR,    // Statement expression
+  ND_VAR,          // Variable
+  ND_VLA_PTR,      // VLA designator
+  ND_NUM,          // Integer
+  ND_CAST,         // Type cast
+  ND_MEMZERO,      // Zero-clear a stack variable
+  ND_ASM,          // "asm"
+  ND_CAS,          // Atomic compare-and-swap
+  ND_EXCH_N,       // Atomic exchange with value
+  ND_LOAD,         // Atomic load to pointer
+  ND_LOAD_N,       // Atomic load to result
+  ND_STORE,        // Atomic store to pointer
+  ND_STORE_N,      // Atomic store to result
+  ND_TESTANDSET,   // Sync lock test and set
+  ND_TESTANDSETA,  // Atomic lock test and set
+  ND_CLEAR,        // Atomic clear
+  ND_RELEASE,      // Atomic lock release
+  ND_FETCHADD,     // Atomic fetch and add
+  ND_FETCHSUB,     // Atomic fetch and sub
+  ND_FETCHXOR,     // Atomic fetch and xor
+  ND_FETCHAND,     // Atomic fetch and and
+  ND_FETCHOR,      // Atomic fetch and or
+  ND_SUBFETCH,     // Atomic sub and fetch
+  ND_FPCLASSIFY,   // floating point classify
+  ND_MOVNTDQ,      // Intel MOVNTDQ
+  ND_PMOVMSKB,     // Intel PMOVMSKB
 } NodeKind;
 
 struct Node {
@@ -387,6 +401,7 @@ struct Node {
   // Assembly
   Asm *azm;
   // Atomic compare-and-swap
+  char memorder;
   Node *cas_addr;
   Node *cas_old;
   Node *cas_new;

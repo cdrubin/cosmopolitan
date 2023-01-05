@@ -17,14 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/calls/internal.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
-#include "libc/sock/yoink.inc"
-#include "libc/sysv/errfuns.h"
+#include "libc/sock/syscall_fd.internal.h"
 
 textwindows int sys_listen_nt(struct Fd *fd, int backlog) {
-  assert(fd->kind == kFdSocket);
+  _npassert(fd->kind == kFdSocket);
   if (__sys_listen_nt(fd->handle, backlog) != -1) {
     return 0;
   } else {

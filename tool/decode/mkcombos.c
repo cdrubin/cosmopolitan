@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/fmt/conv.h"
 #include "libc/log/check.h"
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
     strsep(&tok, ";");
     category = strsep(&tok, ";");
     if (!s1 || !category) continue;
-    bit = strtoimax(s1, NULL, 16);
+    bit = strtol(s1, NULL, 16);
     if (bit != 0x00AD &&
         ((0x1160 <= bit && bit <= 0x11FF) ||
          (strcmp(category, "Me") == 0 || strcmp(category, "Mn") == 0 ||

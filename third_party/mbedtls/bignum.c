@@ -15,17 +15,14 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/bswap.h"
-#include "libc/log/backtrace.internal.h"
-#include "libc/log/check.h"
-#include "libc/log/log.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsf.h"
+#include "libc/intrin/bswap.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsf.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "third_party/mbedtls/bignum.h"
 #include "third_party/mbedtls/bignum_internal.h"
 #include "third_party/mbedtls/chk.h"
@@ -1128,7 +1125,7 @@ static unsigned ct_lt_mpi_uint( const mbedtls_mpi_uint x,
  *                 the two input MPIs is not the same.
  */
 int mbedtls_mpi_lt_mpi_ct( const mbedtls_mpi *X, const mbedtls_mpi *Y,
-        unsigned *ret )
+                           unsigned *ret )
 {
     size_t i;
     /* The value of any of these variables is either 0 or 1 at all times. */
@@ -1949,8 +1946,8 @@ static void mpi_montg_init( mbedtls_mpi_uint *mm, const mbedtls_mpi *N )
  *                      Note that unlike the usual convention in the library
  *                      for `const mbedtls_mpi*`, the content of T can change.
  */
-static void mpi_montmul( mbedtls_mpi *A, const mbedtls_mpi *B, const mbedtls_mpi *N, mbedtls_mpi_uint mm,
-                         const mbedtls_mpi *T )
+static void mpi_montmul( mbedtls_mpi *A, const mbedtls_mpi *B, const mbedtls_mpi *N,
+                         mbedtls_mpi_uint mm, const mbedtls_mpi *T )
 {
     size_t i, n, m;
     mbedtls_mpi_uint u0, u1, *d, *Ap, *Bp, *Np;

@@ -16,13 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/alg.h"
 #include "libc/elf/elf.h"
 #include "libc/elf/struct/sym.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/alg.h"
 #include "libc/mem/mem.h"
+#include "libc/runtime/memtrack.internal.h"
 #include "libc/str/str.h"
 #include "tool/build/lib/dis.h"
 
@@ -84,10 +85,9 @@ static void DisLoadElfSyms(struct Dis *d, struct Elf *elf) {
     for (i = 0; i < n; ++i) {
       if (ELF64_ST_TYPE(st[i].st_info) == STT_SECTION ||
           ELF64_ST_TYPE(st[i].st_info) == STT_FILE || !st[i].st_name ||
-          startswith(d->syms.stab + st[i].st_name, "v_") ||
+          _startswith(d->syms.stab + st[i].st_name, "v_") ||
           !(0 <= st[i].st_name && st[i].st_name < stablen) || !st[i].st_value ||
-          !(-0x800000000000 <= (int64_t)st[i].st_value &&
-            (int64_t)st[i].st_value < 0x800000000000)) {
+          !IsLegalPointer(st[i].st_value)) {
         continue;
       }
       isabs = st[i].st_shndx == SHN_ABS;
@@ -186,8 +186,9 @@ long DisFindSym(struct Dis *d, int64_t addr) {
         l = m + 1;
       }
     }
-    if (r && d->syms.p[r - 1].addr < 256) {
-      /* XXX: prevent skewed binbase from doing weirdness */
+    // TODO(jart): This was <256 but that broke SectorLISP debugging
+    //             Why did the Cosmo binbase bootloader need this?
+    if (r && d->syms.p[r - 1].addr < 32) {
       return -1;
     }
     if (r && (addr == d->syms.p[r - 1].addr ||

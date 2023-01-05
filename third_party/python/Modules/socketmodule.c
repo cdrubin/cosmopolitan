@@ -12,8 +12,10 @@
 #include "libc/dns/ent.h"
 #include "libc/errno.h"
 #include "libc/nt/enum/version.h"
+#include "libc/nt/version.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/fileno.h"
@@ -75,7 +77,6 @@ PYTHON_PROVIDE("_socket.AF_NETBEUI");
 PYTHON_PROVIDE("_socket.AF_NETROM");
 PYTHON_PROVIDE("_socket.AF_PACKET");
 PYTHON_PROVIDE("_socket.AF_PPPOX");
-PYTHON_PROVIDE("_socket.AF_RDS");
 PYTHON_PROVIDE("_socket.AF_ROSE");
 PYTHON_PROVIDE("_socket.AF_ROUTE");
 PYTHON_PROVIDE("_socket.AF_SECURITY");
@@ -6664,7 +6665,6 @@ PyInit__socket(void)
 
     if (AF_CAN) PyModule_AddIntMacro(m, AF_CAN); /* Controller Area Network */
     if (PF_CAN) PyModule_AddIntMacro(m, PF_CAN);
-    if (AF_RDS) PyModule_AddIntMacro(m, AF_RDS); /* Reliable Datagram Sockets */
     if (PF_RDS) PyModule_AddIntMacro(m, PF_RDS);
     if (AF_PACKET) PyModule_AddIntMacro(m, AF_PACKET);
     if (PF_PACKET) PyModule_AddIntMacro(m, PF_PACKET);
@@ -7146,9 +7146,9 @@ PyInit__socket(void)
     if (TCP_USER_TIMEOUT) PyModule_AddIntMacro(m, TCP_USER_TIMEOUT);
     if (TCP_SAVE_SYN) PyModule_AddIntMacro(m, TCP_SAVE_SYN);
     if (TCP_SAVED_SYN) PyModule_AddIntMacro(m, TCP_SAVED_SYN);
-    if (TCP_KEEPCNT && (!IsWindows() || NtGetVersion() >= kNtVersionWindows10))
+    if (TCP_KEEPCNT && (!IsWindows() || IsAtLeastWindows10()))
         PyModule_AddIntMacro(m, TCP_KEEPCNT);
-    if (TCP_FASTOPEN && (!IsWindows() || NtGetVersion() >= kNtVersionWindows10))
+    if (TCP_FASTOPEN && (!IsWindows() || IsAtLeastWindows10()))
         PyModule_AddIntMacro(m, TCP_FASTOPEN);
     if (TCP_FASTOPEN_CONNECT)
         PyModule_AddIntMacro(m, TCP_FASTOPEN_CONNECT);

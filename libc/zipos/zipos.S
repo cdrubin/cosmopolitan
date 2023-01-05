@@ -19,17 +19,25 @@
 #include "libc/macros.internal.h"
 
 //	static_yoink this symbol for open(/zip/...) support.
-	zip_uri_support = 0
-	.globl	zip_uri_support
+	zipos = 0
+	.globl	zipos
 
 	.yoink	__zip_end
 	.yoink	__zip_start
 	.yoink	__zipos_close
 	.yoink	__zipos_fcntl
 	.yoink	__zipos_fstat
+	.yoink	__zipos_access
 	.yoink	__zipos_lseek
 	.yoink	__zipos_open
 	.yoink	__zipos_parseuri
 	.yoink	__zipos_read
 	.yoink	__zipos_stat
 	.yoink	__zipos_notat
+
+//	TODO(jart): why does corruption happen when zip has no assets?
+	.yoink	.cosmo
+
+//	deprecated: use STATIC_YOINK("zipos")
+	zip_uri_support = 0
+	.globl	zip_uri_support

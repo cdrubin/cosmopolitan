@@ -23,19 +23,31 @@
 #include "libc/zip.h"
 #include "libc/zipos/zipos.internal.h"
 
+// TODO(jart): improve time complexity here
+
 ssize_t __zipos_find(struct Zipos *zipos, const struct ZiposUri *name) {
   const char *zname;
   size_t i, n, c, znamesize;
+  if (!name->len) {
+    return 0;
+  }
   c = GetZipCdirOffset(zipos->cdir);
   n = GetZipCdirRecords(zipos->cdir);
   for (i = 0; i < n; ++i, c += ZIP_CFILE_HDRSIZE(zipos->map + c)) {
-    assert(ZIP_CFILE_MAGIC(zipos->map + c) == kZipCfileHdrMagic);
+    _npassert(ZIP_CFILE_MAGIC(zipos->map + c) == kZipCfileHdrMagic);
     zname = ZIP_CFILE_NAME(zipos->map + c);
     znamesize = ZIP_CFILE_NAMESIZE(zipos->map + c);
     if ((name->len == znamesize && !memcmp(name->path, zname, name->len)) ||
         (name->len + 1 == znamesize && !memcmp(name->path, zname, name->len) &&
          zname[name->len] == '/')) {
       return c;
+    } else if ((name->len < znamesize &&
+                !memcmp(name->path, zname, name->len) &&
+                zname[name->len - 1] == '/') ||
+               (name->len + 1 < znamesize &&
+                !memcmp(name->path, zname, name->len) &&
+                zname[name->len] == '/')) {
+      return 0;
     }
   }
   return -1;

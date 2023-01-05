@@ -16,17 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/nt/struct/imagedosheader.internal.h"
 #include "libc/nt/struct/imagentheaders.internal.h"
 #include "libc/nt/struct/imageoptionalheader.internal.h"
+#include "libc/nt/struct/imagesectionheader.internal.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/x/xasprintf.h"
 #include "third_party/xed/x86.h"
 #include "tool/decode/lib/asmcodegen.h"
 #include "tool/decode/lib/flagger.h"
@@ -70,7 +75,7 @@ static void *pecheckaddress(struct NtImageDosHeader *mz, size_t mzsize,
   return addr;
 }
 
-static void *pecomputerva(struct NtImageDosHeader *mz, size_t mzsize,
+static void *PeComputeRva(struct NtImageDosHeader *mz, size_t mzsize,
                           uint32_t reladdr, uint32_t addrsize) {
   return pecheckaddress(mz, mzsize, (void *)((intptr_t)mz + reladdr), addrsize);
 }
@@ -109,13 +114,13 @@ static void showmzheader(void) {
   showshorthex(mz->e_lfarlc);
   showshorthex(mz->e_ovno);
   show(".short",
-       format(b1, "%hn,%hn,%hn,%hn", mz->e_res[0], mz->e_res[1], mz->e_res[2],
+       format(b1, "%hu,%hu,%hu,%hu", mz->e_res[0], mz->e_res[1], mz->e_res[2],
               mz->e_res[3]),
        "mz->e_res");
   showshorthex(mz->e_oemid);
   showshorthex(mz->e_oeminfo);
   show(".short",
-       format(b1, "%hn,%hn,%hn,%hn,%hn,%hn,%hn,%hn,%hn,%hn", mz->e_res2[0],
+       format(b1, "%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu", mz->e_res2[0],
               mz->e_res2[1], mz->e_res2[2], mz->e_res2[3], mz->e_res2[4],
               mz->e_res2[5], mz->e_res2[6], mz->e_res2[7], mz->e_res2[8],
               mz->e_res2[9]),
@@ -128,6 +133,7 @@ static void showdosstub(void) {
 }
 
 static void showpeoptionalheader(struct NtImageOptionalHeader *opt) {
+  int i;
   showtitle(basename(path), "windows", "pe \"optional\" header", NULL, NULL);
   printf("\n");
   show(".short",
@@ -169,6 +175,121 @@ static void showpeoptionalheader(struct NtImageOptionalHeader *opt) {
   showint64hex(opt->SizeOfHeapCommit);
   showinthex(opt->LoaderFlags);
   showinthex(opt->NumberOfRvaAndSizes);
+
+  i = 0;
+#define DATA_DIRECTORY(x)                                             \
+  do {                                                                \
+    if (i++ < opt->NumberOfRvaAndSizes) {                             \
+      show(".long",                                                   \
+           format(b1, "%#X,%u", opt->DataDirectory[x].VirtualAddress, \
+                  opt->DataDirectory[x].Size),                        \
+           _gc(xasprintf("opt->DataDirectory[%s]", #x)));             \
+    }                                                                 \
+  } while (0)
+
+  DATA_DIRECTORY(kNtImageDirectoryEntryExport);
+  DATA_DIRECTORY(kNtImageDirectoryEntryImport);
+  DATA_DIRECTORY(kNtImageDirectoryEntryResource);
+  DATA_DIRECTORY(kNtImageDirectoryEntryException);
+  DATA_DIRECTORY(kNtImageDirectoryEntrySecurity);
+  DATA_DIRECTORY(kNtImageDirectoryEntryBasereloc);
+  DATA_DIRECTORY(kNtImageDirectoryEntryDebug);
+  DATA_DIRECTORY(kNtImageDirectoryEntryArchitecture);
+  DATA_DIRECTORY(kNtImageDirectoryEntryGlobalptr);
+  DATA_DIRECTORY(kNtImageDirectoryEntryTls);
+  DATA_DIRECTORY(kNtImageDirectoryEntryLoadConfig);
+  DATA_DIRECTORY(kNtImageDirectoryEntryBoundImport);
+  DATA_DIRECTORY(kNtImageDirectoryEntryIat);
+  DATA_DIRECTORY(kNtImageDirectoryEntryDelayImport);
+  DATA_DIRECTORY(kNtImageDirectoryEntryComDescriptor);
+
+  for (; i < opt->NumberOfRvaAndSizes; ++i) {
+    showint64hex(opt->DataDirectory[i]);
+  }
+}
+
+static void ShowIlt(int64_t *ilt) {
+  printf("\n");
+  showtitle(basename(path), "windows", "import lookup table (ilt)", 0, 0);
+  do {
+    printf("\n");
+    show(".quad", format(b1, "%#lx", *ilt),
+         _gc(xasprintf("@%#lx", (intptr_t)ilt - (intptr_t)mz)));
+    if (*ilt) {
+      char *hint = (char *)((intptr_t)mz + *ilt);
+      printf("/\t.short\t%d\t\t\t# @%#lx\n", READ16LE(hint),
+             (intptr_t)hint - (intptr_t)mz);
+      char *name = (char *)((intptr_t)mz + *ilt + 2);
+      printf("/\t.asciz\t%`'s\n", name);
+      printf("/\t.align\t2\n");
+    }
+  } while (*ilt++);
+}
+
+static void ShowIat(char *iat, size_t size) {
+  char *p, *e;
+  printf("\n");
+  showtitle(basename(path), "windows", "import address table (iat)", 0, 0);
+  for (p = iat, e = iat + size; p + 20 <= e; p += 20) {
+    printf("\n");
+    show(".long", format(b1, "%#x", READ32LE(p)),
+         _gc(xasprintf("ImportLookupTable RVA @%#lx",
+                       (intptr_t)p - (intptr_t)mz)));
+    show(".long", format(b1, "%#x", READ32LE(p + 4)), "TimeDateStamp");
+    show(".long", format(b1, "%#x", READ32LE(p + 8)), "ForwarderChain");
+    show(".long", format(b1, "%#x", READ32LE(p + 12)),
+         READ32LE(p + 12)
+             ? _gc(xasprintf("DllName RVA (%s)", (char *)mz + READ32LE(p + 12)))
+             : "DllName RVA");
+    show(".long", format(b1, "%#x", READ32LE(p + 16)),
+         "ImportAddressTable RVA");
+  }
+  for (p = iat, e = iat + size; p + 20 <= e; p += 20) {
+    if (READ32LE(p)) {
+      ShowIlt((void *)((intptr_t)mz + READ32LE(p)));
+    }
+  }
+}
+
+static void ShowSection(struct NtImageSectionHeader *s) {
+  char name[9] = {0};
+  memcpy(name, s->Name, 8);
+  printf("\n");
+  printf("\t.ascin\t\"%'s\",8\n", name);
+  printf("\t.long\t%#x\t\t# VirtualSize\n", s->Misc.VirtualSize);
+  printf("\t.long\t%#x\t\t# VirtualAddress\n", s->VirtualAddress);
+  printf("\t.long\t%#x\t\t# SizeOfRawData\n", s->SizeOfRawData);
+  printf("\t.long\t%#x\t\t# PointerToRawData\n", s->PointerToRawData);
+  printf("\t.long\t%#x\t\t# PointerToRelocations\n", s->PointerToRelocations);
+  printf("\t.long\t%#x\t\t# PointerToLinenumbers\n", s->PointerToLinenumbers);
+  printf("\t.short\t%#x\t\t# NumberOfRelocations\n", s->NumberOfRelocations);
+  printf("\t.short\t%#x\t\t# NumberOfLinenumbers\n", s->NumberOfLinenumbers);
+
+  printf("\
+//	          ┌31:Writeable                        ┌─────────────────────────┐\n\
+//	          │┌30:Readable                        │ PE Section Flags        │\n\
+//	          ││┌29:Executable                     ├─────────────────────────┤\n\
+//	          │││┌28:Shareable                     │ o │ for object files    │\n\
+//	          ││││┌27:Unpageable                   │ r │ reserved            │\n\
+//	          │││││┌26:Uncacheable                 └───┴─────────────────────┘\n\
+//	          ││││││┌25:Discardable\n\
+//	          │││││││┌24:Contains Extended Relocations\n\
+//	          ││││││││        ┌15:Contains Global Pointer (GP) Relative Data\n\
+//	          ││││││││        │       ┌7:Contains Uninitialized Data\n\
+//	          ││││││││        │       │┌6:Contains Initialized Data\n\
+//	          ││││││││ o      │       ││┌5:Contains Code\n\
+//	          ││││││││┌┴─┐rrrr│  ooror│││rorrr\n\
+\t.long\t0b%.32b\t\t# Characteristics\n",
+         s->Characteristics);
+}
+
+static void ShowSections(struct NtImageSectionHeader *s, size_t n) {
+  size_t i;
+  printf("\n");
+  showtitle(basename(path), "windows", "sections", 0, 0);
+  for (i = 0; i < n; ++i) {
+    ShowSection(s + i);
+  }
 }
 
 static void showpeheader(struct NtImageNtHeaders *pe) {
@@ -195,6 +316,15 @@ static void showpeheader(struct NtImageNtHeaders *pe) {
   printf("\n");
   showpeoptionalheader(pecheckaddress(mz, mzsize, &pe->OptionalHeader,
                                       pe->FileHeader.SizeOfOptionalHeader));
+  ShowSections(pecheckaddress(mz, mzsize, pe + 1,
+                              pe->FileHeader.NumberOfSections *
+                                  sizeof(struct NtImageSectionHeader)),
+               pe->FileHeader.NumberOfSections);
+  ShowIat(
+      (void *)((intptr_t)mz +
+               pe->OptionalHeader.DataDirectory[kNtImageDirectoryEntryImport]
+                   .VirtualAddress),
+      pe->OptionalHeader.DataDirectory[kNtImageDirectoryEntryImport].Size);
 }
 
 static void showall(void) {
@@ -202,7 +332,7 @@ static void showall(void) {
   showmzheader();
   showdosstub();
   if (mz->e_lfanew) {
-    showpeheader(pecomputerva(mz, mzsize, mz->e_lfanew,
+    showpeheader(PeComputeRva(mz, mzsize, mz->e_lfanew,
                               sizeof(struct NtImageFileHeader)));
   }
 }

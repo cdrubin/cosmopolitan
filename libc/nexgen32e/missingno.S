@@ -18,11 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
 .real
-.source	__FILE__
 .code16 # ∩ .code32 ∩ .code64
 
 //	Optional function stub.
-missingno:
+_missingno:
 	xor	%ax,%ax
 	ret
-	.endfn	missingno,globl,hidden
+	.endfn	_missingno,globl,hidden

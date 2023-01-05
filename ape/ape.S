@@ -35,11 +35,11 @@
 #include "ape/macros.internal.h"
 #include "ape/notice.inc"
 #include "ape/relocations.h"
+#include "libc/calls/metalfile.internal.h"
 #include "libc/dce.h"
 #include "libc/elf/def.h"
 #include "libc/macho.internal.h"
 #include "libc/nexgen32e/uart.internal.h"
-#include "libc/nexgen32e/vidya.internal.h"
 #include "libc/nt/pedef.internal.h"
 #include "libc/runtime/pc.internal.h"
 #include "libc/sysv/consts/prot.h"
@@ -51,7 +51,7 @@
 	.previous
 	.section .rodata,"a",@progbits
 	.align	__SIZEOF_POINTER__
-__ro:	.endobj	__ro,globl,hidden		# ←for gdb readibility
+__ro:	.endobj	__ro,globl,hidden		# ←for gdb readability
 	.previous
 	.section .data,"aw",@progbits
 	.align	__SIZEOF_POINTER__
@@ -60,7 +60,7 @@ __ro:	.endobj	__ro,globl,hidden		# ←for gdb readibility
 	.align	__SIZEOF_POINTER__
 	.previous
 	.section .rodata.str1.1,"a",@progbits
-cstr:	.endobj	cstr,globl,hidden		# ←for gdb readibility
+cstr:	.endobj	cstr,globl,hidden		# ←for gdb readability
 	.previous
 	.section .head,"ax",@progbits
 
@@ -113,7 +113,33 @@ cstr:	.endobj	cstr,globl,hidden		# ←for gdb readibility
 //
 //	@param	dl is drive number
 //	@noreturn
-ape_mz:	.asciz	"MZqFpD='\n"		# Mark 'Zibo' Joseph Zbikowski
+ape_mz:
+#if SupportsWindows() || SupportsMetal()
+	.asciz	"MZqFpD='\n"		# Mark 'Zibo' Joseph Zbikowski
+//	# in real mode
+//	dec	%bp
+//	pop	%dx
+//	jno	0x4a
+//	jo	0x4a
+//
+//	# in legacy mode
+//	push	%ebp
+//	pop	%edx
+//	jno	0x4a
+//	jo	0x4a
+//
+//	# 64-bit mode
+//	rex.WRB
+//	pop	%r10
+//	jno	0x4a
+//	jo	0x4a
+#else
+//	Avoid virus scanner reputation damage when targeting System Five.
+	.asciz	"jartsr='\n"		# Justine Alexandra Roberts Tunney
+//	push	$0x61
+//	jb	0x78
+//	jae	0x78
+#endif
 	.short	0x1000			# MZ: lowers upper bound load / 16
 	.short	0xf800			# MZ: roll greed on bss
 	.short	0			# MZ: lower bound on stack segment
@@ -126,11 +152,15 @@ ape_mz:	.asciz	"MZqFpD='\n"		# Mark 'Zibo' Joseph Zbikowski
 	.org	0x24			# MZ: bytes reserved for you
 	.ascii	"JT"			# MZ: OEM identifier
 	.short	0			# MZ: OEM information
+	.ascii	"' <<'@'\n"
 	.org	0x40-4			# MZ: bytes reserved for you
 #if SupportsWindows() || SupportsMetal()
 	.long	RVA(ape_pe)		# PE: the new technology
 #else
 	.long	0
+	.org	0x78
+	pop	%rax
+	jmp	_start
 #endif
 	.endfn	ape_mz,globl,hidden
 
@@ -193,12 +223,12 @@ stub:	mov	$0x40,%dl		# *literally* dos
 	to a program as soon as its first sector is loaded. That gives
 	us control over user-facing latency, even though the next step
 	will generally be asking the BIOS to load more.
-	
+
 	The process is trivial enough that this entrypoint can support
 	handoffs from alternative program-loaders e.g. Grub and MS-DOS
 	so long as they either load our full program, or implement the
 	PC BIOS disk service API.
-	
+
 	Since so many different implementations of these APIs have been
 	built the last forty years these routines also canonicalize the
 	cpu and program state, as it is written in the System V ABI. */
@@ -236,8 +266,9 @@ pc:	cld
 #endif
 	ljmp	$0,$REAL(1f)
 1:	mov	%cx,%ds
-	mov	$IMAGE_BASE_REAL-0x0500,%cx	# clears bss
-	mov	$0x0500>>4,%ax			# struct mman
+	.set	mm,0x0500			# struct mman
+	mov	$IMAGE_BASE_REAL-mm,%cx		# clears bss
+	mov	$mm>>4,%ax
 	mov	%ax,%es
 	xor	%ax,%ax
 	xor	%di,%di
@@ -251,6 +282,9 @@ pc:	cld
 	xor	%dh,%dh				# current head
 	mov	$v_ape_realsectors,%di		# total sectors
 3:	call	pcread
+	mov	%es,%si				# addr += 512
+	add	$512>>4,%si
+	mov	%si,%es
 	dec	%di
 	jnz	3b
 6:	ljmp	$0,$REAL(realmodeloader)
@@ -301,7 +335,21 @@ pc:	cld
 //	@since	IBM Personal Computer XT
 dsknfo:	push	%bx
 1:	push	%dx
-	mov	$0x08,%ah		# get disk params
+	mov	$0x16,%ah		# make sure there is disk in drive,
+	int	$0x13			# by querying change-line status
+	jnc	2f
+	xor	%ax,%ax			# if error or change line active,
+	int	$0x13			# do a reset...
+	jc	9f
+	mov	$0x0201,%ax		# ...then do a read, to confirm that
+	mov	$0x0001,%cx		# there is disk in drive
+	mov	$0,%dh			# (verify (%ah = 4) does not work
+	mov	$IMAGE_BASE_REAL>>4,%bx	# under QEMU, which always returns
+	mov	%bx,%es			# success)
+	xor	%bx,%bx
+	int	$0x13
+	jc	9f
+2:	mov	$0x08,%ah		# get disk params
 	int	$0x13
 	jc	9f
 	mov	%cl,%bh
@@ -314,7 +362,7 @@ dsknfo:	push	%bx
 	movpp	%es,%ds
 	xor	%si,%si
 	mov	%si,%es
-	mov	$0x1510,%si		# mman::pc_drive_base_table
+	mov	$mm+"struct mman::pc_drive_base_table",%si
 	xchg	%si,%di
 	movsw	#→ headunloadtime, headloadtime
 	movsw	#→ shutofftime, bytespersector
@@ -325,6 +373,7 @@ dsknfo:	push	%bx
 	pop	%ds
 	xchg	%bx,%ax
 	stosw	#→ pc_drive_type, pc_drive_last_sector
+	scasb
 	xchg	%cx,%ax
 	stosw	#→ pc_drive_last_cylinder
 	xchg	%dx,%ax
@@ -363,15 +412,12 @@ pcread:	push	%ax
 	pop	%cx
 	pop	%ax
 	jc	9f
-	mov	%es,%si			# addr += 512
-	add	$512>>4,%si
-	mov	%si,%es
 	inc	%al			# ++sector
-	cmp	0x151c,%al		# mman::pc_drive_last_sector
+	cmp	mm+"struct mman::pc_drive_last_sector",%al
 	jbe	2f
 	mov	$1,%al
 	inc	%dh			# ++head
-	cmp	0x1520,%dh		# mman::pc_drive_last_head
+	cmp	mm+"struct mman::pc_drive_last_head",%dh
 	jbe	2f
 	xor	%dh,%dh
 	inc	%cx			# ++cylinder
@@ -470,19 +516,19 @@ ape.mbrpad:
 ape_disk:
 	.stub	ape.diskid,quad
 	.org	0x1be,0x00
-	.macro	.partn	x
-	.stub	ape.part\x\().status,byte	# 0=absent / 0x80=present
-	.stub	ape.part\x\().first.head,byte	# in low 6 bits
-	.stub	ape.part\x\().first.cylinder,byte
-	.stub	ape.part\x\().first.sector,byte
-	.stub	ape.part\x\().filesystem,byte
-	.stub	ape.part\x\().last.head,byte
-	.stub	ape.part\x\().last.cylinder,byte
-	.stub	ape.part\x\().last.sector,byte
-	.stub	ape.part\x\().lba,long          # c₀*Cₙ + h₀*Hₙ + s₀*Sₙ
-	.stub	ape.part\x\().sector.count,long # sectors are 512 bytes
+	.macro	.partn	x:req sta h0 s0 c0 fs h9 s9 c9 lba0 nsec
+	.stub	ape.part\x\().status,byte,\sta	# 0=non-boot / 0x80=active
+	.stub	ape.part\x\().first.head,byte,\h0
+	.stub	ape.part\x\().first.sector,byte,\s0 # in low 6 bits
+	.stub	ape.part\x\().first.cylinder,byte,\c0
+	.stub	ape.part\x\().filesystem,byte,\fs
+	.stub	ape.part\x\().last.head,byte,\h9
+	.stub	ape.part\x\().last.sector,byte,\s9
+	.stub	ape.part\x\().last.cylinder,byte,\c9
+	.stub	ape.part\x\().lba,long,\lba0	# c₀*Cₙ + h₀*Hₙ + s₀*Sₙ
+	.stub	ape.part\x\().sector.count,long,\nsec # sectors are 512 bytes
 	.endm
-	.partn	1
+	.partn	1,0x80,0,1,0,0x7f,0xff,0xff,0xff,0,0xffffffff
 	.partn	2
 	.partn	3
 	.partn	4
@@ -534,7 +580,7 @@ ape_disk:
 	the bourne executable & linkable format */
 
 #if SupportsWindows() || SupportsMetal() || SupportsXnu()
-apesh:	.ascii	"'\n#'\"\n"			# sixth edition shebang
+apesh:	.ascii	"\n@\n#'\"\n"			# sixth edition shebang
 //	Until all operating systems can be updated to support APE,
 //	we have a beautiful, yet imperfect workaround, which is to
 //	modify the binary to follow the local system's convention.
@@ -542,110 +588,106 @@ apesh:	.ascii	"'\n#'\"\n"			# sixth edition shebang
 //	present two choices.
 	.ascii	"o=\"$(command -v \"$0\")\"\n"
 //	Try to use a system-wide APE loader.
-	.ascii	"type ape-loader >/dev/null 2>&1 && "
-	.ascii	"exec ape-loader \"$o\" \"$@\"\n"
+	.ascii	"[ x\"$1\" != x--assimilate ] && "
+	.ascii	  "type ape >/dev/null 2>&1 && "
+	.ascii	    "exec ape \"$o\" \"$@\"\n"
 #ifdef APE_LOADER
 //	There is no system-wide APE loader, but there is one
 //	embedded inside the APE. So if the system is not MacOs,
 //	extract the loader into a temp folder, and use it to
 //	load the APE without modifying it.
-	.ascii	"if [ ! -d /Applications ]; then\n"
-	.ascii	  "t=\"${TMPDIR:-/tmp}/ape-loader\"\n"
+	.ascii	"[ x\"$1\" != x--assimilate ] && {\n"
+	.ascii	  "t=\"${TMPDIR:-${HOME:-.}}/.ape\"\n"
 	.ascii	  "[ -x \"$t\" ] || {\n"
-	.ascii	    "dd if=\"$o\" of=\"$t.$$\" skip=\""
+	.ascii	    "mkdir -p \"${t%/*}\" &&\n"
+	.ascii	    "dd if=\"$o\" of=\"$t.$$\" skip="
 	.shstub	      ape_loader_dd_skip,2
-	.ascii	      "\" count=\""
+	.ascii	      " count="
 	.shstub	      ape_loader_dd_count,2
-	.ascii	      "\" bs=64 2>/dev/null &&\n"
-	.ascii	    "chmod 755 \"$t.$$\" &&\n"
-	.ascii	    "mv \"$t.$$\" \"$t\"\n"
+	.ascii	      " bs=64 2>/dev/null\n"
+#if SupportsXnu()
+	.ascii	    "[ -d /Applications ] && "
+	.ascii	      "dd if=\"$t.$$\""
+	.ascii	        " of=\"$t.$$\""
+	.ascii	        " skip=6"
+	.ascii	        " count=10"
+	.ascii	        " bs=64"
+	.ascii	        " conv=notrunc"
+	.ascii	        " 2>/dev/null\n"
+#endif /* SupportsXnu() */
+	.ascii	    "chmod 755 \"$t.$$\"\n"
+	.ascii	    "mv -f \"$t.$$\" \"$t\"\n"
 	.ascii	  "}\n"
 	.ascii	  "exec \"$t\" \"$o\" \"$@\"\n"
-	.ascii	"fi\n"
-#endif
+	.ascii	"}\n"
+#endif /* APE_LOADER */
 #ifndef APE_NO_MODIFY_SELF
 //	The default behavior is: to overwrite the header in place.
 //	We prefer this because it's a tiny constant one time cost.
 //	We simply printf a 64-byte header and call execve() again.
 #else
-//	The alternative behavior is to copy to $TMPDIR and edit.
-//	This imposes a variety of caveats of its own that should
-//	be considered by the user beforehand, such as whether or
-//	not /tmp is considered trustworthy on a given system, or
-//	if the administrator chose to mount it with noexec. It's
-//	up to the user to decide what's best in those situations
-//	and also note that argv[0] and getauxval(AT_EXECFN) will
-//	change as a result of this, and lastly note we don't try
-//	to cleanup the tmp copies for the sake of efficiency. It
-//	should also be noted that if $0 has directory components
-//	then permission clashes can happen between system users,
-//	since only root is able to set the sticky bit, which can
-//	be addressed simply by overriding the TMPDIR environment
-	.ascii	"o=\"${TMPDIR:-/tmp}/$0\"\n"
-	.ascii	"if [ ! -e \"$o\" ]; then\n"
-	.ascii	  "d=\"$o\"\n"
-	.ascii	  "o=\"$o.$$\"\n"
-	.ascii	  "mkdir -p \"${o%/*}\" 2>/dev/null\n"
-	.ascii	  "cp -f \"$0\" \"$o\" || exit 120\n"
+//	The alternative behavior is to copy to $TMPDIR or $HOME or
+//	the current directory. We like TMPDIR because it's part of
+//	the IEEE POSIX standard whereas alternatives (XDG) aren't.
+	.ascii	"t=\"${TMPDIR:-${HOME:-.}}/$0\"\n"
+	.ascii	"[ x\"$1\" != x--assimilate ] || [ ! -e \"$t\" ] && {\n"
+	.ascii	  "[ x\"$1\" != x--assimilate ] && {\n"
+	.ascii	    "mkdir -p \"${t%/*}\" 2>/dev/null\n"
+	.ascii	    "cp -f \"$o\" \"$t.$$\" &&\n"
+	.ascii	    "mv -f \"$t.$$\" \"$t\" || exit 120\n"
+	.ascii	    "o=\"$t\"\n"
+	.ascii	  "}\n"
 #endif /* APE_NO_MODIFY_SELF */
+	.ascii	"exec 7<> \"$o\" || exit 121\n"
+	.ascii	"printf '"
+	.ascii	  "\\177ELF"			# 0x0: ⌂ELF
+	.ascii	  "\\2"				#   4: long mode
+	.ascii	  "\\1"				#   5: little endian
+	.ascii	  "\\1"				#   6: elf v1.o
+	.ascii	  "\\011"			#   7: FreeBSD
+	.ascii	  "\\0"				#   8: os/abi ver.
+	.ascii	  "\\0\\0\\0"			#   9: padding 3/7
+	.ascii	  "\\0\\0\\0\\0"		#      padding 4/7
+	.ascii	  "\\2\\0"			#  10: εxεcµταblε
+	.ascii	  "\\076\\0"			#  12: NexGen32e
+	.ascii	  "\\1\\0\\0\\0"		#  14: elf v1.o
+	.shstub	  ape_elf_entry,8		#  18: e_entry
+	.shstub	  ape_elf_phoff,8		#  20: e_phoff
+	.shstub	  ape_elf_shoff,8		#  28: e_shoff
+	.ascii	  "\\0\\0\\0\\0"		#  30: e_flags
+	.ascii	  "\\100\\0"			#  34: e_ehsize
+	.ascii	  "\\070\\0"			#  36: e_phentsize
+	.shstub	  ape_elf_phnum,2		#  38: e_phnum
+	.ascii	  "\\0\\0"			#  3a: e_shentsize
+	.shstub	  ape_elf_shnum,2		#  3c: e_shnum
+	.shstub	  ape_elf_shstrndx,2		#  3e: e_shstrndx
+	.ascii	  "' >&7\n"
+	.ascii	"exec 7<&-\n"
 #if SupportsXnu()
-	.ascii	"if [ -d /Applications ]; then\n"
+	.ascii	"[ -d /Applications ] && "
 	.ascii	  "dd if=\"$o\""
 	.ascii	    " of=\"$o\""
 	.ascii	    " bs=8"
-	.ascii	    " skip=\""
+	.ascii	    " skip="
 	.shstub	    ape_macho_dd_skip,2
-	.ascii	    "\" count=\""
+	.ascii	    " count="
 	.shstub	    ape_macho_dd_count,2
-	.ascii	    "\" conv=notrunc 2>/dev/null\n"
-	.ascii	"el"
+	.ascii	    " conv=notrunc 2>/dev/null\n"
 #endif /* XNU */
-	.ascii	"if exec 7<> \"$o\"; then\n"
-	.ascii	  "printf '"
-	.ascii	    "\\177ELF"			# 0x0: ⌂ELF
-	.ascii	    "\\2"			#   4: long mode
-	.ascii	    "\\1"			#   5: little endian
-	.ascii	    "\\1"			#   6: elf v1.o
-	.ascii	    "\\011"			#   7: FreeBSD
-	.ascii	    "\\0"			#   8: os/abi ver.
-	.ascii	    "\\0\\0\\0"			#   9: padding 3/7
-	.ascii	    "\\0\\0\\0\\0"		#      padding 4/7
-	.ascii	    "\\2\\0"			#  10: εxεcµταblε
-	.ascii	    "\\076\\0"			#  12: NexGen32e
-	.ascii	    "\\1\\0\\0\\0"		#  14: elf v1.o
-	.shstub	    ape_elf_entry,8		#  18: e_entry
-	.shstub	    ape_elf_phoff,8		#  20: e_phoff
-	.shstub	    ape_elf_shoff,8		#  28: e_shoff
-	.ascii	    "\\0\\0\\0\\0"		#  30: e_flags
-	.ascii	    "\\100\\0"			#  34: e_ehsize
-	.ascii	    "\\070\\0"			#  36: e_phentsize
-	.shstub	    ape_elf_phnum,2		#  38: e_phnum
-	.ascii	    "\\0\\0"			#  3a: e_shentsize
-	.shstub	    ape_elf_shnum,2		#  3c: e_shnum
-	.shstub	    ape_elf_shstrndx,2		#  3e: e_shstrndx
-	.ascii	    "' >&7\n"
-	.ascii	  "exec 7<&-\n"
-	.ascii	"else\n"
-	.ascii	  "exit 121\n"
-	.ascii	"fi\n"
+	.ascii	"[ x\"$1\" = x--assimilate ] && exit 0\n"
 #ifndef APE_NO_MODIFY_SELF
-	.ascii	"exec \"$0\" \"$@\"\n"		# optimistic execution
+	.ascii	"exec \"$0\" \"$@\"\n"		# try to preserve argv[0]
 #else
-	.ascii	  "mv -f \"$o\" \"$d\" 2>/dev/null\n"
-	.ascii	  "o=\"$d\"\n"
-	.ascii	"fi\n"
+	.ascii	"}\n"
+	.ascii	"o=\"$t\"\n"
 	.ascii	"exec \"$o\" \"$@\"\n"
 #endif /* APE_NO_MODIFY_SELF */
 	.ascii	"R=$?\n"
-	.ascii	"\n"
-	.ascii	"if [ $R -eq 126 ] && [ \"$(uname -m)\" != x86_64 ]; then\n"
-	.ascii	  "if Q=\"$(command -v qemu-x86_64)\"; then\n"
+	.ascii	"if [ \"$(uname -m)\" != x86_64 ]; then\n"
+	.ascii	  "Q=\"$(command -v qemu-x86_64)\" &&\n"
 	.ascii	    "exec \"$Q\" \"$o\" \"$@\"\n"
-	.ascii	  "else\n"
-	.ascii	    "echo error: need qemu-x86_64 >&2\n"
-	.ascii	  "fi\n"
 #ifndef APE_NO_MODIFY_SELF
-	.ascii	"elif [ $R -eq 127 ]; then\n"	# means argv[0] was wrong
+	.ascii	"else\n"			# means argv[0] was wrong
 	.ascii	"  exec \"$o\" \"$@\"\n"	# so do a path resolution
 #endif /* APE_NO_MODIFY_SELF */
 	.ascii	"fi\n"
@@ -653,13 +695,21 @@ apesh:	.ascii	"'\n#'\"\n"			# sixth edition shebang
 	.endobj	apesh
 #ifdef APE_LOADER
         .section .ape.loader,"a",@progbits
+	.align	64
+ape_loader:
         .incbin APE_LOADER
+	.endobj	ape_loader,globl
+	.align	64
+ape_loader_end:
+	nop
+	.endobj	ape_loader_end,globl
         .previous
 #endif /* APE_LOADER */
 #endif /* SupportsWindows() || SupportsMetal() || SupportsXnu() */
 
 #if SupportsSystemv() || SupportsMetal()
 	.section .elf.phdrs,"a",@progbits
+
 	.long	PT_LOAD
 	.long	PF_R|PF_X
 	.stub	ape_rom_offset,quad
@@ -668,6 +718,7 @@ apesh:	.ascii	"'\n#'\"\n"			# sixth edition shebang
 	.stub	ape_rom_filesz,quad
 	.stub	ape_rom_memsz,quad
 	.stub	ape_rom_align,quad
+
 	.long	PT_LOAD
 	.long	PF_R|PF_W
 	.stub	ape_ram_offset,quad
@@ -676,14 +727,32 @@ apesh:	.ascii	"'\n#'\"\n"			# sixth edition shebang
 	.stub	ape_ram_filesz,quad
 	.stub	ape_ram_memsz,quad
 	.stub	ape_ram_align,quad
+
+//	APE Stack Configuration
+//
+//	We actually respect this when allocating a deterministically
+//	addressed stack on Windows and other operating systems. However
+//	there's a few caveats:
+//
+//	- If ape_stack_pf has PF_X then OpenBSD probably won't work
+//	- We don't bother creating a deterministic stack in MODE=tiny
+//
+//	With that said, here's some examples of configuration:
+//
+//	    STATIC_SYMBOL("ape_stack_pf", "7");  // RWX
+//	    STATIC_STACK_ADDR(0x6fffffff0000);
+//	    STATIC_STACK_SIZE(65536);
+//
+//	@see ape.lds for defaults
 	.long	PT_GNU_STACK
-	.long	PF_R|PF_W
-	.stub	ape_stack_offset,quad
-	.stub	ape_stack_vaddr,quad
-	.stub	ape_stack_paddr,quad
-	.stub	ape_stack_filesz,quad
-	.stub	ape_stack_memsz,quad
-	.stub	ape_stack_align,quad
+	.stub	ape_stack_pf,long		# override w/ PF_X for execstack
+	.stub	ape_stack_offset,quad		# ignored
+	.stub	ape_stack_vaddr,quad		# is mmap()'d with MAP_FIXED
+	.stub	ape_stack_paddr,quad		# ignored
+	.stub	ape_stack_filesz,quad		# ignored
+	.stub	ape_stack_memsz,quad		# is mmap(size) argument
+	.stub	ape_stack_align,quad		# must be 16+
+
 #if SupportsOpenbsd() || SupportsNetbsd()
 	.long	PT_NOTE
 	.long	PF_R
@@ -836,7 +905,7 @@ ape_macho:
 	.long	(520f-510f)/4			# count
 510:	.quad	0				# rax
 	.quad	IMAGE_BASE_VIRTUAL		# rbx
-	.quad	0				# rcx
+	.quad	_HOSTXNU			# rcx
 	.quad	0				# rdx
 	.quad	0				# rdi
 	.quad	0				# rsi
@@ -850,7 +919,7 @@ ape_macho:
 	.quad	0				# r13
 	.quad	0				# r14
 	.quad	0				# r15
-	.quad	_xnu				# rip
+	.quad	_start				# rip
 	.quad	0				# rflags
 	.quad	0				# cs
 	.quad	0				# fs
@@ -887,7 +956,7 @@ ape_macho:
 │ αcτµαlly pδrταblε εxεcµταblε § the new technology                        ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│─╝
 	The Portable Executable Format
-	
+
 	@see https://docs.microsoft.com/en-us/windows/desktop/debug/pe-format
 	@see "The Portable Executable File Format from Top to Bottom",
 	     Randy Kath, Microsoft Developer Network Technology Group. */
@@ -934,7 +1003,7 @@ DLLEXE = DLLSTD
 //	   ││││││││        │       │┌6:Contains Initialized Data
 //	   ││││││││ o      │       ││┌5:Contains Code
 //	   ││││││││┌┴─┐rrrr│  ooror│││rorrr
-PETEXT = 0b01110000000000000000000001100000
+PETEXT = 0b01100000000000000000000001100000
 PEDATA = 0b11000000000000000000000011000000
 PEIMPS = 0b11000000000000000000000001000000
 
@@ -1043,75 +1112,9 @@ ape_idata_idt:
 ape_idata_idtend:
 	.previous
 
-	.section .piro.data.sort.iat.1,"aw",@progbits
-	.type	ape_idata_iatend,@object
-	.type	ape_idata_iat,@object
-	.globl	ape_idata_iat,ape_idata_iatend
-	.hidden	ape_idata_iat,ape_idata_iatend
-ape_idata_iat:
-	.previous/*
-	...
-	decentralized content
-	...
-	*/.section .piro.data.sort.iat.3,"aw",@progbits
-ape_idata_iatend:
-	.previous
-
-#if SupportsMetal()
-/*─────────────────────────────────────────────────────────────────────────────╗
-│ αcτµαlly pδrταblε εxεcµταblε § early-stage read-only data                    │
-╚──────────────────────────────────────────────────────────────────────────────╝
-	better code/data separation (.head is rwx[real] rx[long]) */
-
-//	NUL-Terminated Strings.
-str.error:
-	.asciz	"error: "
-	.endobj	str.error
-str.crlf:
-	.asciz	"\r\n"
-	.endobj	str.crlf
-str.cpuid:
-	.asciz	"cpuid"
-	.endobj	str.cpuid
-str.oldskool:
-	.asciz	"oldskool"
-	.endobj	str.oldskool
-str.e820:
-	.asciz	"e820"
-	.endobj	str.e820
-str.long:
-	.asciz	"nolong"
-	.endobj	str.long
-
-//	Serial Line Configuration (8250 UART 16550)
-//	If it's hacked, it'll at least get hacked very slowly.
-sconf:	.short	1843200/*hz*/ / 16/*wut*/ / 9600/*baud*/
-//
-//	          ┌interrupt trigger level {1,4,8,14}
-//	          │ ┌enable 64 byte fifo (UART 16750+)
-//	          │ │ ┌select dma mode
-//	          │ │ │┌clear transmit fifo
-//	          │ │ ││┌clear receive fifo
-//	          ├┐│ │││┌enable fifos
-	.byte	0b00000000
-//
-//	          ┌dlab: flips configuration mode state
-//	          │┌enable break signal
-//	          ││ ┌parity {none,odd,even,high,low}
-//	          ││ │ ┌extra stop bit
-//	          ││ │ │┌data word length (bits+5)
-//	          ││┌┴┐│├┐
-	.byte	0b01000011
-	.endobj	sconf,global,hidden
-
-//	Global Descriptor Table
-//
-//	@note address portion only concern legacy modes
+	.section .piro.data.sort.metal_gdt,"aw",@progbits
 	.align	8
-gdt:	.short	2f-1f		# table byte length
-	.long	REAL(1f),0	# table address
-	.zero	2
-1:
+_gdt:
 //	          ┌G:granularity (1 → limit *= 0x1000)
 //	          │┌D/B:default operation size (0 = 16|64bit, 1 = 32-bit)
 //	          ││┌L:long mode
@@ -1140,48 +1143,83 @@ gdt:	.short	2f-1f		# table byte length
 .quad	0b0000000011001111100100100000000000000000000000001111111111111111 #32
 .quad	0b0000000010101111100110110000000000000000000000001111111111111111 #40
 .quad	0b0000000010101111100100110000000000000000000000001111111111111111 #48
-2:	.endobj	gdt,global,hidden
+.tssdescstub _tss							#56,64
+_gdt_end:
+	.endobj	_gdt,global,hidden
+	.previous
 
+	.section .piro.data.sort.iat.1,"aw",@progbits
+	.type	ape_idata_iatend,@object
+	.type	ape_idata_iat,@object
+	.globl	ape_idata_iat,ape_idata_iatend
+	.hidden	ape_idata_iat,ape_idata_iatend
+ape_idata_iat:
+	.previous/*
+	...
+	decentralized content
+	...
+	*/.section .piro.data.sort.iat.3,"aw",@progbits
+ape_idata_iatend:
+	.previous
+
+#if SupportsMetal()
 /*─────────────────────────────────────────────────────────────────────────────╗
-│ αcτµαlly pδrταblε εxεcµταblε § multiboot stub                                │
+│ αcτµαlly pδrταblε εxεcµταblε § early-stage read-only data                    │
 ╚──────────────────────────────────────────────────────────────────────────────╝
-	boot modernized for the nineties */
+	better code/data separation (.head is rwx[real] rx[long]) */
 
-#define GRUB_MAGIC 0x1BADB002
-#define GRUB_EAX 0x2BADB002
-#define GRUB_AOUT (1 << 16)
-#define GRUB_CHECKSUM(FLAGS) (-(GRUB_MAGIC + (FLAGS)) & 0xffffffff)
+//	NUL-Terminated Strings.
+str.error:
+	.asciz	"error: "
+	.endobj	str.error
+str.crlf:
+	.asciz	"\r\n"
+	.endobj	str.crlf
+str.e820:
+	.asciz	"e820"
+	.endobj	str.e820
+str.oldcpu:
+	.asciz	"oldcpu"
+	.endobj	str.oldcpu
 
-//	Grub Header.
-	.align	4
-ape_grub:
-	.long	GRUB_MAGIC			# Magic
-	.long	GRUB_AOUT			# Flags
-	.long	GRUB_CHECKSUM(GRUB_AOUT)	# Checksum
-	.long	RVA(ape_grub)			# HeaderPhysicalAddress
-	.long	IMAGE_BASE_PHYSICAL		# TextPhysicalAddress
-	.long	PHYSICAL(_edata)		# LoadEndPhysicalAddress
-	.long	PHYSICAL(_end)			# BssEndPhysicalAddress
-	.long	RVA(ape_grub_entry)		# EntryPhysicalAddress
-	.endobj	ape_grub,globl
+//	Serial Line Configuration (8250 UART 16550)
+//	If it's hacked, it'll at least get hacked very slowly.
+sconf:	.short	1843200/*hz*/ / 16/*wut*/ / 9600/*baud*/
+//
+//	          ┌interrupt trigger level {1,4,8,14}
+//	          │ ┌enable 64 byte fifo (UART 16750+)
+//	          │ │ ┌select dma mode
+//	          │ │ │┌clear transmit fifo
+//	          │ │ ││┌clear receive fifo
+//	          ├┐│ │││┌enable fifos
+	.byte	0b00000000
+//
+//	          ┌dlab: flips configuration mode state
+//	          │┌enable break signal
+//	          ││ ┌parity {none,odd,even,high,low}
+//	          ││ │ ┌extra stop bit
+//	          ││ │ │┌data word length (bits+5)
+//	          ││┌┴┐│├┐
+	.byte	0b01000011
+	.endobj	sconf,global,hidden
 
-//	Grub Entrypoint.
-//	Takes CPU out of legacy mode and jumps to normal entrypoint.
-//	@noreturn
-	.align	4
-ape_grub_entry:
-	.code32
-//	cmp	$GRUB_EAX,%eax
-//	jne	triplf
-	push	$0
-	popf
-	mov	$0x40,%dl
-	mov	%cr0,%eax
-	and	$~CR0_PE,%eax
-	mov	%eax,%cr0
-	ljmpw	$0,$REAL(pc)
-	.code16
-	.endfn	ape_grub_entry
+//	Global Descriptor Table
+	.align	8
+_gdtrlo:
+	.short	2f-_gdtlo-1	# table byte length
+	.long	REAL(_gdtlo)	# table address (base memory space)
+	.endobj	_gdtrlo,global,hidden
+_gdtr:
+	.short	_gdt_end-_gdt-1	# table byte length
+	.quad	_gdt		# table address (final virtual space)
+	.endobj	_gdtr,global,hidden
+	.align	8
+//	Partial GDT with descriptors for switching to unreal mode or long mode.
+_gdtlo	= .-GDT_LEGACY_DATA
+.quad	0b0000000011001111100100100000000000000000000000001111111111111111 #32
+.quad	0b0000000010101111100110110000000000000000000000001111111111111111 #40
+.quad	0b0000000010101111100100110000000000000000000000001111111111111111 #48
+2:
 
 /*─────────────────────────────────────────────────────────────────────────────╗
 │ αcτµαlly pδrταblε εxεcµταblε § real mode                                     │
@@ -1189,12 +1227,32 @@ ape_grub_entry:
 	the default mode of operation on modern cpus */
 
 realmodeloader:
+	call	lhinit
 	call	rlinit
 	call	sinit4
 	.optfn	_start16
 	call	_start16
 	call	longmodeloader
 	.endfn	realmodeloader
+
+//	Prepares to later load parts of the program that are not loaded yet.
+//
+//	@param	al next sector number
+//	@param	cx next cylinder number
+//	@param	dh next head number
+//	@param	dl drive number
+//	@clob	ax, cx, es, di
+lhinit:	cmp	$0x40,%dl
+	je	9f
+	pushpop	0,%es
+	mov	$mm+"struct mman::pc_drive_next_sector",%di
+	cld
+	stosb	#→ pc_drive_next_sector
+	xchg	%ax,%cx
+	stosw	#→ pc_drive_next_cylinder
+	mov	%dh,%al
+	stosb	#→ pc_drive_next_head
+9:	ret
 
 	.section .sort.text.real.init.1,"ax",@progbits
 	.type	rlinit,@function
@@ -1256,6 +1314,8 @@ longmodeloader:
 	call	lcheck
 	call	a20
 	call	e820
+	call	cpyhi
+	call	loadhi
 	call	pinit
 	call	golong
 	.endfn	longmodeloader
@@ -1264,7 +1324,7 @@ longmodeloader:
 lcheck:	pushf				# check for i8086 / i8088 / i80186
 	pop	%ax
 	test	$0x80,%ah		# see intel manual volume 1 20.1.2
-	jnz	9f			# we now assume 32bit is supported
+	jnz	10f			# we now assume 32bit is supported
 	pushfl				# now check for i386 or early i486
 	pop	%eax			# test ability to change cpuid bit
 	mov	%eax,%ecx
@@ -1275,7 +1335,7 @@ lcheck:	pushf				# check for i8086 / i8088 / i80186
 	pushfl
 	pop	%eax
 	cmp	%eax,%ecx
-	je	12f			# we assume cpuid inst is available
+	je	10f			# we assume cpuid inst is available
 	or	%ebx,%eax		# puts cpuid bit in the on position
 	push	%eax
 	popfl
@@ -1287,44 +1347,50 @@ lcheck:	pushf				# check for i8086 / i8088 / i80186
 	jl	10f
 	mov	%edi,%eax
 	cpuid
-	mov	$1<<29,%edi		# need nexgen32e long mode support
-	and	%edi,%edx
+	mov	$1<<29|1<<20,%edi	# need nexgen32e long mode support
+	and	%edi,%edx		# & nx support
 	cmp	%edi,%edx
 	jne	10f
 	xor	%ax,%ax
 1:	ret
-9:	mov	$REAL(str.oldskool),%di
-	jmp	20f
-10:	mov	$REAL(str.long),%di
-	jmp	20f
-12:	mov	$REAL(str.cpuid),%di
+10:	mov	$REAL(str.oldcpu),%di
 20:	call	rldie
 	.endfn	lcheck
 
 //	Gets memory map from BIOS.
-e820:	mov	$0x0510>>4,%di		# mman::e820
-	mov	%di,%es
-	xor	%edi,%edi		# es:di is destination buffer
-	xor	%ebx,%ebx		# ebx is an api state tracker
+e820:	xor	%ebx,%ebx		# %ebx is an api state tracker
+	mov	%bx,%es
+	mov	$mm+"struct mman::e820",%di # es:di is destination buffer
 1:	mov	$0xE820,%eax		# magic
 	mov	$8+8+4+4,%ecx		# sizeof(struct SmapEntry)
 	mov	$0x534d4150,%edx	# magic number
+	movl	$1,8+8+4/*SmapEntry::acpi3*/(%di) # prefill ACPI attributes;
+					# apparently some buggy BIOSes say
+					# that they return this field, yet
+					# do not fill it correctly
 	int	$0x15			# ax,bx,cx,dx,di → ax,bx,cx
 	jc	9f			# cf = unsupported or abuse
 	cmp	%edx,%eax		# more magic means success
 	jne	9f
 	test	%cx,%cx			# discard empty results
 	jz	5f
+	mov	8/*LODWORD(SmapEntry::size)*/(%di),%eax
+	or	8+4/*HIDWORD(SmapEntry::size)*/(%di),%eax
+	jz	5f
 	cmp	$8+8+4+1,%cx		# discard if ignore flag
 	jb	4f
-	testb	$1/*ignore*/,8+8+4/*SmapEntry::__acpi3*/(%di)
-	jnz	5f
+	testb	$1/*don't ignore*/,8+8+4/*SmapEntry::acpi3*/(%di)
+	jz	5f
 4:	add	$8+8+4+4,%di		# keep entry
 5:	test	%ebx,%ebx		# last entry?
 	jz	8f
-	cmp	$0x1000,%di
+	cmp	$mm+"struct mman::e820_end"-(8+8+4+4),%di
 	jb	1b
-8:	ret
+8:	xor	%ax,%ax			# add a blank sentinel entry
+	mov	$(8+8)/2,%cx
+	cld
+	rep stosw
+	ret
 9:	mov	$REAL(str.e820),%di
 	call	rldie
 	.endfn	e820
@@ -1392,11 +1458,96 @@ a20:	cli
 5:	ret
 	.endfn	a20
 
+//	Copies program pages loaded into base memory, to extended memory.
+//
+//	@clob	esi, edi
+cpyhi:	push	%es
+	movpp	%ds,%es
+	call	unreal
+	mov	$IMAGE_BASE_REAL,%esi
+	mov	$IMAGE_BASE_PHYSICAL,%edi
+	mov	$v_ape_realdwords,%ecx
+	cld
+	rep movsl %ds:(%esi),%es:(%edi)
+	sti
+	pop	%es
+	ret
+	.endfn	cpyhi
+
+//	Disables interrupts and switches to "unreal mode".
+//
+//	@return	ds, es have same base addresses as before but can access
+//		4 GiB of memory
+//	@clob	eax
+unreal:	push	%ds
+	push	%es
+	cli
+	lgdt	REAL(_gdtrlo)
+	mov	%cr0,%eax
+	or	$CR0_PE,%al
+	mov	%eax,%cr0
+	jmp	0f
+0:	pushpop	GDT_LEGACY_DATA,%ds
+	movpp	%ds,%es
+	and	$~CR0_PE,%al
+	mov	%eax,%cr0
+	jmp	1f
+1:	pop	%es
+	pop	%ds
+	ret
+
+//	Reads any remaining program pages into memory which have not yet
+//	been read by the boot sector.
+//
+//	@clob	eax, ecx, dx, esi, edi, bp
+loadhi:	mov	$v_ape_highsectors,%bp
+	test	%bp,%bp
+	jz	9f
+	mov	$mm+"struct mman::pc_drive",%si
+	cld
+	lodsb	#← pc_drive
+	xchg	%ax,%dx
+	lodsw
+	lodsb	#← pc_drive_next_sector
+	test	%al,%al
+	jz	9f
+	xchg	%ax,%cx
+	lodsw	#← pc_drive_next_cylinder
+	xchg	%ax,%cx
+	mov	(%si),%dh #← pc_drive_next_head
+	push	%es
+#define	SEG 0x79000
+	mov	$IMAGE_BASE_PHYSICAL+v_ape_realbytes-SEG,%edi
+	push	$SEG>>4
+	pop	%es
+0:	call	pcread
+	push	%ax
+	call	unreal
+	pop	%ax
+	push	%cx
+	xor	%esi,%esi
+	xor	%ecx,%ecx
+	mov	$512/4,%cl
+	cld
+	rep movsl %es:(%esi),%es:(%edi)
+	sti
+	pop	%cx
+	dec	%bp
+	jnz	0b
+	pop	%es
+9:	ret
+
 //	Initializes long mode paging.
 pinit:	push	%ds
-#define	SEG 0x79000
+	push	%es
 	mov	$SEG>>4,%ax
 	mov	%ax,%ds
+	mov	%ax,%es
+	xor	%di,%di
+	xor	%ax,%ax
+	mov	$(0x7f000-SEG)/2,%cx
+	cld
+	rep stosw
 	movl	$0x7d000+PAGE_V+PAGE_RW,0x7e000-SEG	# PDPT←PML4T (+)
 	movl	$0x7c000+PAGE_V+PAGE_RW,0x7e800-SEG	# PDPT←PML4T (-)
 	movl	$0x7b000+PAGE_V+PAGE_RW,0x7d000-SEG	# PDT←PDPT   (+)
@@ -1404,14 +1555,15 @@ pinit:	push	%ds
 	movl	$0x79000+PAGE_V+PAGE_RW,0x7b000-SEG	# PD←PDT     (+)
 	movl	$0x79000+PAGE_V+PAGE_RW,0x7a000-SEG	# PD←PDT     (-)
 	mov	$512,%cx				# PD±2MB
-	mov	$PAGE_V+PAGE_RW,%eax
-	xor	%si,%si
-0:	mov	%eax,(%si)
+	mov	$PAGE_V+PAGE_RSRV+PAGE_RW,%eax
+	xor	%di,%di
+0:	stosl
 	add	$0x1000,%eax
-	add	$8,%si
+	scasl						# di += 4
 	loop	0b
 	mov	$0x7e000,%eax				# PML4T←CR3
 	mov	%eax,%cr3
+	pop	%es
 	pop	%ds
 	ret
 	.endfn	pinit
@@ -1420,15 +1572,15 @@ pinit:	push	%ds
 //
 //	@see	Intel Manual V3A §4.1.2
 golong:	cli
-	lidt	0x1522					# mman::bad_idt
+	lidt	mm+"struct mman::bad_idt"
 	mov	%cr4,%eax
 	or	$CR4_PAE|CR4_PGE|CR4_OSFXSR,%eax
 	mov	%eax,%cr4
 	movl	$EFER,%ecx
 	rdmsr
-	or	$EFER_LME|EFER_SCE,%eax
+	or	$EFER_LME|EFER_SCE|EFER_NXE,%eax
 	wrmsr
-	lgdt	REAL(gdt)
+	lgdt	REAL(_gdtrlo)
 	mov	%cr0,%eax
 	or	$CR0_PE|CR0_PG|CR0_MP,%eax
 	and	$~CR0_EM,%eax
@@ -1438,8 +1590,10 @@ golong:	cli
 
 //	Long mode is long.
 	.code64
-long:	push	$GDT_LONG_DATA
-	pop	%rax
+long:	movabs	$BANE+PHYSICAL(0f),%rax
+	jmp	*%rax
+0:	xor	%eax,%eax
+	mov	$GDT_LONG_DATA,%al
 	mov	%eax,%ds
 	mov	%eax,%ss
 	mov	%eax,%es
@@ -1452,16 +1606,59 @@ long:	push	$GDT_LONG_DATA
 	xor	%r15d,%r15d
 	xor	%ebx,%ebx
 	xor	%ebp,%ebp
-	push	%rbp
-	mov	$0x0500,%rdi			# mman
+	mov	$mm,%rdi
 	mov	%cr3,%rsi
-	mov	$IMAGE_BASE_REAL,%edx
+	mov	$IMAGE_BASE_PHYSICAL,%edx
+	lea	v_ape_allbytes(%rdx),%ecx
 	call	__map_phdrs
 	push	$0x037f
 	fldcw	(%rsp)
+	lgdt	_gdtr					# reload GDTR for
+							# virtual memory space
 	movabs	$kernel,%rax
 	jmp	*%rax
 	.endfn	long
+
+/*─────────────────────────────────────────────────────────────────────────────╗
+│ αcτµαlly pδrταblε εxεcµταblε § multiboot stub                                │
+╚──────────────────────────────────────────────────────────────────────────────╝
+	boot modernized for the nineties */
+
+#define GRUB_MAGIC 0x1BADB002
+#define GRUB_EAX 0x2BADB002
+#define GRUB_AOUT (1 << 16)
+#define GRUB_CHECKSUM(FLAGS) (-(GRUB_MAGIC + (FLAGS)) & 0xffffffff)
+
+//	Grub Header.
+	.align	4
+ape_grub:
+	.long	GRUB_MAGIC			# Magic
+	.long	GRUB_AOUT			# Flags
+	.long	GRUB_CHECKSUM(GRUB_AOUT)	# Checksum
+	.long	RVA(ape_grub)			# HeaderPhysicalAddress
+	.long	IMAGE_BASE_PHYSICAL		# TextPhysicalAddress
+	.long	PHYSICAL(_edata)		# LoadEndPhysicalAddress
+	.long	PHYSICAL(_end)			# BssEndPhysicalAddress
+	.long	RVA(ape_grub_entry)		# EntryPhysicalAddress
+	.endobj	ape_grub,globl
+
+//	Grub Entrypoint.
+//	Takes CPU out of legacy mode and jumps to normal entrypoint.
+//	@noreturn
+	.align	4
+ape_grub_entry:
+	.code32
+//	cmp	$GRUB_EAX,%eax
+//	jne	triplf
+	push	$0
+	popf
+	mov	$0x40,%dl
+	mov	%cr0,%eax
+	and	$~CR0_PE,%eax
+	mov	%eax,%cr0
+	ljmpw	$0,$REAL(pc)
+	.code64
+	.endfn	ape_grub_entry
 
 /*  ▄▄▒▀▀▀▀▒▒▄
 █████▓▓▄░░░░  ▒▒▄
@@ -1498,28 +1695,28 @@ kernel:	movabs	$ape_stack_vaddr,%rsp
 	.byte	0x0f,0x1f,0207			# nop rdi binbase
 	.long	(IMAGE_BASE_VIRTUAL-IMAGE_BASE_REAL)/512
 #endif
-	.weak	__hostos
-	ezlea	__hostos,ax
-	test	%rax,%rax
-	jz	1f
-	movb	$METAL,(%rax)
-1:	push	$0
+	movabs	$BANE+mm,%rdi
+	mov	$0x79000,%esi
+	mov	$0x7f000,%edx
+	call	__reclaim_boot_pages
+	push	$_HOSTMETAL			# sets __hostos in crt.S
+	pop	%rcx
+	pushq	.Lenv0(%rip)			# envp[0][0]
 	mov	%rsp,%rbp
-	mov	.Lenv0(%rip),%rax
-	mov	%rax,(%rbp)			# envp[0][0]
-	push	$0				# argv[0][0]
+	pushq	.Largv0+8(%rip)			# argv[0][8]
+	pushq	.Largv0(%rip)			# argv[0][0]
+	mov	%rsp,%rax
 	push	$0				# auxv[1][1]
 	push	$0				# auxv[1][0]
-	push	%rbp				# auxv[0][1]
+	push	%rax				# auxv[0][1]
 	push	$31				# auxv[0][0] AT_EXECFN
 	push	$0				# envp[1]
-	push	$.Lenv0				# envp[0]
+	push	%rbp				# envp[0]
 	push	$0				# argv[1]
-	push	%rbp				# argv[0]
+	push	%rax				# argv[0]
 	push	$1				# argc
 	xor	%ebp,%ebp
 	xor	%eax,%eax
-	xor	%ecx,%ecx
 	xor	%edx,%edx
 	xor	%edi,%edi
 	xor	%esi,%esi
@@ -1532,6 +1729,9 @@ kernel:	movabs	$ape_stack_vaddr,%rsp
 
 	.rodata
 .Lenv0:	.asciz	"METAL=1"
+.Largv0:
+	.asciz	APE_COM_NAME
+	.org	.Largv0+16
 	.previous
 
 #endif /* SupportsMetal() */
@@ -1544,6 +1744,7 @@ kernel:	movabs	$ape_stack_vaddr,%rsp
 	.ldsvar	_end
 	.ldsvar	_etext
 	.ldsvar	v_ape_realsectors
+	.ldsvar	v_ape_realbytes
 	.ldsvar	v_ape_highsectors
 	.ldsvar	ape_idata_ro
 	.ldsvar	ape_pad_rodata
@@ -1588,6 +1789,7 @@ ape_pad_text:
 	.type	ape_pad_privileged,@object
 	.hidden	ape_pad_privileged
 ape_pad_privileged:
+	.align	4096
 	.previous
 
 	.section .ape.pad.rodata,"a",@progbits
@@ -1613,6 +1815,27 @@ ape_idata_ro:
 	.globl	__data_start
 	.hidden	__data_start
 __data_start:
+	.previous
+
+	.section .dataepilogue,"aw",@progbits
+	.type	__data_end,@object
+	.globl	__data_end
+	.hidden	__data_end
+__data_end:
+	.previous
+
+	.section .bssprologue,"aw",@nobits
+	.type	__bss_start,@object
+	.globl	__bss_start
+	.hidden	__bss_start
+__bss_start:
+	.previous
+
+	.section .bssepilogue,"aw",@nobits
+	.type	__bss_end,@object
+	.globl	__bss_end
+	.hidden	__bss_end
+__bss_end:
 	.previous
 
 .end

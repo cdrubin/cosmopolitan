@@ -21,7 +21,6 @@
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
-#include "libc/nexgen32e/bsr.h"
 #include "libc/stdio/stdio.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
@@ -76,8 +75,6 @@ TEST(FormatInt64Thousands, testNegative) {
 
 BENCH(FormatInt64Thousands, bench) {
   char s[27];
-  EZBENCH2("int64toarray_radix10(MAX)", donothing,
-           int64toarray_radix10(INT64_MAX, s));
   EZBENCH2("FormatInt64Thousands(MAX)", donothing,
            FormatInt64Thousands(s, INT64_MAX));
   EZBENCH2("FormatInt64Thousands(MIN)", donothing,

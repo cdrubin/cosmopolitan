@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_ERRFUNS_H_
 #define COSMOPOLITAN_LIBC_SYSV_ERRFUNS_H_
-#include "libc/errno.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 
 /**
@@ -154,11 +153,14 @@ intptr_t erfkill(void) relegated;
 intptr_t ehwpoison(void) relegated;
 
 #if defined(__MNO_RED_ZONE__) && defined(__GNUC__) && !defined(__STRICT_ANSI__)
-#define __ERRFUN(FUNC)                              \
-  ({                                                \
-    intptr_t NegOne;                                \
-    asm("call\t" FUNC : "=a"(NegOne), "=m"(errno)); \
-    NegOne;                                         \
+#define __ERRFUN(FUNC)               \
+  ({                                 \
+    intptr_t NegOne;                 \
+    asm volatile("call\t" FUNC       \
+                 : "=a"(NegOne)      \
+                 : /* no outputs */  \
+                 : "rcx", "memory"); \
+    NegOne;                          \
   })
 #define einval()          __ERRFUN("einval")
 #define eperm()           __ERRFUN("eperm")

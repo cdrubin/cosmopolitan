@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/log/check.h"
 #include "libc/str/str.h"
-#include "third_party/zlib/zlib.h"
 #include "tool/build/lib/dis.h"
 #include "tool/build/lib/high.h"
 #include "tool/build/lib/modrm.h"
@@ -159,8 +158,8 @@ static char *DisName(struct Dis *d, char *bp, const char *name,
       } else {
         *p++ = 's';
       }
-    } else if (wantsuffix || (ambiguous && !startswith(name, "f") &&
-                              !startswith(name, "set"))) {
+    } else if (wantsuffix || (ambiguous && !_startswith(name, "f") &&
+                              !_startswith(name, "set"))) {
       if (Osz(rde)) {
         if (ambiguous || Mode(rde) != XED_MODE_REAL) {
           *p++ = 'w';

@@ -8,6 +8,7 @@ THIRD_PARTY_BZIP2 = $(THIRD_PARTY_BZIP2_A_DEPS) $(THIRD_PARTY_BZIP2_A)
 THIRD_PARTY_BZIP2_A = o/$(MODE)/third_party/bzip2/bzip2.a
 THIRD_PARTY_BZIP2_A_FILES := $(wildcard third_party/bzip2/*)
 THIRD_PARTY_BZIP2_A_HDRS = $(filter %.h,$(THIRD_PARTY_BZIP2_A_FILES))
+THIRD_PARTY_BZIP2_A_INCS = $(filter %.inc,$(THIRD_PARTY_BZIP2_A_FILES))
 THIRD_PARTY_BZIP2_A_SRCS = $(filter %.c,$(THIRD_PARTY_BZIP2_A_FILES))
 THIRD_PARTY_BZIP2_A_OBJS = $(THIRD_PARTY_BZIP2_A_SRCS:%.c=o/$(MODE)/%.o)
 THIRD_PARTY_BZIP2_BINS = $(THIRD_PARTY_BZIP2_COMS) $(THIRD_PARTY_BZIP2_COMS:%=%.dbg)
@@ -27,7 +28,6 @@ THIRD_PARTY_BZIP2_A_DIRECTDEPS =				\
 	LIBC_LOG						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
-	LIBC_RAND						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
@@ -51,7 +51,7 @@ o/$(MODE)/third_party/bzip2/bzip2.com.dbg:			\
 		o/$(MODE)/third_party/bzip2/bzip2.o		\
 		o/$(MODE)/third_party/bzip2/bzip2.a.pkg		\
 		$(CRT)						\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 o/$(MODE)/third_party/bzip2/bzip2recover.com.dbg:		\
@@ -59,10 +59,10 @@ o/$(MODE)/third_party/bzip2/bzip2recover.com.dbg:		\
 		o/$(MODE)/third_party/bzip2/bzip2recover.o	\
 		o/$(MODE)/third_party/bzip2/bzip2.a.pkg		\
 		$(CRT)						\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(THIRD_PARTY_BZIP2_A_OBJS):					\
+$(THIRD_PARTY_BZIP2_A_OBJS): private				\
 		OVERRIDE_CFLAGS +=				\
 			-ffunction-sections			\
 			-fdata-sections
@@ -70,6 +70,7 @@ $(THIRD_PARTY_BZIP2_A_OBJS):					\
 THIRD_PARTY_BZIP2_LIBS = $(foreach x,$(THIRD_PARTY_BZIP2_ARTIFACTS),$($(x)))
 THIRD_PARTY_BZIP2_SRCS = $(foreach x,$(THIRD_PARTY_BZIP2_ARTIFACTS),$($(x)_SRCS))
 THIRD_PARTY_BZIP2_HDRS = $(foreach x,$(THIRD_PARTY_BZIP2_ARTIFACTS),$($(x)_HDRS))
+THIRD_PARTY_BZIP2_INCS = $(foreach x,$(THIRD_PARTY_BZIP2_ARTIFACTS),$($(x)_INCS))
 THIRD_PARTY_BZIP2_BINS = $(foreach x,$(THIRD_PARTY_BZIP2_ARTIFACTS),$($(x)_BINS))
 THIRD_PARTY_BZIP2_CHECKS = $(foreach x,$(THIRD_PARTY_BZIP2_ARTIFACTS),$($(x)_CHECKS))
 THIRD_PARTY_BZIP2_OBJS = $(foreach x,$(THIRD_PARTY_BZIP2_ARTIFACTS),$($(x)_OBJS))

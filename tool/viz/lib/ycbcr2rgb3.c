@@ -25,20 +25,19 @@
 #include "dsp/core/illumination.h"
 #include "dsp/core/q.h"
 #include "dsp/scale/scale.h"
-#include "libc/bits/xmmintrin.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/sigbits.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/intrin/pmulhrsw.h"
+#include "libc/intrin/xmmintrin.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/gc.internal.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
@@ -97,8 +96,8 @@ void YCbCrComputeCoefficients(int swing, double gamma,
   double x;
   double f1[6][3];
   long longs[6][6];
-  long bitlimit = roundup2pow(swing);
-  long wordoffset = rounddown2pow((bitlimit - swing) / 2);
+  long bitlimit = _roundup2pow(swing);
+  long wordoffset = _rounddown2pow((bitlimit - swing) / 2);
   long chromaswing = swing + 2 * (bitlimit / 2. - swing / 2. - wordoffset);
   long lumamin = wordoffset;
   long lumamax = wordoffset + swing;
@@ -155,8 +154,8 @@ void YCbCrInit(struct YCbCr **ycbcr, bool yonly, int swing, double gamma,
                const double gamut[3], const double illuminant[3]) {
   if (!*ycbcr) *ycbcr = xcalloc(1, sizeof(struct YCbCr));
   (*ycbcr)->yonly = yonly;
-  memset((*ycbcr)->magnums, 0, sizeof((*ycbcr)->magnums));
-  memset((*ycbcr)->lighting, 0, sizeof((*ycbcr)->lighting));
+  bzero((*ycbcr)->magnums, sizeof((*ycbcr)->magnums));
+  bzero((*ycbcr)->lighting, sizeof((*ycbcr)->lighting));
   YCbCrComputeCoefficients(swing, gamma, gamut, illuminant, (*ycbcr)->magnums,
                            (*ycbcr)->lighting, (*ycbcr)->transfer[0]);
   imapxlatab((*ycbcr)->transfer[1]);

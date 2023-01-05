@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/alg.h"
-#include "libc/bits/bits.h"
+#include "libc/mem/alg.h"
+#include "libc/intrin/bits.h"
 #include "libc/dns/consts.h"
 #include "libc/dns/dns.h"
 #include "libc/dns/hoststxt.h"

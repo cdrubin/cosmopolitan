@@ -17,17 +17,17 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/likely.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
+#include "libc/intrin/bsf.h"
+#include "libc/intrin/bsr.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/weaken.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/arena.h"
 #include "libc/mem/hook/hook.internal.h"
-#include "libc/nexgen32e/bsf.h"
-#include "libc/nexgen32e/bsr.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
@@ -35,11 +35,11 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
 
-#define BASE 0x50000000
-#define SIZE 0x2ffe0000
+#define BASE 0x50040000
+#define SIZE 0x2ff80000
 #define P(i) ((void *)(intptr_t)(i))
 #define EXCHANGE(HOOK, SLOT) \
-  __arena_hook((intptr_t *)weaken(HOOK), (intptr_t *)(&(SLOT)))
+  __arena_hook((intptr_t *)_weaken(HOOK), (intptr_t *)(&(SLOT)))
 
 static struct Arena {
   bool once;
@@ -58,22 +58,17 @@ static struct Arena {
 } __arena;
 
 static wontreturn void __arena_die(void) {
-  if (weaken(__die)) weaken(__die)();
+  if (_weaken(__die)) _weaken(__die)();
   _exit(83);
 }
 
-static wontreturn void __arena_not_implemented(void) {
-  assert(!"not implemented");
-  __arena_die();
-}
-
 forceinline void __arena_check(void) {
-  assert(__arena.depth);
+  _unassert(__arena.depth);
 }
 
 forceinline void __arena_check_pointer(void *p) {
-  assert(BASE + __arena.offset[__arena.depth - 1] <= (uintptr_t)p &&
-         (uintptr_t)p < BASE + __arena.offset[__arena.depth]);
+  _unassert(BASE + __arena.offset[__arena.depth - 1] <= (uintptr_t)p &&
+            (uintptr_t)p < BASE + __arena.offset[__arena.depth]);
 }
 
 forceinline bool __arena_is_arena_pointer(void *p) {
@@ -120,13 +115,13 @@ static dontinline bool __arena_grow(size_t offset, size_t request) {
   } else {
     enomem();
   }
-  if (weaken(__oom_hook)) {
-    weaken(__oom_hook)(request);
+  if (_weaken(__oom_hook)) {
+    _weaken(__oom_hook)(request);
   }
   return false;
 }
 
-static void *__arena_alloc(size_t a, size_t n) {
+static inline void *__arena_alloc(size_t a, size_t n) {
   size_t o;
   if (!n) n = 1;
   o = ROUNDUP(__arena.offset[__arena.depth] + sizeof(size_t), a);
@@ -165,7 +160,7 @@ static void *__arena_memalign(size_t a, size_t n) {
   if (a <= sizeof(size_t)) {
     return __arena_alloc(8, n);
   } else {
-    return __arena_alloc(2ul << bsrl(a - 1), n);
+    return __arena_alloc(2ul << _bsrl(a - 1), n);
   }
 }
 
@@ -190,7 +185,7 @@ static void *__arena_realloc(void *p, size_t n) {
         if ((m = __arena_get_size(p)) >= n) {
           return p;
         } else if (n <= SIZE) {
-          z = 2ul << bsrl(n - 1);
+          z = 2ul << _bsrl(n - 1);
           if (__arena.offset[__arena.depth] - m == (o = (intptr_t)p - BASE)) {
             if (UNLIKELY(o + z > __arena.size)) {
               if (o + z <= SIZE) {
@@ -205,7 +200,7 @@ static void *__arena_realloc(void *p, size_t n) {
             __arena.offset[__arena.depth] = o + z;
             *(size_t *)((char *)p - sizeof(size_t)) = z;
             return p;
-          } else if ((q = __arena_alloc(1ul << bsfl((intptr_t)p), z))) {
+          } else if ((q = __arena_alloc(1ul << _bsfl((intptr_t)p), z))) {
             memmove(q, p, m);
             return q;
           } else {
@@ -225,7 +220,7 @@ static void *__arena_realloc(void *p, size_t n) {
     if (n <= 16) {
       n = 16;
     } else {
-      n = 2ul << bsrl(n - 1);
+      n = 2ul << _bsrl(n - 1);
     }
     return __arena_alloc(16, n);
   }
@@ -299,6 +294,25 @@ static void __arena_init(void) {
   atexit(__arena_destroy);
 }
 
+/**
+ * Pushes memory arena.
+ *
+ * This allocator gives a ~3x performance boost over dlmalloc, mostly
+ * because it isn't thread safe and it doesn't do defragmentation.
+ *
+ * Calling this function will push a new arena. It may be called
+ * multiple times from the main thread recursively. The first time it's
+ * called, it hooks all the regular memory allocation functions. Any
+ * allocations that were made previously outside the arena, will be
+ * passed on to the previous hooks. Then, the basic idea, is rather than
+ * bothering with free() you can just call __arena_pop() to bulk free.
+ *
+ * Arena allocations also have a slight size advantage, since 32-bit
+ * pointers are always used. The maximum amount of arena memory is
+ * 805,175,296 bytes.
+ *
+ * @see __arena_pop()
+ */
 void __arena_push(void) {
   if (UNLIKELY(!__arena.once)) {
     __arena_init();
@@ -307,12 +321,21 @@ void __arena_push(void) {
   if (!__arena.depth) {
     __arena_install();
   } else {
-    assert(__arena.depth < ARRAYLEN(__arena.offset) - 1);
+    _unassert(__arena.depth < ARRAYLEN(__arena.offset) - 1);
   }
   __arena.offset[__arena.depth + 1] = __arena.offset[__arena.depth];
   ++__arena.depth;
 }
 
+/**
+ * Pops memory arena.
+ *
+ * This pops the most recently created arena, freeing all the memory
+ * that was allocated between the push and pop arena calls. If this is
+ * the last arena on the stack, then the old malloc hooks are restored.
+ *
+ * @see __arena_push()
+ */
 void __arena_pop(void) {
   size_t a, b, greed;
   __arena_check();

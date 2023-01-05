@@ -80,7 +80,7 @@
 #define kNtErrorSemIsSet 102
 #define kNtErrorTooManySemRequests 103
 #define kNtErrorInvalidAtInterruptTime 104
-#define kNtErrorSemOwnerDied 105
+#define kNtErrorSemOwnerDied 105 /* EOWNERDEAD */
 #define kNtErrorSemUserLimit 106
 #define kNtErrorDiskChange 107
 #define kNtErrorDriveLocked 108
@@ -89,8 +89,8 @@
 #define kNtErrorBufferOverflow 111
 #define kNtErrorDiskFull 112 /* ENOSPC */
 #define kNtErrorNoMoreSearchHandles 113
-#define kNtErrorInvalidTargetHandle 114
-#define kNtErrorInvalidCategory 117
+#define kNtErrorInvalidTargetHandle 114 /* EBADF */
+#define kNtErrorInvalidCategory 117 /* ENOATTR */
 #define kNtErrorInvalidVerifySwitch 118
 #define kNtErrorBadDriverLevel 119
 #define kNtErrorCallNotImplemented 120
@@ -103,7 +103,7 @@
 #define kNtErrorProcNotFound 127
 #define kNtErrorWaitNoChildren 128 /* ECHILD */
 #define kNtErrorChildNotComplete 129
-#define kNtErrorDirectAccessHandle 130
+#define kNtErrorDirectAccessHandle 130 /* EBADF */
 #define kNtErrorNegativeSeek 131
 #define kNtErrorSeekOnDevice 132
 #define kNtErrorIsJoinTarget 133
@@ -131,7 +131,7 @@
 #define kNtErrorTooManyTcbs 155
 #define kNtErrorSignalRefused 156
 #define kNtErrorDiscarded 157
-#define kNtErrorNotLocked 158
+#define kNtErrorNotLocked 158 /* ENOLCK */
 #define kNtErrorBadThreadidAddr 159
 #define kNtErrorBadArguments 160
 #define kNtErrorBadPathname 161
@@ -151,7 +151,7 @@
 #define kNtErrorInvalidStackseg 189
 #define kNtErrorInvalidModuletype 190
 #define kNtErrorInvalidExeSignature 191
-#define kNtErrorExeMarkedInvalid 192
+#define kNtErrorExeMarkedInvalid 192 /* EBADEXEC */
 #define kNtErrorBadExeFormat 193 /* ENOEXEC */
 #define kNtErrorIteratedDataExceeds_64k 194
 #define kNtErrorInvalidMinallocsize 195
@@ -164,7 +164,7 @@
 #define kNtErrorInfloopInRelocChain 202
 #define kNtErrorEnvvarNotFound 203
 #define kNtErrorNoSignalSent 205
-#define kNtErrorFilenameExcedRange 206
+#define kNtErrorFilenameExcedRange 206 /* ENAMETOOLONG */
 #define kNtErrorRing2StackInUse 207
 #define kNtErrorMetaExpansionTooLong 208
 #define kNtErrorInvalidSignalNumber 209
@@ -172,14 +172,14 @@
 #define kNtErrorLocked 212
 #define kNtErrorTooManyModules 214
 #define kNtErrorNestingNotAllowed 215
-#define kNtErrorExeMachineTypeMismatch 216
+#define kNtErrorExeMachineTypeMismatch 216 /* EBADARCH */
 #define kNtErrorExeCannotModifySignedBinary 217
 #define kNtErrorExeCannotModifyStrongSignedBinary 218
 #define kNtErrorFileCheckedOut 220
 #define kNtErrorCheckoutRequired 221
-#define kNtErrorBadFileType 222
+#define kNtErrorBadFileType 222 /* EFTYPE */
 #define kNtErrorFileTooLarge 223 /* EFBIG */
-#define kNtErrorFormsAuthRequired 224
+#define kNtErrorFormsAuthRequired 224 /* ENEEDAUTH */
 #define kNtErrorVirusInfected 225
 #define kNtErrorVirusDeleted 226
 #define kNtErrorPipeLocal 229
@@ -194,7 +194,7 @@
 #define kNtErrorEaListInconsistent 255
 #define kNtErrorNoMoreItems 259
 #define kNtErrorCannotCopy 266
-#define kNtErrorDirectory 267
+#define kNtErrorDirectory 267 /* EISDIR */
 #define kNtErrorEasDidntFit 275
 #define kNtErrorEaFileCorrupt 276
 #define kNtErrorEaTableFull 277
@@ -231,14 +231,14 @@
 #define kNtErrorFileLevelTrimNotSupported 326
 #define kNtErrorOffsetAlignmentViolation 327
 #define kNtErrorInvalidFieldInParameterList 328
-#define kNtErrorOperationInProgress 329
+#define kNtErrorOperationInProgress 329 /* EPROGUNAVAIL */
 #define kNtErrorBadDevicePath 330
 #define kNtErrorTooManyDescriptors 331 /* ENFILE */
 #define kNtErrorScrubDataDisabled 332
 #define kNtErrorNotRedundantStorage 333
 #define kNtErrorResidentFileNotSupported 334
 #define kNtErrorCompressedFileNotSupported 335
-#define kNtErrorDirectoryNotSupported 336 /* EISDIR */
+#define kNtErrorDirectoryNotSupported 336
 #define kNtErrorNotReadFromCopy 337
 #define kNtErrorFtWriteFailure 338
 #define kNtErrorFtDiScanRequired 339
@@ -331,12 +331,12 @@
 #define kNtErrorPnpQueryRemoveDeviceTimeout 480
 #define kNtErrorPnpQueryRemoveRelatedDeviceTimeout 481
 #define kNtErrorPnpQueryRemoveUnrelatedDeviceTimeout 482
-#define kNtErrorDeviceHardwareError 483
+#define kNtErrorDeviceHardwareError 483 /* EDEVERR */
 #define kNtErrorInvalidAddress 487 /* EFAULT */
 #define kNtErrorVrfCfgEnabled 1183
 #define kNtErrorPartitionTerminating 1184
 #define kNtErrorUserProfileLoad 500
-#define kNtErrorArithmeticOverflow 534
+#define kNtErrorArithmeticOverflow 534 /* EOVERFLOW */
 #define kNtErrorPipeConnected 535
 #define kNtErrorPipeListening 536
 #define kNtErrorVerifierStop 537
@@ -383,7 +383,7 @@
 #define kNtErrorIllegalFloatContext 579
 #define kNtErrorNoEventPair 580
 #define kNtErrorDomainCtrlrConfigError 581
-#define kNtErrorIllegalCharacter 582
+#define kNtErrorIllegalCharacter 582 /* EILSEQ */
 #define kNtErrorUndefinedCharacter 583
 #define kNtErrorFloppyVolume 584
 #define kNtErrorBiosFailedToConnectInterrupt 585
@@ -396,7 +396,7 @@
 #define kNtErrorDataNotAccepted 592
 #define kNtErrorVdmHardError 593
 #define kNtErrorDriverCancelTimeout 594
-#define kNtErrorReplyMessageMismatch 595
+#define kNtErrorReplyMessageMismatch 595 /* EPROGMISMATCH */
 #define kNtErrorLostWritebehindData 596
 #define kNtErrorClientServerParametersInvalid 597
 #define kNtErrorNotTinyStream 598
@@ -440,7 +440,7 @@
 #define kNtErrorPnpRestartEnumeration 636
 #define kNtErrorSystemImageBadSignature 637
 #define kNtErrorPnpRebootRequired 638
-#define kNtErrorInsufficientPower 639
+#define kNtErrorInsufficientPower 639 /* EPWROFF */
 #define kNtErrorMultipleFaultViolation 640
 #define kNtErrorSystemShutdown 641
 #define kNtErrorPortNotSet 642
@@ -761,7 +761,7 @@
 #define kNtErrorRemoteSessionLimitExceeded 1220
 #define kNtErrorDupDomainname 1221
 #define kNtErrorNoNetwork 1222
-#define kNtErrorCancelled 1223
+#define kNtErrorCancelled 1223 /* ECANCELED */
 #define kNtErrorUserMappedFile 1224
 #define kNtErrorConnectionRefused 1225
 #define kNtErrorGracefulDisconnect 1226
@@ -771,7 +771,7 @@
 #define kNtErrorConnectionActive 1230
 #define kNtErrorNetworkUnreachable 1231
 #define kNtErrorHostUnreachable 1232
-#define kNtErrorProtocolUnreachable 1233
+#define kNtErrorProtocolUnreachable 1233 /* multimapped to ENETUNREACH */
 #define kNtErrorPortUnreachable 1234
 #define kNtErrorRequestAborted 1235
 #define kNtErrorConnectionAborted 1236
@@ -782,7 +782,7 @@
 #define kNtErrorIncorrectAddress 1241
 #define kNtErrorAlreadyRegistered 1242
 #define kNtErrorServiceNotFound 1243
-#define kNtErrorNotAuthenticated 1244
+#define kNtErrorNotAuthenticated 1244 /* EAUTH */
 #define kNtErrorNotLoggedOn 1245
 #define kNtErrorContinue 1246
 #define kNtErrorAlreadyInitialized 1247
@@ -820,7 +820,7 @@
 #define kNtErrorDebuggerInactive 1284
 #define kNtErrorDelayLoadFailed 1285
 #define kNtErrorVdmDisallowed 1286
-#define kNtErrorUnidentifiedError 1287
+#define kNtErrorUnidentifiedError 1287 /* EIDRM */
 #define kNtErrorInvalidCruntimeParameter 1288
 #define kNtErrorBeyondVdl 1289
 #define kNtErrorIncompatibleServiceSidType 1290
@@ -992,7 +992,7 @@
 #define kNtErrorInvalidKeyboardHandle 1457
 #define kNtErrorHookTypeNotAllowed 1458
 #define kNtErrorRequiresInteractiveWindowstation 1459
-#define kNtErrorTimeout 1460
+#define kNtErrorTimeout 1460 /* ETIMEDOUT */
 #define kNtErrorInvalidMonitorHandle 1461
 #define kNtErrorIncorrectSize 1462
 #define kNtErrorSymlinkClassDisabled 1463
@@ -1038,8 +1038,8 @@
 #define kNtErrorInstallLanguageUnsupported 1623
 #define kNtErrorInstallTransformFailure 1624
 #define kNtErrorInstallPackageRejected 1625
-#define kNtErrorFunctionNotCalled 1626
-#define kNtErrorFunctionFailed 1627
+#define kNtErrorFunctionNotCalled 1626 /* EBADRPC */
+#define kNtErrorFunctionFailed 1627 /* ERPCMISMATCH */
 #define kNtErrorInvalidTable 1628
 #define kNtErrorDatatypeMismatch 1629
 #define kNtErrorUnsupportedType 1630
@@ -1102,7 +1102,7 @@
 #define kNtErrorResourceTypeNotFound 1813
 #define kNtErrorResourceNameNotFound 1814
 #define kNtErrorResourceLangNotFound 1815
-#define kNtErrorNotEnoughQuota 1816
+#define kNtErrorNotEnoughQuota 1816 /* EDQUOT */
 #define kNtErrorInvalidTime 1901
 #define kNtErrorInvalidFormName 1902
 #define kNtErrorInvalidFormSize 1903
@@ -1217,7 +1217,7 @@
 #define kNtErrorDriveMediaMismatch 4303
 #define kNtErrorMediaOffline 4304
 #define kNtErrorLibraryOffline 4305
-#define kNtErrorEmpty 4306
+#define kNtErrorEmpty 4306 /* ENOMSG */
 #define kNtErrorNotEmpty 4307
 #define kNtErrorMediaUnavailable 4308
 #define kNtErrorResourceDisabled 4309
@@ -1531,7 +1531,7 @@
 #define kNtErrorLogSectorParityInvalid 6601
 #define kNtErrorLogSectorRemapped 6602
 #define kNtErrorLogBlockIncomplete 6603
-#define kNtErrorLogInvalidRange 6604
+#define kNtErrorLogInvalidRange 6604 /* ERANGE */
 #define kNtErrorLogBlocksExhausted 6605
 #define kNtErrorLogReadContextInvalid 6606
 #define kNtErrorLogRestartInvalid 6607
@@ -1707,7 +1707,7 @@
 #define kNtErrorCtxSessionInUse 7062
 #define kNtErrorCtxNoForceLogoff 7063
 #define kNtErrorCtxAccountRestriction 7064
-#define kNtErrorRdpProtocolError 7065
+#define kNtErrorRdpProtocolError 7065 /* EPROTO */
 #define kNtErrorCtxCdmConnect 7066
 #define kNtErrorCtxCdmDisconnect 7067
 #define kNtErrorCtxSecurityLayerError 7068
@@ -2566,7 +2566,7 @@
 #define kNtErrorStateSettingValueSizeLimitExceeded 15816
 #define kNtErrorStateSettingNameSizeLimitExceeded 15817
 #define kNtErrorStateContainerNameSizeLimitExceeded 15818
-#define kNtErrorApiUnavailable 15841
+#define kNtErrorApiUnavailable 15841 /* EPROCUNAVAIL */
 
 #define kNtWaitIoCompletion 0xc0
 

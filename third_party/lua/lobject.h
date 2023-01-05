@@ -1,13 +1,7 @@
-/*
-** $Id: lobject.h $
-** Type definitions for Lua objects
-** See Copyright Notice in lua.h
-*/
-
 #ifndef lobject_h
 #define lobject_h
 
-#include "libc/nexgen32e/bsr.h"
+#include "libc/intrin/bsr.h"
 #include "third_party/lua/llimits.h"
 #include "third_party/lua/lua.h"
 
@@ -792,7 +786,7 @@ LUAI_FUNC void luaO_chunkid (char *out, const char *source, size_t srclen);
 ** Computes ceil(log2(x))
 */
 static inline int luaO_ceillog2 (unsigned int x) {
-  return --x ? bsr(x) + 1 : 0;
+  return --x ? _bsr(x) + 1 : 0;
 }
 
 #endif

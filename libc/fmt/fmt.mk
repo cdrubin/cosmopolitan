@@ -54,14 +54,14 @@ $(LIBC_FMT_A).pkg:				\
 		$(LIBC_FMT_A_OBJS)		\
 		$(foreach x,$(LIBC_FMT_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(LIBC_FMT_A_OBJS):				\
+$(LIBC_FMT_A_OBJS): private			\
 		OVERRIDE_CFLAGS +=		\
 			-fno-jump-tables
 
 o/$(MODE)/libc/fmt/formatint64.o		\
 o/$(MODE)/libc/fmt/formatint64thousands.o	\
 o/$(MODE)/libc/fmt/dosdatetimetounix.o		\
-o/$(MODE)/libc/fmt/itoa64radix10.greg.o:	\
+o/$(MODE)/libc/fmt/itoa64radix10.greg.o: private\
 		OVERRIDE_CFLAGS +=		\
 			-O3
 
@@ -73,9 +73,19 @@ o/$(MODE)/libc/fmt/wcstoul.o			\
 o/$(MODE)/libc/fmt/strtoimax.o			\
 o/$(MODE)/libc/fmt/strtoumax.o			\
 o/$(MODE)/libc/fmt/wcstoimax.o			\
-o/$(MODE)/libc/fmt/wcstoumax.o:			\
+o/$(MODE)/libc/fmt/wcstoumax.o: private		\
 		OVERRIDE_CFLAGS +=		\
 			-Os
+
+# we can't use compiler magic because:
+#   kprintf() depends on these functions
+o/$(MODE)/libc/fmt/strerrno.greg.o		\
+o/$(MODE)/libc/fmt/strerrdoc.greg.o		\
+o/$(MODE)/libc/fmt/strerror_wr.greg.o: private	\
+		OVERRIDE_CFLAGS +=		\
+			-fpie			\
+			-ffreestanding		\
+			$(NO_MAGIC)
 
 LIBC_FMT_LIBS = $(foreach x,$(LIBC_FMT_ARTIFACTS),$($(x)))
 LIBC_FMT_SRCS = $(foreach x,$(LIBC_FMT_ARTIFACTS),$($(x)_SRCS))

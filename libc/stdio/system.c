@@ -16,35 +16,39 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/sigbits.h"
+#include "libc/calls/struct/rusage.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/weaken.h"
+#include "libc/log/log.h"
 #include "libc/paths.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ok.h"
 #include "libc/sysv/consts/sig.h"
+#include "libc/thread/thread.h"
 
 /**
  * Launches program with system command interpreter.
  *
- * @param cmdline is an interpreted Turing-complete command
+ * This embeds the Cosmopolitan Command Interpreter which provides
+ * Bourne-like syntax on all platforms including Windows.
+ *
+ * @param cmdline is a unix shell script
  * @return -1 if child process couldn't be created, otherwise a wait
- *     status that can be accessed using macros like WEXITSTATUS(s)
+ *     status that can be accessed using macros like WEXITSTATUS(s),
+ *     WIFSIGNALED(s), WTERMSIG(s), etc.
+ * @threadsafe
  */
 int system(const char *cmdline) {
   int pid, wstatus;
   sigset_t chldmask, savemask;
   struct sigaction ignore, saveint, savequit;
-  if (!cmdline) {
-    if (IsWindows()) return 1;
-    if (!access(_PATH_BSHELL, X_OK)) return 1;
-    return 0;
-  }
+  if (!cmdline) return 1;
+  BLOCK_CANCELLATIONS;
   ignore.sa_flags = 0;
   ignore.sa_handler = SIG_IGN;
   sigemptyset(&ignore.sa_mask);
@@ -57,8 +61,7 @@ int system(const char *cmdline) {
     sigaction(SIGINT, &saveint, 0);
     sigaction(SIGQUIT, &savequit, 0);
     sigprocmask(SIG_SETMASK, &savemask, 0);
-    systemexec(cmdline);
-    _exit(127);
+    _Exit(_cocmd(3, (char *[]){"system", "-c", cmdline, 0}, environ));
   } else if (pid != -1) {
     while (wait4(pid, &wstatus, 0, 0) == -1) {
       if (errno != EINTR) {
@@ -72,5 +75,6 @@ int system(const char *cmdline) {
   sigaction(SIGINT, &saveint, 0);
   sigaction(SIGQUIT, &savequit, 0);
   sigprocmask(SIG_SETMASK, &savemask, 0);
+  ALLOW_CANCELLATIONS;
   return wstatus;
 }

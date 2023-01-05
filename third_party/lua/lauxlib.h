@@ -1,16 +1,10 @@
-/*
-** $Id: lauxlib.h $
-** Auxiliary functions for building Lua libraries
-** See Copyright Notice in lua.h
-*/
-
-
 #ifndef lauxlib_h
 #define lauxlib_h
-
+#include "libc/assert.h"
 #include "libc/stdio/stdio.h"
-#include "third_party/lua/luaconf.h"
 #include "third_party/lua/lua.h"
+#include "third_party/lua/luaconf.h"
+/* clang-format off */
 
 /* global table */
 #define LUA_GNAME	"_G"
@@ -110,6 +104,9 @@ LUALIB_API int (luaL_getsubtable) (lua_State *L, int idx, const char *fname);
 LUALIB_API void (luaL_traceback) (lua_State *L, lua_State *L1,
                                   const char *msg, int level);
 
+LUALIB_API void (luaL_traceback2) (lua_State *L, lua_State *L1,
+                                   const char *msg, int level);
+
 LUALIB_API void (luaL_requiref) (lua_State *L, const char *modname,
                                  lua_CFunction openf, int glb);
 
@@ -160,10 +157,9 @@ LUALIB_API void (luaL_requiref) (lua_State *L, const char *modname,
 #if !defined(lua_assert)
 
 #if defined LUAI_ASSERT
-  #include <assert.h>
   #define lua_assert(c)		assert(c)
 #else
-  #define lua_assert(c)		((void)0)
+  #define lua_assert(c)		_unassert(c)
 #endif
 
 #endif

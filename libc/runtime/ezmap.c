@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/runtime/ezmap.internal.h"
@@ -26,7 +26,9 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 
-hidden int MapFileRead(const char *filename, struct MappedFile *mf) {
+// TODO(jart): DELETE
+
+_Hide int MapFileRead(const char *filename, struct MappedFile *mf) {
   mf->addr = MAP_FAILED;
   if ((mf->fd = open(filename, O_RDONLY)) != -1 &&
       (mf->size = getfiledescriptorsize(mf->fd)) < INT_MAX &&
@@ -40,7 +42,7 @@ hidden int MapFileRead(const char *filename, struct MappedFile *mf) {
   }
 }
 
-hidden int UnmapFile(struct MappedFile *mf) {
+_Hide int UnmapFile(struct MappedFile *mf) {
   int rc;
   rc = 0;
   if (mf->addr && mf->addr != MAP_FAILED) {

@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -251,7 +251,7 @@ const struct Descriptors {
      "STOS, and SCAS). In 64-bit mode, only 64-bit (RDI) and 32-bit (EDI) "
      "address sizes are supported. In non-64-bit modes, only 32-bit (EDI) "
      "and 16-bit (DI) address sizes are supported. The implicit ES "
-     "segment register cannot be overriden by a segment prefix."},
+     "segment register cannot be overridden by a segment prefix."},
 
     {"Z", "r",
      "The instruction has no ModR/M byte; the three least-significant "
@@ -331,7 +331,7 @@ void HandleOperand(const char *op) {
   while (*op) {
     found = false;
     for (i = 0; i < ARRAYLEN(kDescriptors); ++i) {
-      if (startswith(op, kDescriptors[i].prefix)) {
+      if (_startswith(op, kDescriptors[i].prefix)) {
         found = true;
         op += strlen(kDescriptors[i].prefix);
         if (succinct_) {

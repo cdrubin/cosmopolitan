@@ -51,7 +51,7 @@
            ;; lea x@tlsgd(,%rbx,1),%rdi
            ;; call __tls_get_addr@plt
            "tlsgd"
-           "tlsld" 
+           "tlsld"
            "dtpmod"
            "dtpoff"
            "gottpoff"
@@ -108,10 +108,12 @@
        "protip"
        "nxbitsafe"
        "vforksafe"
+       "threadsafe"
        "preinitsafe"
        "asyncsignalsafe"
        "notasyncsignalsafe"
        "isa"
+       "norestart"
        "mayalias"
        "sideffect")
       "\\>"]))
@@ -290,7 +292,7 @@
       (1 font-lock-constant-face)
       (2 font-lock-constant-face))
 
-     ;; Bultin Constants
+     ;; Builtin Constants
      ;;
      ;;   - Valid
      ;;
@@ -353,10 +355,7 @@
   (add-hook 'asm-mode-hook 'cosmo-asm-supplemental-hook)
   (setq asm-font-lock-keywords cosmo-asm-font-lock-keywords))
 
-;; Make -*-unix-assembly-*- mode line work correctly.
-;; TODO(jart): Would be nice to use GitHub's name instead of changing asm-mode.
-(defun unix-assembly-mode ()
-  (interactive)
-  (asm-mode))
+;; Make -*-unix-assembly-*- mode line work correctly like GitHub.
+(define-derived-mode unix-assembly-mode asm-mode "UNIX Assembly")
 
 (provide 'cosmo-asm-mode)

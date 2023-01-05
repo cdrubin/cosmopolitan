@@ -16,13 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/pushpop.h"
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/pushpop.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
 #include "libc/dns/hoststxt.h"
 #include "libc/fmt/fmt.h"
+#include "libc/thread/thread.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/systeminfo.h"
 #include "libc/runtime/runtime.h"
@@ -32,12 +33,13 @@
 static struct HostsTxt *g_hoststxt;
 static struct HostsTxtInitialStaticMemory {
   struct HostsTxt ht;
+  pthread_mutex_t lock;
   struct HostsTxtEntry entries[8];
   char strings[64];
 } g_hoststxt_init;
 
 static textwindows dontinline char *GetNtHostsTxtPath(char *pathbuf,
-                                                    uint32_t size) {
+                                                      uint32_t size) {
   const char *const kWinHostsPath = "\\drivers\\etc\\hosts";
   uint32_t len = GetSystemDirectoryA(&pathbuf[0], size);
   if (len && len + strlen(kWinHostsPath) + 1 < size) {
@@ -53,6 +55,7 @@ static textwindows dontinline char *GetNtHostsTxtPath(char *pathbuf,
  * Returns hosts.txt map.
  *
  * @note yoinking realloc() ensures there's no size limits
+ * @threadsafe
  */
 const struct HostsTxt *GetHostsTxt(void) {
   FILE *f;
@@ -60,6 +63,7 @@ const struct HostsTxt *GetHostsTxt(void) {
   char pathbuf[PATH_MAX];
   struct HostsTxtInitialStaticMemory *init;
   init = &g_hoststxt_init;
+  pthread_mutex_lock(&init->lock);
   if (!g_hoststxt) {
     g_hoststxt = &init->ht;
     init->ht.entries.n = pushpop(ARRAYLEN(init->entries));
@@ -78,5 +82,6 @@ const struct HostsTxt *GetHostsTxt(void) {
       fclose(f);
     }
   }
+  pthread_mutex_unlock(&init->lock);
   return g_hoststxt;
 }

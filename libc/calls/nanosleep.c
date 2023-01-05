@@ -16,26 +16,32 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/dce.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/errno.h"
+#include "libc/sysv/consts/clock.h"
 
 /**
- * Sleeps for a particular amount of time.
+ * Sleeps for relative amount of time.
+ *
+ * @param req is the duration of time we should sleep
+ * @param rem if non-null will be updated with the remainder of unslept
+ *     time when -1 w/ `EINTR` is returned otherwise `rem` is undefined
+ * @return 0 on success, or -1 w/ errno
+ * @raise EINVAL if `req->tv_nsec ∉ [0,1000000000)`
+ * @raise ECANCELED if thread was cancelled in masked mode
+ * @raise EINTR if a signal was delivered and `rem` is updated
+ * @raise EFAULT if `req` is NULL or `req` / `rem` is a bad pointer
+ * @raise ENOSYS on bare metal
+ * @see clock_nanosleep()
+ * @cancellationpoint
+ * @norestart
  */
 int nanosleep(const struct timespec *req, struct timespec *rem) {
-  if (!req) return efault();
-  if (req->tv_sec < 0 || !(0 <= req->tv_nsec && req->tv_nsec <= 999999999)) {
-    return einval();
-  }
-  if (!IsWindows() && !IsMetal() && !IsXnu()) {
-    return sys_nanosleep(req, rem);
-  } else if (IsXnu()) {
-    return sys_nanosleep_xnu(req, rem);
-  } else if (IsMetal()) {
-    return enosys(); /* TODO: Sleep on Metal */
+  int rc;
+  if (!(rc = clock_nanosleep(CLOCK_REALTIME, 0, req, rem))) {
+    return 0;
   } else {
-    return sys_nanosleep_nt(req, rem);
+    errno = rc;
+    return -1;
   }
 }

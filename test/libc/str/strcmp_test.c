@@ -17,14 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
 #include "libc/dce.h"
+#include "libc/intrin/bits.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/cachesize.h"
 #include "libc/nexgen32e/x86feature.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
@@ -319,13 +319,6 @@ TEST(wcscasecmp, testItWorksCase) {
   EXPECT_NE(0, wcscasecmp(L"hello", L"yello"));
 }
 
-TEST(strcasecmp8to16, testItWorksCase) {
-  EXPECT_EQ(0, strcasecmp8to16("hello", u"HELLO"));
-  EXPECT_EQ(0, strcasecmp8to16("hello", u"Hello"));
-  EXPECT_EQ(0, strcasecmp8to16("hello", u"hello"));
-  EXPECT_NE(0, strcasecmp8to16("hello", u"yello"));
-}
-
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ test/libc/str/strcmp_test.c § nontrivial length                          ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
@@ -496,14 +489,14 @@ TEST(wcsncmp, testTwosComplementBane) {
 │ test/libc/str/strcmp_test.c § benchmarks                                 ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
-testonly dontinline int strcmp_pure(const char *a, const char *b) {
+dontinline int strcmp_pure(const char *a, const char *b) {
   for (; *a == *b; a++, b++) {
     if (!*a) break;
   }
   return (*a & 0xff) - (*b & 0xff);
 }
 
-testonly dontinline int strcasecmp_pure(const char *a, const char *b) {
+dontinline int strcasecmp_pure(const char *a, const char *b) {
   for (; *a && *b; a++, b++) {
     if (!(*a == *b || tolower(*a & 0xff) == tolower(*b & 0xff))) {
       break;
@@ -513,7 +506,7 @@ testonly dontinline int strcasecmp_pure(const char *a, const char *b) {
 }
 
 char *randomize_buf2str(size_t size, char data[size]) {
-  rngset(data, size, rand64, -1);
+  rngset(data, size, _rand64, -1);
   data[size - 1] = '\0';
   return data;
 }
@@ -541,8 +534,8 @@ void longstringislong_dupe(size_t size, char data[size], char dupe[size]) {
 BENCH(bench_00_strcmp, bench) {
   size_t size;
   char *dupe, *data;
-  size = ROUNDDOWN(MAX(FRAMESIZE, getcachesize(kCpuCacheTypeData, 1)) / 2,
-                   PAGESIZE);
+
+  size = 14139;
   data = gc(malloc(size));
   dupe = gc(malloc(size));
 
@@ -583,8 +576,7 @@ BENCH(bench_00_strcmp, bench) {
 BENCH(bench_01_strcasecmp, bench) {
   size_t size;
   char *dupe, *data;
-  size = ROUNDDOWN(MAX(FRAMESIZE, getcachesize(kCpuCacheTypeData, 1)) / 2,
-                   PAGESIZE);
+  size = 141393;
   data = gc(malloc(size));
   dupe = gc(malloc(size));
 
@@ -606,7 +598,7 @@ BENCH(memcmp, bench) {
   volatile char *copy = gc(strdup(kHyperion));
   EZBENCH2("memcmp big", donothing,
            EXPROPRIATE(memcmp(kHyperion, copy, kHyperionSize)));
-  copy = gc(strdup("tought little ship"));
-  EZBENCH2("memcmp 19", donothing,
-           EXPROPRIATE(memcmp("tought little ship", copy, 19)));
+  copy = gc(strdup("tough little ship"));
+  EZBENCH2("memcmp 18", donothing,
+           EXPROPRIATE(memcmp("tough little ship", copy, 18)));
 }

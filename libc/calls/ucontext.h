@@ -5,56 +5,6 @@
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-#define REG_R8      REG_R8
-#define REG_R9      REG_R9
-#define REG_R10     REG_R10
-#define REG_R11     REG_R11
-#define REG_R12     REG_R12
-#define REG_R13     REG_R13
-#define REG_R14     REG_R14
-#define REG_R15     REG_R15
-#define REG_RDI     REG_RDI
-#define REG_RSI     REG_RSI
-#define REG_RBP     REG_RBP
-#define REG_RBX     REG_RBX
-#define REG_RDX     REG_RDX
-#define REG_RAX     REG_RAX
-#define REG_RCX     REG_RCX
-#define REG_RSP     REG_RSP
-#define REG_RIP     REG_RIP
-#define REG_EFL     REG_EFL
-#define REG_CSGSFS  REG_CSGSFS
-#define REG_ERR     REG_ERR
-#define REG_TRAPNO  REG_TRAPNO
-#define REG_OLDMASK REG_OLDMASK
-#define REG_CR2     REG_CR2
-
-enum GeneralRegister {
-  REG_R8,
-  REG_R9,
-  REG_R10,
-  REG_R11,
-  REG_R12,
-  REG_R13,
-  REG_R14,
-  REG_R15,
-  REG_RDI,
-  REG_RSI,
-  REG_RBP,
-  REG_RBX,
-  REG_RDX,
-  REG_RAX,
-  REG_RCX,
-  REG_RSP,
-  REG_RIP,
-  REG_EFL,
-  REG_CSGSFS,
-  REG_ERR,
-  REG_TRAPNO,
-  REG_OLDMASK,
-  REG_CR2
-};
-
 struct XmmRegister {
   uint64_t u64[2];
 };
@@ -115,22 +65,26 @@ struct MachineContext {
     };
     gregset_t gregs;
   };
-  struct FpuState *fpregs;
+  struct FpuState *fpregs; /* zero when no fpu context */
   uint64_t __pad1[8];
 };
 
 typedef struct MachineContext mcontext_t;
 
 struct ucontext {
-  uint64_t uc_flags;
+  uint64_t uc_flags; /* don't use this */
   struct ucontext *uc_link;
   stack_t uc_stack;
   mcontext_t uc_mcontext; /* use this */
   sigset_t uc_sigmask;
+  uint64_t __pad;
   struct FpuState __fpustate; /* for cosmo on non-linux */
 };
 
 typedef struct ucontext ucontext_t;
+
+int getcontext(ucontext_t *);
+int setcontext(const ucontext_t *);
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

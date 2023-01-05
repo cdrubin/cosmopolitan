@@ -17,33 +17,79 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/sig.internal.h"
 #include "libc/calls/struct/iovec.h"
-#include "libc/limits.h"
+#include "libc/calls/struct/iovec.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/calls/wincrash.internal.h"
+#include "libc/errno.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/nt/errors.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
-#include "libc/nt/struct/overlapped.h"
+#include "libc/runtime/internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/sicode.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 
-static textwindows ssize_t sys_write_nt_impl(struct Fd *fd, void *data,
-                                             size_t size, ssize_t offset) {
-  uint32_t sent;
+static textwindows ssize_t sys_write_nt_impl(int fd, void *data, size_t size,
+                                             ssize_t offset) {
+  bool32 ok;
+  int64_t h, p;
+  uint32_t err, sent;
   struct NtOverlapped overlap;
-  if (WriteFile(fd->handle, data, clampio(size), &sent,
-                offset2overlap(offset, &overlap))) {
-    /* TODO(jart): Trigger SIGPIPE on kNtErrorBrokenPipe */
+
+  h = g_fds.p[fd].handle;
+
+  if (offset != -1) {
+    // windows changes the file pointer even if overlapped is passed
+    _npassert(SetFilePointerEx(h, 0, &p, SEEK_CUR));
+  }
+
+  ok = WriteFile(h, data, _clampio(size), &sent,
+                 _offset2overlap(h, offset, &overlap));
+
+  if (offset != -1) {
+    // windows clobbers file pointer even on error
+    _npassert(SetFilePointerEx(h, p, 0, SEEK_SET));
+  }
+
+  if (ok) {
     return sent;
-  } else {
-    return __winerr();
+  }
+
+  switch (GetLastError()) {
+    // case kNtErrorInvalidHandle:
+    //   return ebadf(); /* handled by consts.sh */
+    // case kNtErrorNotEnoughQuota:
+    //   return edquot(); /* handled by consts.sh */
+    case kNtErrorBrokenPipe:  // broken pipe
+    case kNtErrorNoData:      // closing named pipe
+      if (_weaken(__sig_raise)) {
+        _weaken(__sig_raise)(SIGPIPE, SI_KERNEL);
+        return epipe();
+      } else {
+        STRACE("broken pipe");
+        _Exitr(128 + EPIPE);
+      }
+    case kNtErrorAccessDenied:  // write doesn't return EACCESS
+      return ebadf();
+    default:
+      return __winerr();
   }
 }
 
-textwindows ssize_t sys_write_nt(struct Fd *fd, const struct iovec *iov,
-                                 size_t iovlen, ssize_t opt_offset) {
+textwindows ssize_t sys_write_nt(int fd, const struct iovec *iov, size_t iovlen,
+                                 ssize_t opt_offset) {
   ssize_t rc;
   size_t i, total;
   uint32_t size, wrote;
   struct NtOverlapped overlap;
+  if (opt_offset < -1) return einval();
   while (iovlen && !iov[0].iov_len) iov++, iovlen--;
   if (iovlen) {
     for (total = i = 0; i < iovlen; ++i) {

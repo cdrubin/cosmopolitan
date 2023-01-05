@@ -1,10 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_TESTLIB_H_
 #define COSMOPOLITAN_LIBC_TESTLIB_H_
-#include "libc/bits/weaken.h"
-#include "libc/errno.h"
-#include "libc/runtime/gc.internal.h"
-#include "libc/str/str.h"
-#include "libc/testlib/ugly.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*───────────────────────────────────────────────────────────────────────────│─╗
@@ -67,6 +62,37 @@ COSMOPOLITAN_C_START_
 #define EXPECT_LE(C, X) _TEST2("EXPECT_LE", C, <=, (X), #C, " ≤ ", #X, 0)
 #define EXPECT_LT(C, X) _TEST2("EXPECT_LT", C, <, (X), #C, " < ", #X, 0)
 
+#define __TEST_ARRAY(S) \
+  _Section(".piro.relo.sort.testcase.2." #S ",\"aw\",@init_array #")
+
+#define __BENCH_ARRAY(S) \
+  _Section(".piro.relo.sort.bench.2." #S ",\"aw\",@init_array #")
+
+#define __TEST_PROTOTYPE(S, N, A, K)               \
+  void S##_##N(void);                              \
+  testfn_t S##_##N##_ptr[] A(S##_##N) = {S##_##N}; \
+  K void S##_##N(void)
+
+#define __TEST_SECTION(NAME, CONTENT) \
+  ".section " NAME "\n" CONTENT "\n\t.previous\n"
+
+#define __RELOSECTION(NAME, CONTENT) \
+  __TEST_SECTION(".piro.relo.sort" NAME ",\"aw\",@progbits", CONTENT)
+
+#define __ROSTR(STR) __TEST_SECTION(".rodata.str1.1,\"aSM\",@progbits,1", STR)
+
+#define TESTLIB_STRINGIFY(A)  _TESTLIB_STRINGIFY(A)
+#define _TESTLIB_STRINGIFY(A) #A
+
+#define __FIXTURE(KIND, GROUP, ENTRY)                               \
+  asm(__RELOSECTION("." KIND ".2." #GROUP #ENTRY,                   \
+                    "\t.quad\t1f\n"                                 \
+                    "\t.quad\t2f\n"                                 \
+                    "\t.quad\t" TESTLIB_STRINGIFY(GROUP##_##ENTRY)) \
+          __ROSTR("1:\t.asciz\t" TESTLIB_STRINGIFY(#GROUP))         \
+              __ROSTR("2:\t.asciz\t" TESTLIB_STRINGIFY(#ENTRY)));   \
+  void GROUP##_##ENTRY(void)
+
 /**
  * Enables setup and teardown of test directories.
  *
@@ -114,11 +140,12 @@ void TearDownOnce(void);
 
 #define ASSERT_SYS(ERRNO, WANT, GOT, ...)                                  \
   do {                                                                     \
-    errno = 0;                                                             \
+    int e = testlib_geterrno();                                            \
     __TEST_EQ(assert, __FILE__, __LINE__, __FUNCTION__, #WANT, #GOT, WANT, \
               GOT, __VA_ARGS__);                                           \
     __TEST_EQ(assert, __FILE__, __LINE__, __FUNCTION__, #ERRNO,            \
-              strerror(errno), ERRNO, errno, __VA_ARGS__);                 \
+              testlib_strerror(), ERRNO, testlib_geterrno(), __VA_ARGS__); \
+    testlib_seterrno(e);                                                   \
   } while (0)
 
 #define ASSERT_BETWEEN(BEG, END, GOT) \
@@ -188,11 +215,11 @@ void TearDownOnce(void);
 
 #define EXPECT_SYS(ERRNO, WANT, GOT, ...)                                  \
   do {                                                                     \
-    errno = 0;                                                             \
+    testlib_seterrno(0);                                                   \
     __TEST_EQ(expect, __FILE__, __LINE__, __FUNCTION__, #WANT, #GOT, WANT, \
               GOT, __VA_ARGS__);                                           \
     __TEST_EQ(expect, __FILE__, __LINE__, __FUNCTION__, #ERRNO,            \
-              strerror(errno), ERRNO, errno, __VA_ARGS__);                 \
+              testlib_strerror(), ERRNO, testlib_geterrno(), __VA_ARGS__); \
   } while (0)
 
 #define EXPECT_FALSE(X) _TEST2("EXPECT_FALSE", false, ==, (X), #X, "", "", 0)
@@ -268,12 +295,11 @@ void TearDownOnce(void);
     Got = (intptr_t)(GOT);                                                   \
     Want = (intptr_t)(WANT);                                                 \
     if (Want != Got) {                                                       \
-      if (g_testlib_shoulddebugbreak) DebugBreak();                          \
-      testlib_showerror_file = FILE;                                         \
-      testlib_showerror_func = FUNC;                                         \
+      testlib_error_enter(FILE, FUNC);                                       \
       testlib_showerror_##KIND##_eq(LINE, WANTCODE, GOTCODE,                 \
                                     testlib_formatint(Want),                 \
                                     testlib_formatint(Got), "" __VA_ARGS__); \
+      testlib_error_leave();                                                 \
     }                                                                        \
     (void)0;                                                                 \
   } while (0)
@@ -285,12 +311,11 @@ void TearDownOnce(void);
     Got = (intptr_t)(GOT);                                                   \
     Want = (intptr_t)(WANT);                                                 \
     if (Want == Got) {                                                       \
-      if (g_testlib_shoulddebugbreak) DebugBreak();                          \
-      testlib_showerror_file = FILE;                                         \
-      testlib_showerror_func = FUNC;                                         \
+      testlib_error_enter(FILE, FUNC);                                       \
       testlib_showerror_##KIND##_ne(LINE, WANTCODE, GOTCODE,                 \
                                     testlib_formatint(Want),                 \
                                     testlib_formatint(Got), "" __VA_ARGS__); \
+      testlib_error_leave();                                                 \
     }                                                                        \
   } while (0)
 
@@ -317,8 +342,8 @@ extern char g_fixturename[256];
 extern char g_testlib_olddir[PATH_MAX];
 extern char g_testlib_tmpdir[PATH_MAX];
 extern bool g_testlib_shoulddebugbreak;     /* set by testmain */
-extern unsigned g_testlib_ran;              /* set by wrappers */
-extern unsigned g_testlib_failed;           /* set by wrappers */
+extern _Atomic(unsigned) g_testlib_ran;     /* set by wrappers */
+extern _Atomic(unsigned) g_testlib_failed;  /* set by wrappers */
 extern const char *testlib_showerror_errno; /* set by macros */
 extern const char *testlib_showerror_file;  /* set by macros */
 extern const char *testlib_showerror_func;  /* set by macros */
@@ -344,15 +369,20 @@ void testlib_showerror_expect_ne(int, const char *, const char *, char *,
 void testlib_showerror_expect_true(int, const char *, const char *, char *,
                                    char *, const char *, ...);
 
+void testlib_error_leave(void);
+void testlib_error_enter(const char *, const char *);
 void testlib_showerror(const char *, int, const char *, const char *,
                        const char *, const char *, char *, char *);
 
 void thrashcodecache(void);
 
 void testlib_finish(void);
+int testlib_geterrno(void);
+void testlib_seterrno(int);
 void testlib_runalltests(void);
+const char *testlib_strerror(void);
 void testlib_runallbenchmarks(void);
-void testlib_checkformemoryleaks(void);
+bool testlib_memoryexists(const void *);
 void testlib_runtestcases(testfn_t *, testfn_t *, testfn_t);
 void testlib_runcombos(testfn_t *, testfn_t *, const struct TestFixture *,
                        const struct TestFixture *);
@@ -368,6 +398,7 @@ bool testlib_strcaseequals(size_t, const void *, const void *) nosideeffect;
 bool testlib_strncaseequals(size_t, const void *, const void *,
                             size_t) nosideeffect;
 void testlib_free(void *);
+void testlib_extract(const char *, const char *, int);
 bool testlib_binequals(const char16_t *, const void *, size_t) nosideeffect;
 bool testlib_hexequals(const char *, const void *, size_t) nosideeffect;
 bool testlib_startswith(size_t, const void *, const void *) nosideeffect;
@@ -392,7 +423,9 @@ forceinline void testlib_ontest() {
 
 forceinline void testlib_onfail2(bool isfatal) {
   testlib_incrementfailed();
-  if (isfatal) testlib_abort();
+  if (isfatal) {
+    testlib_abort();
+  }
 }
 
 forceinline void assertNotEquals(FILIFU_ARGS intptr_t donotwant, intptr_t got,

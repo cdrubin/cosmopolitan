@@ -16,13 +16,24 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/atomic.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/state.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
+#include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/thread/thread.h"
+
+#if SupportsMetal()
+STATIC_YOINK("_idt");
+#endif
 
 /**
  * Aborts process after printing a backtrace.
@@ -31,15 +42,24 @@
  */
 relegated wontreturn void __die(void) {
   /* asan runtime depends on this function */
-  static bool once;
-  if (cmpxchg(&once, false, true)) {
-    __restore_tty(1);
+  int me, owner;
+  static atomic_int once;
+  owner = 0;
+  me = sys_gettid();
+  pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0);
+  if (__vforked ||
+      atomic_compare_exchange_strong_explicit(
+          &once, &owner, me, memory_order_relaxed, memory_order_relaxed)) {
+    __restore_tty();
     if (IsDebuggerPresent(false)) {
       DebugBreak();
     }
-    ShowBacktrace(2, NULL);
-    quick_exit(77);
+    ShowBacktrace(2, __builtin_frame_address(0));
+    _Exitr(77);
+  } else if (owner == me) {
+    kprintf("die failed while dying\n");
+    _Exitr(78);
+  } else {
+    _Exit1(79);
   }
-  __write_str("PANIC: __DIE() DIED\r\n");
-  _Exit(78);
 }

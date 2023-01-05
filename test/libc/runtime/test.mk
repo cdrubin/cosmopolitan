@@ -23,24 +23,23 @@ TEST_LIBC_RUNTIME_CHECKS =					\
 	$(TEST_LIBC_RUNTIME_SRCS_TEST:%.c=o/$(MODE)/%.com.runs)
 
 TEST_LIBC_RUNTIME_DIRECTDEPS =					\
-	LIBC_ALG						\
-	LIBC_BITS						\
 	LIBC_CALLS						\
 	LIBC_FMT						\
 	LIBC_INTRIN						\
 	LIBC_LOG						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
-	LIBC_RAND						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
 	LIBC_STUBS						\
 	LIBC_SYSV						\
+	LIBC_THREAD						\
 	LIBC_TESTLIB						\
 	LIBC_TINYMATH						\
-	LIBC_UNICODE						\
 	LIBC_X							\
+	LIBC_ZIPOS						\
+	TOOL_BUILD_LIB						\
 	THIRD_PARTY_XED
 
 TEST_LIBC_RUNTIME_DEPS :=					\
@@ -56,10 +55,19 @@ o/$(MODE)/test/libc/runtime/%.com.dbg:				\
 		o/$(MODE)/test/libc/runtime/runtime.pkg		\
 		$(LIBC_TESTMAIN)				\
 		$(CRT)						\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(TEST_LIBC_RUNTIME_OBJS):					\
+o/$(MODE)/test/libc/runtime/ape_test.com.dbg:			\
+		$(TEST_LIBC_RUNTIME_DEPS)			\
+		o/$(MODE)/test/libc/runtime/ape_test.o		\
+		o/$(MODE)/test/libc/runtime/runtime.pkg		\
+		$(LIBC_TESTMAIN)				\
+		$(CRT)						\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+$(TEST_LIBC_RUNTIME_OBJS): private				\
 	DEFAULT_CCFLAGS +=					\
 		-fno-builtin
 
@@ -67,8 +75,7 @@ o/$(MODE)/test/libc/runtime/getenv_test.com.runs:		\
 		o/$(MODE)/test/libc/runtime/getenv_test.com
 	@HELLO=THERE build/runit $@ $<
 
-o/$(MODE)/test/libc/runtime/fun_test.o				\
-o/$(MODE)/test/libc/runtime/itsatrap_test.o:			\
+o/$(MODE)/test/libc/runtime/itsatrap_test.o: private		\
 		OVERRIDE_CFLAGS +=				\
 			-fno-sanitize=all			\
 			-ftrapv

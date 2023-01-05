@@ -18,8 +18,11 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define PY_SSIZE_T_CLEAN
 #include "dsp/scale/cdecimate2xuint8x8.h"
-#include "libc/bits/popcnt.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/pledge.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/popcnt.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
@@ -27,6 +30,7 @@
 #include "libc/nexgen32e/rdtsc.h"
 #include "libc/nexgen32e/rdtscp.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/import.h"
 #include "third_party/python/Include/longobject.h"
@@ -80,7 +84,7 @@ polyfilled yet.");
 static PyObject *
 cosmo_syscount(PyObject *self, PyObject *noargs)
 {
-    return PyLong_FromSize_t(g_syscount);
+    return PyLong_FromSize_t(__syscount);
 }
 
 PyDoc_STRVAR(rdtsc_doc,
@@ -187,6 +191,60 @@ cosmo_popcount(PyObject *self, PyObject *args)
     return PyLong_FromSize_t(_countbits(p, n));
 }
 
+PyDoc_STRVAR(pledge_doc,
+"pledge($module, promises, execpromises)\n\
+--\n\n\
+Permits syscall operations, e.g.\n\
+\n\
+    >>> cosmo.pledge('stdio rpath tty', None)\n\
+\n\
+This function implements the OpenBSD pledge() API for\n\
+OpenBSD and Linux, where we use SECCOMP BPF. Read the\n\
+Cosmopolitan Libc documentation to learn more.");
+
+static PyObject *
+cosmo_pledge(PyObject *self, PyObject *args)
+{
+    int e = errno;
+    const char *x, *y;
+    if (!PyArg_ParseTuple(args, "sz:pledge", &x, &y)) return 0;
+    __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
+    if (!pledge(x, y)) {
+        Py_RETURN_NONE;
+    } else {
+        PyErr_SetString(PyExc_SystemError, strerror(errno));
+        errno = e;
+        return 0;
+    }
+}
+
+PyDoc_STRVAR(unveil_doc,
+"unveil($module, path, permissions)\n\
+--\n\n\
+Permits filesystem operations, e.g.\n\
+\n\
+    >>> cosmo.unveil('.', 'rwcx')\n\
+    >>> cosmo.unveil(None, None)\n\
+\n\
+This function implements the OpenBSD unveil() API for\n\
+OpenBSD and Linux where we use Landlock LSM. Read the\n\
+Cosmopolitan Libc documentation to learn more.");
+
+static PyObject *
+cosmo_unveil(PyObject *self, PyObject *args)
+{
+    int e = errno;
+    const char *x, *y;
+    if (!PyArg_ParseTuple(args, "zz:unveil", &x, &y)) return 0;
+    if (!unveil(x, y)) {
+        Py_RETURN_NONE;
+    } else {
+        PyErr_SetString(PyExc_SystemError, strerror(errno));
+        errno = e;
+        return 0;
+    }
+}
+
 PyDoc_STRVAR(exit1_doc,
 "exit1($module)\n\
 --\n\n\
@@ -205,50 +263,44 @@ static bool ftrace_installed = 0;
 
 typedef struct {
     PyObject_HEAD
-} TracerObject;
+} FtracerObject;
 
-static int TracerObject_init(PyObject* self, PyObject *args, PyObject *kwargs)
+static int FtracerObject_init(PyObject* self, PyObject *args, PyObject *kwargs)
 {
-    if (!ftrace_installed) {
-        ftrace_install();
-        ftrace_installed = 1;
-        ftrace_enabled = 0;
-    }
+    ftrace_install();
     return 0;
 }
 
-static PyObject* TracerObject_enter(PyObject *self, PyObject *Py_UNUSED(ignored))
+static PyObject* FtracerObject_enter(PyObject *self, PyObject *Py_UNUSED(ignored))
 {
-    ftrace_enabled = 1;
+    ftrace_enabled(+1);
     return self;
 }
 
-static PyObject* TracerObject_exit(PyObject *self, PyObject *args)
+static PyObject* FtracerObject_exit(PyObject *self, PyObject *args)
 {
-    ftrace_enabled = 0;
+    ftrace_enabled(-1);
     return self;
 }
 
-static PyMethodDef TracerObject_methods[] = {
-    {"__enter__", (PyCFunction) TracerObject_enter, METH_NOARGS,
-     "enable ftrace to start logging"
-    },
-    {"__exit__", (PyCFunction) TracerObject_exit, METH_VARARGS,
-     "disable ftrace to stop logging"
-    },
+static PyMethodDef FtracerObject_methods[] = {
+    {"__enter__", (PyCFunction) FtracerObject_enter, METH_NOARGS,
+     "enables c function call logging"},
+    {"__exit__", (PyCFunction) FtracerObject_exit, METH_VARARGS,
+     "disables c function call logging"},
     {0}
 };
 
-static PyTypeObject TracerType = {
+static PyTypeObject FtracerType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "cosmo.Tracer",
+    .tp_name = "cosmo.Ftracer",
     .tp_doc = "wrapping ftrace with a context manager",
-    .tp_basicsize = sizeof(TracerObject),
+    .tp_basicsize = sizeof(FtracerObject),
     .tp_itemsize = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = PyType_GenericNew,
-    .tp_init = (initproc) TracerObject_init,
-    .tp_methods = TracerObject_methods,
+    .tp_init = (initproc) FtracerObject_init,
+    .tp_methods = FtracerObject_methods,
 };
 
 PyDoc_STRVAR(ftrace_doc,
@@ -265,18 +317,18 @@ to work, the concomitant .com.dbg binary needs to be present.");
 static PyObject *
 cosmo_ftrace(PyObject *self, PyObject *noargs)
 {
-    PyObject *tracer = PyType_GenericNew(&TracerType, NULL, NULL);
+    PyObject *tracer = PyType_GenericNew(&FtracerType, NULL, NULL);
     if (tracer == NULL) Py_RETURN_NONE;
-    TracerObject_init(tracer, NULL, NULL);
+    FtracerObject_init(tracer, NULL, NULL);
     return tracer;
 }
-
-
 
 static PyMethodDef cosmo_methods[] = {
     {"exit1", cosmo_exit1, METH_NOARGS, exit1_doc},
     {"rdtsc", cosmo_rdtsc, METH_NOARGS, rdtsc_doc},
     {"crc32c", cosmo_crc32c, METH_VARARGS, crc32c_doc},
+    {"pledge", cosmo_pledge, METH_VARARGS, pledge_doc},
+    {"unveil", cosmo_unveil, METH_VARARGS, unveil_doc},
     {"syscount", cosmo_syscount, METH_NOARGS, syscount_doc},
     {"popcount", cosmo_popcount, METH_VARARGS, popcount_doc},
     {"decimate", cosmo_decimate, METH_VARARGS, decimate_doc},
@@ -321,14 +373,14 @@ PyMODINIT_FUNC
 PyInit_cosmo(void)
 {
     PyObject *m;
-    if (PyType_Ready(&TracerType) < 0) return 0;
+    if (PyType_Ready(&FtracerType) < 0) return 0;
     if (!(m = PyModule_Create(&cosmomodule))) return 0;
     PyModule_AddStringConstant(m, "MODE", MODE);
     PyModule_AddIntConstant(m, "IMAGE_BASE_VIRTUAL", IMAGE_BASE_VIRTUAL);
     PyModule_AddStringConstant(m, "kernel", GetKernelName());
     PyModule_AddIntConstant(m, "kStartTsc", kStartTsc);
 
-    Py_INCREF(&TracerType);
+    Py_INCREF(&FtracerType);
     // PyModule_AddObject(m, "Tracer", (PyObject *) &TracerType);
     return !PyErr_Occurred() ? m : 0;
 }

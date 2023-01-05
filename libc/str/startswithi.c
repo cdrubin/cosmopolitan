@@ -17,11 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 
-bool startswithi(const char *s, const char *prefix) {
+bool _startswithi(const char *s, const char *prefix) {
   for (;;) {
     if (!*prefix) return true;
     if (!*s) return false;
-    if (kToLower[*s++ & 255] != (*prefix++ & 255)) return false;
+    if (kToLower[*s++ & 255] != kToLower[*prefix++ & 255]) return false;
   }
 }

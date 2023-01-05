@@ -4,8 +4,9 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
+#include "libc/intrin/weaken.h"
 #include "libc/log/log.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/pyerrors.h"
@@ -124,14 +125,9 @@ Py_FatalError(const char *msg)
     }
     int has_tstate_and_gil = (tss_tstate != NULL);
 
-    if (has_tstate_and_gil) {
-        /* If an exception is set, print the exception with its traceback */
-        if (!_Py_FatalError_PrintExc(fd)) {
-            /* No exception is set, or an exception is set without traceback */
-            _Py_FatalError_DumpTracebacks(fd);
-        }
-    }
-    else {
+    /* If an exception is set, print the exception with its traceback */
+    if (!_Py_FatalError_PrintExc(fd)) {
+        /* No exception is set, or an exception is set without traceback */
         _Py_FatalError_DumpTracebacks(fd);
     }
 
@@ -164,6 +160,6 @@ exit:
 #if defined(MS_WINDOWS) && defined(_DEBUG)
     DebugBreak();
 #endif
-    if (weaken(__die)) weaken(__die)();
+    if (_weaken(__die)) _weaken(__die)();
     abort();
 }

@@ -19,9 +19,10 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/strtol.internal.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 
 /**
- * Decodes 128-bit unsigned integer from ASCII string.
+ * Decodes uintmax_t from ASCII string.
  *
  * @param s is a non-null nul-terminated string
  * @param endptr if non-null will always receive a pointer to the char

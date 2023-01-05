@@ -20,18 +20,17 @@
 #include "libc/fmt/fmt.h"
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/testlib/testlib.h"
 
 TEST(dirname, test) {
   EXPECT_STREQ("/usr/lib", dirname(gc(strdup("/usr/lib/foo.bar"))));
   EXPECT_STREQ("/usr", dirname(gc(strdup("/usr/lib"))));
-  EXPECT_STREQ("/usr", dirname(gc(strdup("/usr/lib"))));
   EXPECT_STREQ("usr", dirname(gc(strdup("usr/lib"))));
   EXPECT_STREQ("/", dirname(gc(strdup("/usr/"))));
+  EXPECT_STREQ(".", dirname(gc(strdup("usr"))));
   EXPECT_STREQ("/", dirname(gc(strdup("/"))));
-  EXPECT_STREQ(".", dirname(gc(strdup("hello"))));
   EXPECT_STREQ(".", dirname(gc(strdup("."))));
   EXPECT_STREQ(".", dirname(gc(strdup(".."))));
-  EXPECT_STREQ("", dirname(gc(strdup(""))));
+  EXPECT_STREQ(".", dirname(gc(strdup(""))));
 }

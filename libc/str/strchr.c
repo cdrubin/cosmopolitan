@@ -61,6 +61,7 @@ noasan static inline const char *strchr_sse(const char *s, unsigned char c) {
  * @return pointer to first instance of c or NULL if not found
  *     noting that if c is NUL we return pointer to terminator
  * @asyncsignalsafe
+ * @vforksafe
  */
 char *strchr(const char *s, int c) {
   const char *r;
@@ -70,6 +71,6 @@ char *strchr(const char *s, int c) {
   } else {
     r = strchr_pure(s, c);
   }
-  assert(!r || *r || !(c & 255));
+  _unassert(!r || *r || !(c & 255));
   return (char *)r;
 }

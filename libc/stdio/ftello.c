@@ -20,16 +20,11 @@
 #include "libc/errno.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/internal.h"
+#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/o.h"
 
-/**
- * Returns current position of stream.
- *
- * @param stream is a non-null stream handle
- * @returns current byte offset from beginning, or -1 w/ errno
- */
-int64_t ftello(FILE *f) {
+static inline int64_t ftello_unlocked(FILE *f) {
   int64_t pos;
   uint32_t skew;
   if (f->fd != -1) {
@@ -44,4 +39,19 @@ int64_t ftello(FILE *f) {
   } else {
     return f->beg;
   }
+}
+
+/**
+ * Returns current position of stream.
+ *
+ * @param stream is a non-null stream handle
+ * @returns current byte offset from beginning, or -1 w/ errno
+ * @threadsafe
+ */
+int64_t ftello(FILE *f) {
+  int64_t rc;
+  flockfile(f);
+  rc = ftello_unlocked(f);
+  funlockfile(f);
+  return rc;
 }

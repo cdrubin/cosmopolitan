@@ -17,12 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
-#include "libc/macros.internal.h"
-#include "libc/runtime/runtime.h"
-#include "libc/sock/sock.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
 #include "tool/build/lib/demangle.h"
@@ -44,7 +41,7 @@ void SpawnCxxFilt(void) {
   const char *cxxfilt;
   char path[PATH_MAX];
   cxxfilt = firstnonnull(emptytonull(getenv("CXXFILT")), "c++filt");
-  if (commandv(cxxfilt, path)) {
+  if (commandv(cxxfilt, path, sizeof(path))) {
     pipe2(pipefds[0], O_CLOEXEC);
     pipe2(pipefds[1], O_CLOEXEC);
     if (!(g_cxxfilt.pid = vfork())) {
@@ -118,7 +115,7 @@ char *Demangle(char *p, const char *symbol, size_t n) {
   char *r;
   size_t sn;
   sn = strlen(symbol);
-  if (startswith(symbol, "_Z")) {
+  if (_startswith(symbol, "_Z")) {
     if ((r = DemangleCxxFilt(p, n, symbol, sn))) return r;
   }
   return CopySymbol(p, n, symbol, sn);

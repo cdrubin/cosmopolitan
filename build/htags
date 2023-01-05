@@ -43,12 +43,19 @@
 #     '(progn
 #        (add-hook 'c-mode-common-hook 'jart-c-mode-common-hook)))
 
+TAGS="$1"
+shift
+
+# ctags doesn't understand atomics, e.g.
+#   extern char **environ;
+set -- --regex-c='/_Atomic(\([^)]*\))/\1/b' "$@"
+
 # ctags doesn't understand variable prototypes, e.g.
 #   extern char **environ;
 set -- --regex-c='/^\(\(hidden\|extern\|const\) \)*[_[:alpha:]][_[:alnum:]]*[ *][ *]*\([_[:alpha:]][_[:alnum:]]*[ *][ *]*\)*\([_[:alpha:]][_$[:alnum:]]*\)/\4/b' "$@"
 
 # ctags doesn't understand function prototypes, e.g.
-#   bool isheap(void *p) nothrow nocallback;
+#   bool isheap(void *p) dontthrow nocallback;
 set -- --regex-c='/^[_[:alpha:]][_[:alnum:]]*[ *][ *]*\([_[:alpha:]][_[:alnum:]]*[ *][ *]*\)*\([_[:alpha:]][_$[:alnum:]]*\)(.*/\2/b' "$@"
 
 # ctags doesn't understand function pointers, e.g.
@@ -59,7 +66,7 @@ set -- --regex-c='/^extern [^(]*(\*const \([^)]*\))(/\1/b' "$@"
 #   struct WorstSoftwareEver;
 set -- --regex-c='/^struct.*;$/uehocruehcroue/b' "$@"
 
-exec ${TAGS:-ctags}                                               \
+exec $TAGS                                                        \
      -e                                                           \
      --langmap=c:.c.h                                             \
      --exclude=libc/nt/struct/imagefileheader.internal.h          \

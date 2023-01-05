@@ -18,18 +18,36 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/log/log.h"
-#include "libc/runtime/gc.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/sysv/consts/s.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
 char testlib_enable_tmp_setup_teardown;
+
+void SetUpOnce(void) {
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+}
+
+TEST(readlink, enoent) {
+  char buf[32];
+  ASSERT_SYS(ENOENT, -1, readlink("doesnotexist", buf, 32));
+  ASSERT_SYS(ENOENT, -1, readlink("o/doesnotexist", buf, 32));
+}
+
+TEST(readlink, enotdir) {
+  char buf[32];
+  ASSERT_SYS(0, 0, touch("o", 0644));
+  ASSERT_SYS(ENOTDIR, -1, readlink("o/doesnotexist", buf, 32));
+}
 
 TEST(readlinkat, test) {
   char buf[128], *p, *q;
@@ -88,4 +106,13 @@ TEST(readlinkat, statReadsNameLength) {
   ASSERT_SYS(0, 0, fstatat(AT_FDCWD, "froot", &st, AT_SYMLINK_NOFOLLOW));
   EXPECT_TRUE(S_ISLNK(st.st_mode));
   EXPECT_EQ(5, st.st_size);
+}
+
+TEST(readlinkat, realpathReturnsLongPath) {
+  struct stat st;
+  char buf[PATH_MAX];
+  if (!IsWindows()) return;
+  if (!_startswith(getcwd(buf, PATH_MAX), "/c/")) return;
+  ASSERT_SYS(0, 0, touch("froot", 0644));
+  ASSERT_STARTSWITH("/c/", realpath("froot", buf));
 }

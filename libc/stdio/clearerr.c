@@ -16,8 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 
+/**
+ * Clears eof and error state indicators on stream.
+ *
+ * @param f is file object stream pointer
+ * @see	clearerr_unlocked()
+ * @threadsafe
+ */
 void clearerr(FILE *f) {
-  f->state = 0;
+  flockfile(f);
+  clearerr_unlocked(f);
+  funlockfile(f);
 }

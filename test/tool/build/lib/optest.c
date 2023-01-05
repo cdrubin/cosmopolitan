@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
+#include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -49,7 +49,7 @@ void(RunOpTests)(const uint8_t *ops, size_t n, const char *const *opnames,
                                  o << FLAGS_OF;
                   xn = RunGolden(w, ops[h], x, y, &f1);
                   xp = RunOpTest(w, ops[h], x, y, &f2);
-                  if (weaken(FixupUndefOpTestFlags)) {
+                  if (_weaken(FixupUndefOpTestFlags)) {
                     FixupUndefOpTestFlags(w, ops[h], x, y, f1, &f2);
                   }
                   if (xn == xp && (f1 & FMASK) == (f2 & FMASK)) {

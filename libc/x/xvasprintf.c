@@ -16,10 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/log/log.h"
 #include "libc/mem/fmt.h"
-#include "libc/mem/mem.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
 /**
  * Returns dynamically formatted string.

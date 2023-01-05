@@ -17,19 +17,74 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/internal.h"
+#include "libc/calls/metalfile.internal.h"
+#include "libc/calls/struct/metastat.internal.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/limits.h"
+#include "libc/nt/enum/fileinfobyhandleclass.h"
 #include "libc/nt/files.h"
+#include "libc/nt/struct/filestandardinformation.h"
+#include "libc/sysv/errfuns.h"
+#include "libc/zipos/zipos.internal.h"
 
 /**
  * Determines size of open file.
  *
- * @return file byte length, or -1ul w/ errno
+ * This function is equivalent to:
+ *
+ *     struct stat st;
+ *     !fstat(fd, &st) ? st.st_size : -1
+ *
+ * Except faster on BSD/Windows and a much smaller link size.
+ *
+ * @return file byte length, or -1 w/ errno
  * @asyncsignalsafe
  */
-size_t getfiledescriptorsize(int fd) {
-  struct stat st;
-  if (fstat(fd, &st) == -1) return SIZE_MAX;
-  return st.st_size;
+ssize_t getfiledescriptorsize(int fd) {
+  int e;
+  ssize_t rc;
+  union metastat st;
+  struct NtFileStandardInformation info;
+  e = errno;
+  if (__isfdkind(fd, kFdZip)) {
+    if (_weaken(__zipos_fstat)(
+            (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, &st.cosmo) !=
+        -1) {
+      rc = st.cosmo.st_size;
+    } else {
+      rc = -1;
+    }
+  } else if (IsMetal()) {
+    if (fd < 0 || fd >= g_fds.n) {
+      rc = ebadf();
+    } else if (g_fds.p[fd].kind != kFdFile) {
+      rc = eacces();
+    } else {
+      struct MetalFile *state = (struct MetalFile *)g_fds.p[fd].handle;
+      rc = state->size;
+    }
+  } else if (!IsWindows()) {
+    if (!__sys_fstat(fd, &st)) {
+      rc = METASTAT(st, st_size);
+    } else {
+      rc = -1;
+    }
+  } else if (__isfdopen(fd)) {
+    if (GetFileInformationByHandleEx(g_fds.p[fd].handle, kNtFileStandardInfo,
+                                     &info, sizeof(info))) {
+      rc = info.EndOfFile;
+    } else {
+      rc = ebadf();
+    }
+  } else {
+    rc = ebadf();
+  }
+  STRACE("getfiledescriptorsize(%d) → %'zd% m", fd, rc);
+  return rc;
 }

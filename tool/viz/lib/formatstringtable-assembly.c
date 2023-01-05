@@ -16,12 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/fmt/itoa.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/str/str.h"
-#include "libc/unicode/unicode.h"
+#include "libc/str/strwidth.h"
 #include "libc/x/x.h"
 #include "tool/viz/lib/formatstringtable.h"
 
@@ -79,7 +79,7 @@ static const char *GetStorageSpecifier(const char *type, int *out_width,
 static void EmitSection(long yn, long xn, int w, int arrayalign, int emit(),
                         void *a) {
   char alignstr[21];
-  uint64toarray_radix10(arrayalign, alignstr);
+  FormatUint32(alignstr, arrayalign);
   if (arrayalign <= 8 && yn * xn * w == 8) {
     emit("\t.rodata.cst", a);
     emit("8\n", a);
@@ -108,8 +108,8 @@ void *FormatStringTableAsAssembly(long yn, long xn, const char *const T[yn][xn],
   char ynstr[21], xnstr[21];
   name = firstnonnull(name, "M");
   storage = GetStorageSpecifier(firstnonnull(type, "long"), &w, &align);
-  uint64toarray_radix10(yn, ynstr);
-  uint64toarray_radix10(xn, xnstr);
+  FormatUint64(ynstr, yn);
+  FormatUint64(xnstr, xn);
   EmitSection(yn, xn, w, GetArrayAlignment(yn, xn, w, align), emit, a);
   emit(name, a);
   emit(":", a);

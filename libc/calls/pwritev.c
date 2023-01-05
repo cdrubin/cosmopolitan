@@ -16,19 +16,95 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
-#include "libc/calls/calls.h"
+#include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
+#include "libc/calls/struct/iovec.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/macros.internal.h"
-#include "libc/sysv/consts/iov.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/zipos/zipos.internal.h"
 
-#define __NR_pwritev_linux 0x0128
+static ssize_t Pwritev(int fd, const struct iovec *iov, int iovlen,
+                       int64_t off) {
+  int i, e;
+  size_t sent;
+  ssize_t rc, toto;
+
+  if (fd < 0) {
+    return ebadf();
+  }
+
+  if (iovlen < 0) {
+    return einval();
+  }
+
+  if (IsAsan() && !__asan_is_valid_iov(iov, iovlen)) {
+    return efault();
+  }
+
+  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    return _weaken(__zipos_write)(
+        (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, iov, iovlen, off);
+  }
+
+  if (IsWindows()) {
+    if (fd < g_fds.n) {
+      return sys_write_nt(fd, iov, iovlen, off);
+    } else {
+      return ebadf();
+    }
+  }
+
+  if (IsMetal()) {
+    return espipe();  // must be serial or console if not zipos
+  }
+
+  while (iovlen && !iov->iov_len) {
+    --iovlen;
+    ++iov;
+  }
+
+  if (!iovlen) {
+    return sys_pwrite(fd, 0, 0, off, off);
+  }
+
+  if (iovlen == 1) {
+    return sys_pwrite(fd, iov->iov_base, iov->iov_len, off, off);
+  }
+
+  e = errno;
+  rc = sys_pwritev(fd, iov, iovlen, off, off);
+  if (rc != -1 || errno != ENOSYS) return rc;
+  errno = e;
+
+  for (toto = i = 0; i < iovlen; ++i) {
+    rc = sys_pwrite(fd, iov[i].iov_base, iov[i].iov_len, off, off);
+    if (rc == -1) {
+      if (!toto) {
+        toto = -1;
+      } else if (errno != EINTR) {
+        notpossible;
+      }
+      break;
+    }
+    sent = rc;
+    toto += sent;
+    off += sent;
+    if (sent != iov[i].iov_len) {
+      break;
+    }
+  }
+
+  return toto;
+}
 
 /**
  * Writes data from multiple buffers to offset.
@@ -39,77 +115,16 @@
  * call using pwrite().
  *
  * @return number of bytes actually sent, or -1 w/ errno
+ * @cancellationpoint
  * @asyncsignalsafe
  * @vforksafe
  */
 ssize_t pwritev(int fd, const struct iovec *iov, int iovlen, int64_t off) {
-  static bool once, demodernize;
-  int i, err;
   ssize_t rc;
-  size_t sent, toto;
-
-  if (fd < 0) return einval();
-  if (iovlen < 0) return einval();
-  if (IsAsan() && !__asan_is_valid_iov(iov, iovlen)) return efault();
-  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
-    return weaken(__zipos_write)(
-        (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, iov, iovlen, off);
-  } else if (IsWindows()) {
-    if (fd < g_fds.n) {
-      return sys_write_nt(g_fds.p + fd, iov, iovlen, off);
-    } else {
-      return ebadf();
-    }
-  } else if (IsMetal()) {
-    return enosys();
-  }
-
-  /*
-   * NT, XNU, and 2007-era Linux don't support this system call.
-   */
-  if (!once) {
-    err = errno;
-    rc = sys_pwritev(fd, iov, iovlen, off, off);
-    if (rc == -1 && errno == ENOSYS) {
-      errno = err;
-      once = true;
-      demodernize = true;
-    } else if (IsLinux() && rc == __NR_pwritev_linux) {
-      if (__iovec_size(iov, iovlen) < __NR_pwritev_linux) {
-        demodernize = true; /*RHEL5:CVE-2010-3301*/
-        once = true;
-      } else {
-        return rc;
-      }
-    } else {
-      once = true;
-      return rc;
-    }
-  }
-
-  if (!demodernize) {
-    return sys_pwritev(fd, iov, iovlen, off, off);
-  }
-
-  if (!iovlen) {
-    return sys_pwrite(fd, NULL, 0, off, off);
-  }
-
-  for (toto = i = 0; i < iovlen; ++i) {
-    rc = sys_pwrite(fd, iov[i].iov_base, iov[i].iov_len, off, off);
-    if (rc == -1) {
-      if (toto && (errno == EINTR || errno == EAGAIN)) {
-        return toto;
-      } else {
-        return -1;
-      }
-    }
-    sent = rc;
-    toto += sent;
-    if (sent != iov[i].iov_len) {
-      break;
-    }
-  }
-
-  return toto;
+  BEGIN_CANCELLATION_POINT;
+  rc = Pwritev(fd, iov, iovlen, off);
+  END_CANCELLATION_POINT;
+  STRACE("pwritev(%d, %s, %d, %'ld) → %'ld% m", fd,
+         DescribeIovec(rc != -1 ? rc : -2, iov, iovlen), iovlen, off, rc);
+  return rc;
 }

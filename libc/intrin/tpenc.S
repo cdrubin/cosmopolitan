@@ -17,14 +17,13 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
-.source	__FILE__
 
 //	Encodes Thompson-Pike varint.
 //
 //	@param	edi is int to encode
 //	@return	rax is word-encoded byte buffer
 //	@note	invented on a napkin in a new jersey diner
-tpenc:	.leafprologue
+_tpenc:	.leafprologue
 	.profilable
 	mov	%edi,%edi
 	xor	%eax,%eax
@@ -43,10 +42,11 @@ tpenc:	.leafprologue
 2:	or	%ch,%al
 3:	or	%rdi,%rax
 	.leafepilogue
-	.endfn	tpenc,globl
+	.endfn	_tpenc,globl
 
 	.rodata
 	.align	4
+	.underrun
 kTpenc:	.rept	4			# MSB≤10 (0x7FF)
 	.byte	1,0b11000000		# len,mark
 	.endr
@@ -64,3 +64,4 @@ kTpenc:	.rept	4			# MSB≤10 (0x7FF)
 	.endr
 	.zero	2
 	.endobj	kTpenc
+	.overrun

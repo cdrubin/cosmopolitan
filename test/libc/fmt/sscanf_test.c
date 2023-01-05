@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/bits.h"
 #include "libc/limits.h"
 #include "libc/mem/mem.h"
 #include "libc/testlib/testlib.h"
@@ -26,7 +26,7 @@
 #define sscanf1(STR, FMT)               \
   ({                                    \
     errno = 0;                          \
-    intmax_t x = 0;                     \
+    int128_t x = 0;                     \
     EXPECT_EQ(1, sscanf(STR, FMT, &x)); \
     x;                                  \
   })
@@ -50,11 +50,11 @@ TEST(sscanf, testHex) {
   EXPECT_EQ(0x123, sscanf1("123", "%x"));
   EXPECT_EQ(0x123, sscanf1("0x123", "%x"));
   EXPECT_EQ(0x123, sscanf1("0123", "%x"));
-  EXPECT_EQ(INTMAX_MAX,
-            sscanf1("170141183460469231731687303715884105727", "%jd"));
-  EXPECT_EQ(INTMAX_MIN,
-            sscanf1("-170141183460469231731687303715884105728", "%jd"));
-  EXPECT_EQ(UINTMAX_MAX, sscanf1("0xffffffffffffffffffffffffffffffff", "%jx"));
+  EXPECT_EQ(INT128_MAX,
+            sscanf1("170141183460469231731687303715884105727", "%jjd"));
+  EXPECT_EQ(INT128_MIN,
+            sscanf1("-170141183460469231731687303715884105728", "%jjd"));
+  EXPECT_EQ(UINT128_MAX, sscanf1("0xffffffffffffffffffffffffffffffff", "%jjx"));
 }
 
 TEST(sscanf, testOctal) {
@@ -87,7 +87,7 @@ TEST(sscanf, testStringBuffer_gothicUtf8ToUtf8_roundTrips) {
   EXPECT_STREQ("𐌴𐌵𐌶𐌷", s2);
 }
 
-TEST(sscanf, testStringBuffer_gothicUtf8ToUtf16) {
+TEST(sscanf, testStringBuffer_gothicUtf8to16) {
   char16_t s1[64], s2[64];
   ASSERT_EQ(2, sscanf("𐌰𐌱𐌲𐌳 𐌴𐌵𐌶𐌷", "%63hs %63hs", s1, s2));
   EXPECT_STREQ(u"𐌰𐌱𐌲𐌳", s1);
@@ -140,4 +140,12 @@ TEST(sscanf, testDiscard_notIncludedInCount) {
   char buf[8];
   ASSERT_EQ(1, sscanf("hello there", "%*s %8s", buf));
   EXPECT_STREQ("there", buf);
+}
+
+TEST(sscanf, testFixedWidthFormat_Integer) {
+  int r, g, b;
+  ASSERT_EQ(3, sscanf("#321030", "#%2x%2b%2d", &r, &g, &b));
+  ASSERT_EQ(0x32, r);
+  ASSERT_EQ(2, g);
+  ASSERT_EQ(30, b);
 }

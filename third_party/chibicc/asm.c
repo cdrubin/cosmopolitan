@@ -16,6 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/intrin/bsf.h"
+#include "libc/intrin/bsr.h"
 #include "third_party/chibicc/chibicc.h"
 
 #define PRECIOUS 0b1111000000101000  // bx,bp,r12-r15
@@ -232,7 +234,9 @@ static int PickAsmOperandType(Asm *a, AsmOperand *op) {
     op->type &= ~kAsmImm;
     if (!IsLvalue(op)) error_tok(op->tok, "lvalue required");
   }
-  if ((op->type & kAsmImm) && is_const_expr(op->node)) {
+  if ((op->type & kAsmImm) && (is_const_expr(op->node) ||
+                               // TODO(jart): confirm this is what we want
+                               op->node->ty->kind == TY_FUNC)) {
     op->val = eval2(op->node, &op->label);
     return kAsmImm;
   }
@@ -277,13 +281,13 @@ static Token *ParseAsmOperands(Asm *a, Token *tok) {
   return tok;
 }
 
-static void CouldNotAllocateRegister(AsmOperand *op) {
-  error_tok(op->tok, "could not allocate register");
+static void CouldNotAllocateRegister(AsmOperand *op, const char *kind) {
+  error_tok(op->tok, "could not allocate %s register", kind);
 }
 
 static void PickAsmRegisters(Asm *a) {
-  int i, j, m, regset, xmmset, x87sts;
-  regset = 0b0000111111000111;  // exclude bx,sp,bp,r12-r15
+  int i, j, m, pick, regset, xmmset, x87sts;
+  regset = 0b1111111111001111;  // exclude bx,sp,bp
   xmmset = 0b1111111111111111;
   x87sts = 0b0000000011111111;
   regset ^= regset & a->regclob;  // don't allocate from clobber list
@@ -296,21 +300,23 @@ static void PickAsmRegisters(Asm *a) {
         case kAsmReg:
           if (!(m = a->ops[i].regmask)) break;
           if (popcnt(m) != j) break;
-          if (!(m &= regset)) CouldNotAllocateRegister(&a->ops[i]);
-          regset &= ~(1 << (a->ops[i].reg = bsf(m)));
+          if (!(m &= regset)) CouldNotAllocateRegister(&a->ops[i], "rm");
+          pick = 1 << (a->ops[i].reg = _bsf(m));
+          if (pick & PRECIOUS) a->regclob |= pick;
+          regset &= ~pick;
           a->ops[i].regmask = 0;
           break;
         case kAsmXmm:
           if (!(m = a->ops[i].regmask)) break;
-          if (!(m &= xmmset)) CouldNotAllocateRegister(&a->ops[i]);
-          xmmset &= ~(1 << (a->ops[i].reg = bsf(m)));
+          if (!(m &= xmmset)) CouldNotAllocateRegister(&a->ops[i], "xmm");
+          xmmset &= ~(1 << (a->ops[i].reg = _bsf(m)));
           a->ops[i].regmask = 0;
           break;
         case kAsmFpu:
           if (!(m = a->ops[i].x87mask)) break;
           if (popcnt(m) != j) break;
-          if (!(m &= x87sts)) CouldNotAllocateRegister(&a->ops[i]);
-          x87sts &= ~(1 << (a->ops[i].reg = bsf(m)));
+          if (!(m &= x87sts)) CouldNotAllocateRegister(&a->ops[i], "fpu");
+          x87sts &= ~(1 << (a->ops[i].reg = _bsf(m)));
           a->ops[i].x87mask = 0;
           break;
         default:
@@ -364,7 +370,7 @@ static Token *ParseAsmClobbers(Asm *a, Token *tok) {
       a->flagclob = true;
     } else if ((i = GetIndexOfRegisterName(s)) != -1) {
       a->regclob |= 1 << i;
-    } else if (startswith(s, "xmm") && isdigit(s[3]) &&
+    } else if (_startswith(s, "xmm") && isdigit(s[3]) &&
                (!s[4] || isdigit(s[4]))) {
       i = s[3] - '0';
       if (s[4]) {
@@ -375,7 +381,7 @@ static Token *ParseAsmClobbers(Asm *a, Token *tok) {
       a->xmmclob |= 1 << i;
     } else if (!strcmp(s, "st")) {
       a->x87clob |= 1;
-    } else if (startswith(s, "st(") && isdigit(s[3]) && s[4] == ')') {
+    } else if (_startswith(s, "st(") && isdigit(s[3]) && s[4] == ')') {
       i = s[3] - '0';
       i &= 7;
       a->x87clob |= 1 << i;
@@ -534,7 +540,7 @@ static char *HandleAsmSpecifier(Asm *a, char *p) {
   if ((i = c - '0') >= a->n) {
     error_tok(a->tok, "bad asm reference at offset %d", p - a->str);
   }
-  z = bsr(a->ops[i].node->ty->size);
+  z = _bsr(a->ops[i].node->ty->size);
   if (z > 3 && a->ops[i].type == kAsmReg) {
     error_tok(a->tok, "bad asm op size");
   }
@@ -673,7 +679,7 @@ static void StoreAsmOutputs(Asm *a) {
           println("\tset%s\t(%%rax)", a->ops[i].str + a->ops[i].predicate);
           break;
         case kAsmReg:
-          z = bsr(a->ops[i].node->ty->size);
+          z = _bsr(a->ops[i].node->ty->size);
           if (a->ops[i].reg) {
             gen_addr(a->ops[i].node);
             if (z > 3) error_tok(a->tok, "bad asm out size");
@@ -728,7 +734,7 @@ static void StoreAsmOutputs(Asm *a) {
 static void PushClobbers(Asm *a) {
   int i, regs = a->regclob & PRECIOUS;
   while (regs) {
-    i = bsf(regs);
+    i = _bsf(regs);
     pushreg(kGreg[3][i]);
     regs &= ~(1 << i);
   }
@@ -737,7 +743,7 @@ static void PushClobbers(Asm *a) {
 static void PopClobbers(Asm *a) {
   int i, regs = a->regclob & PRECIOUS;
   while (regs) {
-    i = bsr(regs);
+    i = _bsr(regs);
     popreg(kGreg[3][i]);
     regs &= ~(1 << i);
   }

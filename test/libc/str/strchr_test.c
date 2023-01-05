@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/intrin/bits.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/hyperion.h"
@@ -118,7 +118,7 @@ TEST(memchr, fuzz) {
   p = malloc(64);
   for (i = -2; i < 257; ++i) {
     for (j = 0; j < 17; ++j) {
-      rngset(p, 64, rand64, -1);
+      rngset(p, 64, _rand64, -1);
       ASSERT_EQ(memchr(p + j, i, 64 - j), memchr_pure(p + j, i, 64 - j));
     }
   }
@@ -139,7 +139,7 @@ TEST(strchrnul, fuzz) {
   p = calloc(1, 64);
   for (i = -2; i < 257; ++i) {
     for (j = 0; j < 17; ++j) {
-      rngset(p, 63, rand64, -1);
+      rngset(p, 63, _rand64, -1);
       ASSERT_EQ(strchrnul(p + j, i), strchrnul_pure(p + j, i));
     }
   }
@@ -159,7 +159,7 @@ TEST(rawmemchr, fuzz) {
   p = malloc(64);
   for (i = -2; i < 257; ++i) {
     for (j = 0; j < 17; ++j) {
-      rngset(p, 63, rand64, -1);
+      rngset(p, 63, _rand64, -1);
       p[63] = i;
       ASSERT_EQ(rawmemchr(p + j, i), rawmemchr_pure(p + j, i));
     }
@@ -167,6 +167,22 @@ TEST(rawmemchr, fuzz) {
   free(p);
 }
 
+/*
+ *     strchr 0            l:        10c         3ns   m:        38c        12ns
+ *     strchr 5            l:        13c         4ns   m:        42c        14ns
+ *     strchr 8            l:        14c         5ns   m:        44c        14ns
+ *     strchr 17           l:        13c         4ns   m:        45c        15ns
+ *     strchr 34           l:        16c         5ns   m:        48c        16ns
+ *     strchr z            l:       369c       119ns   m:       408c       132ns
+ *     rawmemchr z         l:       236c        76ns   m:       391c       126ns
+ *     memchr z            l:       357c       115ns   m:       423c       137ns
+ *     strchr Z            l:     1,872c       605ns   m:     1,911c       617ns
+ *     rawmemchr \0        l:     1,184c       382ns   m:     1,880c       607ns
+ *     strlen              l:     1,174c       379ns   m:     1,237c       400ns
+ *     memchr Z            l:     1,866c       603ns   m:     1,945c       628ns
+ *     strchrnul z         l:       365c       118ns   m:       408c       132ns
+ *     strchrnul Z         l:     1,871c       604ns   m:     1,914c       618ns
+ */
 BENCH(strchr, bench2) {
   char *strchr_(const char *, int) asm("strchr");
   char *strchrnul_(const char *, int) asm("strchrnul");

@@ -45,45 +45,64 @@
 LC_ALL = C
 SOURCE_DATE_EPOCH = 0
 
-TAGS ?= /usr/bin/ctags  # emacs source builds or something breaks it
 ARFLAGS = rcsD
 ZFLAGS ?=
 XARGS ?= xargs -P4 -rs8000
 DOT ?= dot
-GZ ?= gzip
 CLANG = clang
 FC = gfortran  #/opt/cross9f/bin/x86_64-linux-musl-gfortran
+TMPDIR = o/tmp
 
-# see build/compile, etc. which run third_party/gcc/unbundle.sh
 AR = build/bootstrap/ar.com
+CP = build/bootstrap/cp.com
+RM = build/bootstrap/rm.com -f
+ECHO = build/bootstrap/echo.com
+TOUCH = build/bootstrap/touch.com
 PKG = build/bootstrap/package.com
 MKDEPS = build/bootstrap/mkdeps.com
 ZIPOBJ = build/bootstrap/zipobj.com
-AS = o/third_party/gcc/bin/x86_64-linux-musl-as
-CC = o/third_party/gcc/bin/x86_64-linux-musl-gcc
-CXX = o/third_party/gcc/bin/x86_64-linux-musl-g++
-CXXFILT = o/third_party/gcc/bin/x86_64-linux-musl-c++filt
-LD = o/third_party/gcc/bin/x86_64-linux-musl-ld.bfd
-NM = o/third_party/gcc/bin/x86_64-linux-musl-nm
-GCC = o/third_party/gcc/bin/x86_64-linux-musl-gcc
-STRIP = o/third_party/gcc/bin/x86_64-linux-musl-strip
-OBJCOPY = o/third_party/gcc/bin/x86_64-linux-musl-objcopy
-OBJDUMP = o/third_party/gcc/bin/x86_64-linux-musl-objdump
-ADDR2LINE = $(shell pwd)/o/third_party/gcc/bin/x86_64-linux-musl-addr2line
+FIXUPOBJ = build/bootstrap/fixupobj.com
+MKDIR = build/bootstrap/mkdir.com -p
+COMPILE = build/bootstrap/compile.com -V9 -P4096 $(QUOTA)
 
 COMMA := ,
-PWD := $(shell pwd)
+PWD := $(shell build/bootstrap/pwd.com)
 IMAGE_BASE_VIRTUAL ?= 0x400000
-HELLO := $(shell build/hello)
-TMPDIR := $(shell build/findtmp)
-SPAWNER := $(shell build/getcompile) -V$(shell build/getccversion $(CC))
-COMPILE = $(SPAWNER) $(HARNESSFLAGS) $(QUOTA)
+
+IGNORE := $(shell $(ECHO) -2 ♥cosmo)
+IGNORE := $(shell $(MKDIR) o/tmp)
+
+ifneq ("$(wildcard o/third_party/gcc/bin/x86_64-pc-linux-gnu-*)","")
+PREFIX = o/third_party/gcc/bin/x86_64-pc-linux-gnu-
+else
+IGNORE := $(shell build/bootstrap/unbundle.com)
+PREFIX = o/third_party/gcc/bin/x86_64-linux-musl-
+endif
+
+AS = $(PREFIX)as
+CC = $(PREFIX)gcc
+CXX = $(PREFIX)g++
+CXXFILT = $(PREFIX)c++filt
+LD = $(PREFIX)ld.bfd
+NM = $(PREFIX)nm
+GCC = $(PREFIX)gcc
+STRIP = $(PREFIX)strip
+OBJCOPY = $(PREFIX)objcopy
+OBJDUMP = $(PREFIX)objdump
+ADDR2LINE = $(PWD)/$(PREFIX)addr2line
 
 export ADDR2LINE
 export LC_ALL
+export MKDIR
 export MODE
 export SOURCE_DATE_EPOCH
 export TMPDIR
+
+ifeq ($(LANDLOCKMAKE_VERSION),)
+TMPSAFE = $(TMPDIR)/$(subst /,_,$@).tmp
+else
+TMPSAFE = $(TMPDIR)/
+endif
 
 FTRACE =								\
 	-pg
@@ -100,7 +119,8 @@ SANITIZER =								\
 NO_MAGIC =								\
 	-mno-fentry							\
 	-fno-stack-protector						\
-	-fwrapv
+	-fwrapv								\
+	-fno-sanitize=all
 
 OLD_CODE =								\
 	-fno-strict-aliasing						\
@@ -114,11 +134,12 @@ TRADITIONAL =								\
 DEFAULT_CCFLAGS =							\
 	-Wall								\
 	-Werror								\
-	-fdebug-prefix-map="$(PWD)"=					\
+	-fdebug-prefix-map='$(PWD)'=					\
 	-frecord-gcc-switches
 
 DEFAULT_OFLAGS =							\
 	-g								\
+	-gdwarf-4							\
 	-gdescribe-dies
 
 DEFAULT_COPTS =								\
@@ -131,7 +152,8 @@ DEFAULT_COPTS =								\
 	-fno-gnu-unique							\
 	-fstrict-aliasing						\
 	-fstrict-overflow						\
-	-fno-semantic-interposition
+	-fno-semantic-interposition					\
+	-mno-tls-direct-seg-refs
 
 MATHEMATICAL =								\
 	-O3								\
@@ -142,19 +164,19 @@ DEFAULT_CPPFLAGS =							\
 	-DMODE='"$(MODE)"'						\
 	-DIMAGE_BASE_VIRTUAL=$(IMAGE_BASE_VIRTUAL)			\
 	-nostdinc							\
-	-iquote.
+	-iquote .
 
 DEFAULT_CFLAGS =							\
 	-std=gnu2x
 
 DEFAULT_CXXFLAGS =							\
-	-std=gnu++11							\
 	-fno-rtti							\
 	-fno-exceptions							\
 	-fuse-cxa-atexit						\
 	-fno-threadsafe-statics						\
 	-Wno-int-in-bool-context					\
-	-Wno-narrowing
+	-Wno-narrowing							\
+	-Wno-literal-suffix
 
 DEFAULT_ASFLAGS =							\
 	-W								\
@@ -169,7 +191,7 @@ DEFAULT_LDFLAGS =							\
 	--gc-sections							\
 	--build-id=none							\
 	--no-dynamic-linker						\
-	-zmax-page-size=0x1000
+	-zmax-page-size=0x1000 #--cref -Map=$@.map
 
 ZIPOBJ_FLAGS =								\
 	 -b$(IMAGE_BASE_VIRTUAL)
@@ -180,7 +202,7 @@ PYFLAGS =								\
 ASONLYFLAGS =								\
 	-c								\
 	-g								\
-	--debug-prefix-map="$(PWD)"=
+	--debug-prefix-map='$(PWD)'=
 
 DEFAULT_LDLIBS =
 
@@ -209,7 +231,7 @@ cpp.flags =								\
 	$(CONFIG_CPPFLAGS)						\
 	$(CPPFLAGS)							\
 	$(OVERRIDE_CPPFLAGS)						\
-	-includelibc/integral/normalize.inc
+	-include libc/integral/normalize.inc
 
 copt.flags =								\
 	$(TARGET_ARCH)							\
@@ -301,6 +323,9 @@ OBJECTIFY.greg.c =							\
 	-fno-instrument-functions					\
 	-fno-optimize-sibling-calls					\
 	-fno-sanitize=all						\
+	-ffreestanding							\
+	-mno-fentry							\
+	-fwrapv								\
 	-c
 
 OBJECTIFY.ansi.c = $(CC) $(OBJECTIFY.c.flags) -ansi -Wextra -Werror -pedantic-errors -c

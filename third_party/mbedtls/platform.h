@@ -1,13 +1,11 @@
 #ifndef COSMOPOLITAN_THIRD_PARTY_MBEDTLS_PLATFORM_H_
 #define COSMOPOLITAN_THIRD_PARTY_MBEDTLS_PLATFORM_H_
 #include "libc/assert.h"
-#include "libc/bits/likely.h"
-#include "libc/calls/weirdtypes.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/likely.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
-#include "libc/time/time.h"
 #include "third_party/mbedtls/config.h"
 COSMOPOLITAN_C_START_
 
@@ -19,7 +17,7 @@ COSMOPOLITAN_C_START_
 #define mbedtls_snprintf          snprintf
 #define mbedtls_vsnprintf         vsnprintf
 #define mbedtls_exit              exit
-#define mbedtls_time_t            time_t
+#define mbedtls_time_t            int64_t
 #define mbedtls_time              time
 #define mbedtls_platform_gmtime_r gmtime_r
 
@@ -53,7 +51,7 @@ COSMOPOLITAN_C_START_
 #define MBEDTLS_ASSERT(EXPR) \
   ((void)((EXPR) || (__assert_fail(#EXPR, __FILE__, __LINE__), 0)))
 #else
-#define MBEDTLS_ASSERT(EXPR) (void)0
+#define MBEDTLS_ASSERT(EXPR) _unassert(EXPR)
 #endif
 
 typedef struct mbedtls_platform_context {

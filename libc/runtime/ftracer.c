@@ -16,22 +16,19 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
-#include "libc/log/libfatal.internal.h"
+#include "libc/calls/calls.h"
+#include "libc/errno.h"
+#include "libc/fmt/itoa.h"
+#include "libc/intrin/cmpxchg.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/nopl.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/rdtsc.h"
-#include "libc/nexgen32e/rdtscp.h"
 #include "libc/nexgen32e/stackframe.h"
-#include "libc/nexgen32e/x86feature.h"
-#include "libc/runtime/memtrack.internal.h"
-#include "libc/runtime/runtime.h"
+#include "libc/runtime/internal.h"
+#include "libc/runtime/stack.h"
 #include "libc/runtime/symbols.internal.h"
-#include "libc/stdio/stdio.h"
-#include "libc/sysv/consts/map.h"
-#include "libc/sysv/consts/o.h"
-
-#pragma weak stderr
+#include "libc/thread/tls.h"
+#include "libc/thread/tls2.h"
 
 #define MAX_NESTING 512
 
@@ -45,14 +42,10 @@
 
 void ftrace_hook(void);
 
-bool ftrace_enabled;
-static int g_skew;
-static int g_lastsymbol;
-static uint64_t laststamp;
-static struct SymbolTable *g_symbols;
+static int g_stackdigs;
+static struct CosmoFtrace g_ftrace;
 
-static privileged noinstrument noasan noubsan int GetNestingLevelImpl(
-    struct StackFrame *frame) {
+static privileged inline int GetNestingLevelImpl(struct StackFrame *frame) {
   int nesting = -2;
   while (frame) {
     ++nesting;
@@ -61,12 +54,12 @@ static privileged noinstrument noasan noubsan int GetNestingLevelImpl(
   return MAX(0, nesting);
 }
 
-static privileged noinstrument noasan noubsan int GetNestingLevel(
-    struct StackFrame *frame) {
+static privileged inline int GetNestingLevel(struct CosmoFtrace *ft,
+                                             struct StackFrame *sf) {
   int nesting;
-  nesting = GetNestingLevelImpl(frame);
-  if (nesting < g_skew) g_skew = nesting;
-  nesting -= g_skew;
+  nesting = GetNestingLevelImpl(sf);
+  if (nesting < ft->ft_skew) ft->ft_skew = nesting;
+  nesting -= ft->ft_skew;
   return MIN(MAX_NESTING, nesting);
 }
 
@@ -77,42 +70,41 @@ static privileged noinstrument noasan noubsan int GetNestingLevel(
  * prologues of other functions. We assume those functions behave
  * according to the System Five NexGen32e ABI.
  */
-privileged noinstrument noasan noubsan void ftracer(void) {
-  /* asan runtime depends on this function */
-  int symbol;
-  uint64_t stamp;
-  static bool noreentry;
-  struct StackFrame *frame;
-  if (!cmpxchg(&noreentry, 0, 1)) return;
-  if (ftrace_enabled && g_symbols) {
-    stamp = rdtsc();
-    frame = __builtin_frame_address(0);
-    frame = frame->next;
-    if ((symbol = __get_symbol(g_symbols, frame->addr)) != -1 &&
-        symbol != g_lastsymbol) {
-      g_lastsymbol = symbol;
-      __printf("+ %*s%s %d\r\n", GetNestingLevel(frame) * 2, "",
-               __get_symbol_name(g_symbols, symbol),
-               (long)(unsignedsubtract(stamp, laststamp) / 3.3));
-      laststamp = X86_HAVE(RDTSCP) ? rdtscp(0) : rdtsc();
-    }
+privileged void ftracer(void) {
+  long stackuse;
+  struct CosmoTib *tib;
+  struct StackFrame *sf;
+  struct CosmoFtrace *ft;
+  if (__tls_enabled) {
+    tib = __get_tls_privileged();
+    if (tib->tib_ftrace <= 0) return;
+    ft = &tib->tib_ftracer;
+  } else {
+    ft = &g_ftrace;
   }
-  noreentry = 0;
+  if (_cmpxchg(&ft->ft_once, false, true)) {
+    ft->ft_lastaddr = -1;
+    ft->ft_skew = GetNestingLevelImpl(__builtin_frame_address(0));
+  }
+  if (_cmpxchg(&ft->ft_noreentry, false, true)) {
+    sf = __builtin_frame_address(0);
+    sf = sf->next;
+    if (sf->addr != ft->ft_lastaddr) {
+      stackuse = GetStackAddr() + GetStackSize() - (intptr_t)sf;
+      kprintf("%rFUN %6P %'13T %'*ld %*s%t\n", g_stackdigs, stackuse,
+              GetNestingLevel(ft, sf) * 2, "", sf->addr);
+      ft->ft_lastaddr = sf->addr;
+    }
+    ft->ft_noreentry = false;
+  }
 }
 
-textstartup void ftrace_install(void) {
-  const char *path;
-  if ((path = FindDebugBinary())) {
-    if ((g_symbols = OpenSymbolTable(path))) {
-      laststamp = kStartTsc;
-      g_lastsymbol = -1;
-      g_skew = GetNestingLevelImpl(__builtin_frame_address(0));
-      ftrace_enabled = 1;
-      __hook(ftrace_hook, g_symbols);
-    } else {
-      __printf("error: --ftrace failed to open symbol table\r\n");
-    }
+textstartup int ftrace_install(void) {
+  if (GetSymbolTable()) {
+    g_stackdigs = LengthInt64Thousands(GetStackSize());
+    return __hook(ftrace_hook, GetSymbolTable());
   } else {
-    __printf("error: --ftrace needs concomitant .com.dbg binary\r\n");
+    kprintf("error: --ftrace failed to open symbol table\n");
+    return -1;
   }
 }

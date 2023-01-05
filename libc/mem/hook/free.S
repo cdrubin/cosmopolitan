@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
-.source	__FILE__
 
 	.initbss 202,_init_free
 hook_free:
@@ -28,7 +27,7 @@ hook_free:
 	.init.start 202,_init_free
 	ezlea	dlfree,ax
 	stosq
-	yoink	realloc
+	.yoink	realloc
 	.init.end 202,_init_free
 
 	.hidden	dlfree

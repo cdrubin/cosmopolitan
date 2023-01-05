@@ -17,10 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/dprintf.h"
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
 
-void memsummary(int fd) {
+void _memsummary(int fd) {
   struct mallinfo mi;
   mi = mallinfo();
   (dprintf)(fd,

@@ -18,19 +18,19 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/tty/windex.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
+#include "libc/intrin/bits.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/x86feature.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
-unsigned windex_k8(short *, size_t) hidden;
-unsigned windex_avx2(short *, size_t) hidden;
-unsigned windex_sse4(short *, size_t) hidden;
+unsigned windex_k8(short *, size_t) _Hide;
+unsigned windex_avx2(short *, size_t) _Hide;
+unsigned windex_sse4(short *, size_t) _Hide;
 
 const short kW[64] forcealign(32) = {
     8281, 3883, 1365, 1786, 9006, 3681, 5563, 8013, 5787,   9063, 2923,

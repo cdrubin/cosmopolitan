@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/sigbits.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/ucontext.h"
@@ -29,11 +28,11 @@
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/time/time.h"
-#include "libc/x/x.h"
+#include "libc/x/xgetline.h"
 
 static int pid;
 
-static void RelaySig(int sig, struct siginfo *si, struct ucontext *uc) {
+static void RelaySig(int sig, struct siginfo *si, void *uc) {
   kill(pid, sig);
 }
 

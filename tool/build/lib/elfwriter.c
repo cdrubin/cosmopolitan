@@ -16,25 +16,21 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/arraylist2.internal.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/elf/def.h"
 #include "libc/log/check.h"
-#include "libc/macros.internal.h"
-#include "libc/mem/fmt.h"
-#include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/arraylist2.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/runtime/memtrack.internal.h"
-#include "libc/runtime/runtime.h"
+#include "libc/stdalign.internal.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
-#include "libc/sysv/consts/mremap.h"
 #include "libc/sysv/consts/msync.h"
 #include "libc/sysv/consts/o.h"
-#include "libc/sysv/consts/ok.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 #include "tool/build/lib/elfwriter.h"
-#include "tool/build/lib/interner.h"
 
 static const Elf64_Ehdr kObjHeader = {
     .e_ident = {ELFMAG0, ELFMAG1, ELFMAG2, ELFMAG3, ELFCLASS64, ELFDATA2LSB, 1,
@@ -90,8 +86,8 @@ static void MakeRelaSection(struct ElfWriter *elf, size_t section) {
   elfwriter_align(elf, alignof(Elf64_Rela), sizeof(Elf64_Rela));
   shdr = elfwriter_startsection(
       elf,
-      gc(xasprintf("%s%s", ".rela",
-                   &elf->shstrtab->p[elf->shdrs->p[section].sh_name])),
+      _gc(xasprintf("%s%s", ".rela",
+                    &elf->shstrtab->p[elf->shdrs->p[section].sh_name])),
       SHT_RELA, SHF_INFO_LINK);
   elf->shdrs->p[shdr].sh_info = section;
   elfwriter_reserve(elf, size);
@@ -141,7 +137,9 @@ static void FlushTables(struct ElfWriter *elf) {
   symtab = AppendSection(elf, ".symtab", SHT_SYMTAB, 0);
   for (i = 0; i < ARRAYLEN(elf->syms); ++i) {
     size = elf->syms[i]->i * sizeof(Elf64_Sym);
-    memcpy(elfwriter_reserve(elf, size), elf->syms[i]->p, size);
+    if (size) {
+      memcpy(elfwriter_reserve(elf, size), elf->syms[i]->p, size);
+    }
     elfwriter_commit(elf, size);
   }
   FinishSection(elf);
@@ -162,9 +160,7 @@ struct ElfWriter *elfwriter_open(const char *path, int mode) {
   struct ElfWriter *elf;
   CHECK_NOTNULL((elf = calloc(1, sizeof(struct ElfWriter))));
   CHECK_NOTNULL((elf->path = strdup(path)));
-  CHECK_NE(-1, asprintf(&elf->tmppath, "%s.%d", elf->path, getpid()));
-  CHECK_NE(-1, (elf->fd = open(elf->tmppath,
-                               O_CREAT | O_TRUNC | O_RDWR | O_EXCL, mode)));
+  CHECK_NE(-1, (elf->fd = open(elf->path, O_CREAT | O_TRUNC | O_RDWR, mode)));
   CHECK_NE(-1, ftruncate(elf->fd, (elf->mapsize = FRAMESIZE)));
   CHECK_NE(MAP_FAILED, (elf->map = mmap((void *)(intptr_t)kFixedmapStart,
                                         elf->mapsize, PROT_READ | PROT_WRITE,
@@ -185,7 +181,6 @@ void elfwriter_close(struct ElfWriter *elf) {
   CHECK_NE(-1, munmap(elf->map, elf->mapsize));
   CHECK_NE(-1, ftruncate(elf->fd, elf->wrote));
   CHECK_NE(-1, close(elf->fd));
-  CHECK_NE(-1, rename(elf->tmppath, elf->path));
   freeinterner(elf->shstrtab);
   freeinterner(elf->strtab);
   free(elf->shdrs->p);

@@ -28,8 +28,6 @@ TOOL_DECODE_DIRECTDEPS =				\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
-	LIBC_RUNTIME					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
@@ -37,7 +35,7 @@ TOOL_DECODE_DIRECTDEPS =				\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
 	LIBC_TIME					\
-	LIBC_UNICODE					\
+	LIBC_TINYMATH					\
 	LIBC_X						\
 	THIRD_PARTY_GDTOA				\
 	THIRD_PARTY_GETOPT				\
@@ -56,7 +54,7 @@ o/$(MODE)/tool/decode/%.com.dbg:			\
 		o/$(MODE)/tool/decode/%.o		\
 		o/$(MODE)/tool/decode/decode.pkg	\
 		$(CRT)					\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 $(TOOL_DECODE_OBJS):					\

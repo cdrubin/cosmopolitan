@@ -16,21 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/popcnt.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/elf/elf.h"
 #include "libc/elf/struct/phdr.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/popcnt.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
-#include "libc/nexgen32e/vendor.internal.h"
+#include "libc/runtime/pc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
-#include "libc/sysv/consts/fileno.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "third_party/xed/x86.h"
 #include "tool/build/lib/argv.h"
 #include "tool/build/lib/endian.h"
 #include "tool/build/lib/loader.h"
@@ -43,7 +44,7 @@ static void LoadElfLoadSegment(struct Machine *m, void *code, size_t codesize,
   int64_t align, bsssize;
   int64_t felf, fstart, fend, vstart, vbss, vend;
   align = MAX(phdr->p_align, PAGESIZE);
-  CHECK_EQ(1, popcnt(align));
+  if (popcnt(align) != 1) align = 8;
   CHECK_EQ(0, (phdr->p_vaddr - phdr->p_offset) % align);
   felf = (int64_t)(intptr_t)code;
   vstart = ROUNDDOWN(phdr->p_vaddr, align);
@@ -65,9 +66,12 @@ static void LoadElfLoadSegment(struct Machine *m, void *code, size_t codesize,
   CHECK_GE(vend - vstart, fstart - fend);
   CHECK_LE(phdr->p_filesz, phdr->p_memsz);
   CHECK_EQ(felf + phdr->p_offset - fstart, phdr->p_vaddr - vstart);
-  CHECK_NE(-1, ReserveVirtual(m, vstart, fend - fstart, 0x0207));
+  CHECK_NE(-1, ReserveVirtual(m, vstart, fend - fstart,
+                              PAGE_V | PAGE_RW | PAGE_U | PAGE_RSRV));
   VirtualRecv(m, vstart, (void *)fstart, fend - fstart);
-  if (bsssize) CHECK_NE(-1, ReserveVirtual(m, vbss, bsssize, 0x0207));
+  if (bsssize)
+    CHECK_NE(-1, ReserveVirtual(m, vbss, bsssize,
+                                PAGE_V | PAGE_RW | PAGE_U | PAGE_RSRV));
   if (phdr->p_memsz - phdr->p_filesz > bsssize) {
     VirtualSet(m, phdr->p_vaddr + phdr->p_filesz, 0,
                phdr->p_memsz - phdr->p_filesz - bsssize);
@@ -77,7 +81,7 @@ static void LoadElfLoadSegment(struct Machine *m, void *code, size_t codesize,
 static void LoadElf(struct Machine *m, struct Elf *elf) {
   unsigned i;
   Elf64_Phdr *phdr;
-  m->ip = elf->base = elf->ehdr->e_entry;
+  m->ip = elf->base = 0x400000 /* elf->ehdr->e_entry */;
   VERBOSEF("LOADELF ENTRY %012lx", m->ip);
   for (i = 0; i < elf->ehdr->e_phnum; ++i) {
     phdr = GetElfSegmentHeaderAddress(elf->ehdr, elf->size, i);
@@ -131,11 +135,53 @@ static void BootProgram(struct Machine *m, struct Elf *elf, size_t codesize) {
   }
 }
 
+static int GetElfHeader(char ehdr[hasatleast 64], const char *prog,
+                        const char *image) {
+  char *p;
+  int c, i;
+  for (p = image; p < image + 4096; ++p) {
+    if (READ64LE(p) != READ64LE("printf '")) continue;
+    for (i = 0, p += 8; p + 3 < image + 4096 && (c = *p++) != '\'';) {
+      if (c == '\\') {
+        if ('0' <= *p && *p <= '7') {
+          c = *p++ - '0';
+          if ('0' <= *p && *p <= '7') {
+            c *= 8;
+            c += *p++ - '0';
+            if ('0' <= *p && *p <= '7') {
+              c *= 8;
+              c += *p++ - '0';
+            }
+          }
+        }
+      }
+      if (i < 64) {
+        ehdr[i++] = c;
+      } else {
+        WARNF("%s: ape printf elf header too long\n", prog);
+        return -1;
+      }
+    }
+    if (i != 64) {
+      WARNF("%s: ape printf elf header too short\n", prog);
+      return -1;
+    }
+    if (READ32LE(ehdr) != READ32LE("\177ELF")) {
+      WARNF("%s: ape printf elf header didn't have elf magic\n", prog);
+      return -1;
+    }
+    return 0;
+  }
+  WARNF("%s: printf statement not found in first 4096 bytes\n", prog);
+  return -1;
+}
+
 void LoadProgram(struct Machine *m, const char *prog, char **args, char **vars,
                  struct Elf *elf) {
   int fd;
   ssize_t rc;
   int64_t sp;
+  char ehdr[64];
   struct stat st;
   size_t i, mappedsize;
   DCHECK_NOTNULL(prog);
@@ -158,9 +204,16 @@ void LoadProgram(struct Machine *m, const char *prog, char **args, char **vars,
     sp = 0x800000000000;
     Write64(m->sp, sp);
     m->cr3 = AllocateLinearPage(m);
-    CHECK_NE(-1, ReserveVirtual(m, sp - STACKSIZE, STACKSIZE, 0x0207));
+    CHECK_NE(-1, ReserveVirtual(m, sp - 0x800000, 0x800000,
+                                PAGE_V | PAGE_RW | PAGE_U | PAGE_RSRV));
     LoadArgv(m, prog, args, vars);
     if (memcmp(elf->map, "\177ELF", 4) == 0) {
+      elf->ehdr = (void *)elf->map;
+      elf->size = elf->mapsize;
+      LoadElf(m, elf);
+    } else if (READ64LE(elf->map) == READ64LE("MZqFpD='") &&
+               !GetElfHeader(ehdr, prog, elf->map)) {
+      memcpy(elf->map, ehdr, 64);
       elf->ehdr = (void *)elf->map;
       elf->size = elf->mapsize;
       LoadElf(m, elf);

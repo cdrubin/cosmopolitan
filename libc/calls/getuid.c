@@ -16,14 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/accounting.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
-#include "libc/sysv/consts/auxv.h"
 
 static uint32_t KnuthMultiplicativeHash32(const void *buf, size_t size) {
   size_t i;
@@ -38,7 +40,7 @@ static textwindows dontinline uint32_t GetUserNameHash(void) {
   char16_t buf[257];
   uint32_t size = ARRAYLEN(buf);
   GetUserName(&buf, &size);
-  return KnuthMultiplicativeHash32(buf, size >> 1);
+  return KnuthMultiplicativeHash32(buf, size >> 1) & INT_MAX;
 }
 
 /**
@@ -47,15 +49,23 @@ static textwindows dontinline uint32_t GetUserNameHash(void) {
  * This never fails. On Windows, which doesn't really have this concept,
  * we return a deterministic value that's likely to work.
  *
+ * @return user id (always successful)
  * @asyncsignalsafe
+ * @threadsafe
  * @vforksafe
  */
 uint32_t getuid(void) {
-  if (!IsWindows()) {
-    return sys_getuid();
+  int rc;
+  if (IsMetal()) {
+    rc = 0;
+  } else if (!IsWindows()) {
+    rc = sys_getuid();
   } else {
-    return GetUserNameHash();
+    rc = GetUserNameHash();
   }
+  _npassert(rc >= 0);
+  STRACE("%s() → %d", "getuid", rc);
+  return rc;
 }
 
 /**
@@ -64,13 +74,21 @@ uint32_t getuid(void) {
  * This never fails. On Windows, which doesn't really have this concept,
  * we return a deterministic value that's likely to work.
  *
+ * @return group id (always successful)
  * @asyncsignalsafe
+ * @threadsafe
  * @vforksafe
  */
 uint32_t getgid(void) {
-  if (!IsWindows()) {
-    return sys_getgid();
+  int rc;
+  if (IsMetal()) {
+    rc = 0;
+  } else if (!IsWindows()) {
+    rc = sys_getgid();
   } else {
-    return GetUserNameHash();
+    rc = GetUserNameHash();
   }
+  _npassert(rc >= 0);
+  STRACE("%s() → %d", "getgid", rc);
+  return rc;
 }

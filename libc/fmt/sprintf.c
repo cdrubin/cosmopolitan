@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/fmt.h"
 #include "libc/limits.h"
+#include "libc/log/log.h"
 
 /**
  * Formats string to buffer that's hopefully large enough.

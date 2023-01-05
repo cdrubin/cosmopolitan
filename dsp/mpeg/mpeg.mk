@@ -37,8 +37,7 @@ DSP_MPEG_A_DIRECTDEPS =				\
 	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_TIME				\
-	LIBC_TINYMATH				\
-	LIBC_UNICODE
+	LIBC_TINYMATH
 
 DSP_MPEG_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(DSP_MPEG_A_DIRECTDEPS),$($(x))))
@@ -51,12 +50,9 @@ $(DSP_MPEG_A).pkg:				\
 		$(DSP_MPEG_A_OBJS)		\
 		$(foreach x,$(DSP_MPEG_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/dsp/mpeg/clamp4int256-k8.o:		\
+o/$(MODE)/dsp/mpeg/clamp4int256-k8.o: private	\
 		OVERRIDE_CFLAGS +=		\
 			-Os
-
-#o/$(MODE)/dsp/mpeg/macroblock.o:		\
-		CC = $(CLANG)
 
 DSP_MPEG_LIBS = $(foreach x,$(DSP_MPEG_ARTIFACTS),$($(x)))
 DSP_MPEG_SRCS = $(foreach x,$(DSP_MPEG_ARTIFACTS),$($(x)_SRCS))

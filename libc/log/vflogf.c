@@ -16,19 +16,24 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/dprintf.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/log/internal.h"
 #include "libc/log/log.h"
 #include "libc/math.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/runtime/runtime.h"
+#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/fileno.h"
@@ -42,18 +47,21 @@ static struct timespec vflogf_ts;
 /**
  * Takes corrective action if logging is on the fritz.
  */
-void vflogf_onfail(FILE *f) {
+static void vflogf_onfail(FILE *f) {
   errno_t err;
-  struct stat st;
+  int64_t size;
   if (IsTiny()) return;
-  err = ferror(f);
-  if (fileno(f) != -1 && (err == ENOSPC || err == EDQUOT || err == EFBIG) &&
-      (fstat(fileno(f), &st) == -1 || st.st_size > kNontrivialSize)) {
-    ftruncate(fileno(f), 0);
-    fseek(f, SEEK_SET, 0);
+  err = ferror_unlocked(f);
+  if (fileno_unlocked(f) != -1 &&
+      (err == ENOSPC || err == EDQUOT || err == EFBIG) &&
+      ((size = getfiledescriptorsize(fileno_unlocked(f))) == -1 ||
+       size > kNontrivialSize)) {
+    ftruncate(fileno_unlocked(f), 0);
+    fseeko_unlocked(f, SEEK_SET, 0);
     f->beg = f->end = 0;
-    clearerr(f);
-    (fprintf)(f, "performed emergency log truncation: %s\n", strerror(err));
+    clearerr_unlocked(f);
+    (fprintf_unlocked)(f, "performed emergency log truncation: %s\n",
+                       strerror(err));
   }
 }
 
@@ -71,47 +79,68 @@ void vflogf_onfail(FILE *f) {
  *
  * In that case, the second log entry will always display the amount of
  * time that it took to connect. This is great in forking applications.
+ *
+ * @asyncsignalsafe
+ * @threadsafe
  */
 void(vflogf)(unsigned level, const char *file, int line, FILE *f,
              const char *fmt, va_list va) {
   int bufmode;
+  int64_t dots;
   struct tm tm;
-  long double t2;
-  const char *prog;
-  bool issamesecond;
   char buf32[32];
-  int64_t secs, nsec, dots;
+  const char *prog;
+  const char *sign;
+  bool issamesecond;
+  struct timespec t2;
   if (!f) f = __log_file;
   if (!f) return;
-  t2 = nowl();
-  secs = t2;
-  nsec = (t2 - secs) * 1e9L;
-  issamesecond = secs == vflogf_ts.tv_sec;
-  dots = issamesecond ? nsec - vflogf_ts.tv_nsec : nsec;
-  vflogf_ts.tv_sec = secs;
-  vflogf_ts.tv_nsec = nsec;
-  localtime_r(&secs, &tm);
-  strcpy(iso8601(buf32, &tm), issamesecond ? "+" : ".");
-  prog = basename(program_invocation_name);
+  flockfile(f);
+  strace_enabled(-1);
+  BLOCK_CANCELLATIONS;
+
+  // We display TIMESTAMP.MICROS normally. However, when we log multiple
+  // times in the same second, we display TIMESTAMP+DELTAMICROS instead.
+  t2 = timespec_real();
+  if (t2.tv_sec == vflogf_ts.tv_sec) {
+    sign = "+";
+    dots = t2.tv_nsec - vflogf_ts.tv_nsec;
+  } else {
+    sign = ".";
+    dots = t2.tv_nsec;
+  }
+  vflogf_ts = t2;
+
+  localtime_r(&t2.tv_sec, &tm);
+  strcpy(iso8601(buf32, &tm), sign);
+  prog = basename(firstnonnull(program_invocation_name, "unknown"));
   bufmode = f->bufmode;
   if (bufmode == _IOLBF) f->bufmode = _IOFBF;
-  if ((fprintf)(f, "%c%s%06ld:%s:%d:%.*s:%d] ", "FEWIVDNT"[level & 7], buf32,
-                rem1000000int64(div1000int64(dots)), file, line,
-                strchrnul(prog, '.') - prog, prog, getpid()) <= 0) {
+
+  if ((fprintf_unlocked)(f, "%r%c%s%06ld:%s:%d:%.*s:%d] ",
+                         "FEWIVDNT"[level & 7], buf32, dots / 1000, file, line,
+                         strchrnul(prog, '.') - prog, prog, getpid()) <= 0) {
     vflogf_onfail(f);
   }
-  (vfprintf)(f, fmt, va);
-  fputs("\n", f);
+  (vfprintf_unlocked)(f, fmt, va);
+  fputc_unlocked('\n', f);
   if (bufmode == _IOLBF) {
     f->bufmode = _IOLBF;
-    fflush(f);
+    fflush_unlocked(f);
   }
+
   if (level == kLogFatal) {
     __start_fatal(file, line);
     strcpy(buf32, "unknown");
     gethostname(buf32, sizeof(buf32));
-    (dprintf)(STDERR_FILENO, "fatality %s pid %d\n", buf32, getpid());
+    (dprintf)(STDERR_FILENO,
+              "exiting due to aforementioned error (host %s pid %d tid %d)\n",
+              buf32, getpid(), gettid());
     __die();
     unreachable;
   }
+
+  ALLOW_CANCELLATIONS;
+  strace_enabled(+1);
+  funlockfile(f);
 }

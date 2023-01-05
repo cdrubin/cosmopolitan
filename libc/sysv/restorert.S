@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sysv/consts/nrlinux.h"
 #include "libc/macros.internal.h"
 .privileged
-.source	__FILE__
 
 //	Linux Signal Trampoline (HOLY CODE)
 __restore_bt:
@@ -26,8 +26,8 @@ __restore_bt:
 	.endfn	__restore_bt,globl,hidden
 	nop	# gap so that __get_symbol(st, addr - 1) fails
 	.align	16
-__restore_rt:				# @see gdb/amd64-linux-tdep.c
-	mov	$0x000f,%rax		# [sic]
+__restore_rt:					# @see gdb/amd64-linux-tdep.c
+	mov	$__NR_linux_sigreturn,%rax	# [sic]
 	syscall
 	.align	16
 	.endfn	__restore_rt,globl,hidden

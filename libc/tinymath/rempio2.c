@@ -25,7 +25,7 @@
 │  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                      │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/likely.h"
+#include "libc/intrin/likely.h"
 #include "libc/math.h"
 #include "libc/tinymath/kernel.internal.h"
 
@@ -36,8 +36,8 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-
 /* clang-format off */
+
 /* origin: FreeBSD /usr/src/lib/msun/src/e_rem_pio2.c */
 /*
  * ====================================================

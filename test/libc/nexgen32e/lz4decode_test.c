@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/log/check.h"
 #include "libc/mem/mem.h"
@@ -78,7 +78,7 @@ TEST(lz4, zoneFileGmt) {
   size_t mapsize, gmtsize;
   char *mapping, *gmtdata;
   lz4decode((gmtdata = lz4decode(
-                 (mapping = mapanon(
+                 (mapping = _mapanon(
                       (mapsize = roundup(
                            LZ4_FRAME_BLOCKCONTENTSIZE(lz4check(dict.addr)) +
                                (gmtsize = LZ4_FRAME_BLOCKCONTENTSIZE(

@@ -16,10 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/dce.h"
 #include "libc/runtime/runtime.h"
-#include "libc/str/str.h"
-#include "libc/sysv/consts/auxv.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Returns auxiliary value, or zero if kernel didn't provide it.
@@ -27,8 +25,10 @@
  * This function is typically regarded as a libc implementation detail;
  * thus, the source code is the documentation.
  *
+ * @return auxiliary value or 0 if `at` not found
  * @see libc/sysv/consts.sh
  * @see System Five Application Binary Interface § 3.4.3
+ * @error ENOENT when value not found
  * @asyncsignalsafe
  */
 unsigned long getauxval(unsigned long at) {
@@ -38,8 +38,6 @@ unsigned long getauxval(unsigned long at) {
       return ap[1];
     }
   }
-  if (at == AT_EXECFN) {
-    return (intptr_t)__argv[0];
-  }
+  enoent();
   return 0;
 }

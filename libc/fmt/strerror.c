@@ -16,14 +16,21 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/str/str.h"
 
 /**
  * Converts errno value to string non-reentrantly.
  * @see strerror_r()
  */
-noasan char *strerror(int err) {
-  _Alignas(1) static char buf[512];
-  strerror_r(err, buf, sizeof(buf));
-  return buf;
+char *strerror(int err) {
+  if (IsTiny()) {
+    return firstnonnull(_strerrno(err), "EUNKNOWN");
+  } else {
+    _Alignas(1) static char buf[512];
+    strerror_r(err, buf, sizeof(buf));
+    return buf;
+  }
 }

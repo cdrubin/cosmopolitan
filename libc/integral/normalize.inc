@@ -50,6 +50,9 @@
 #ifndef __has_cpp_attribute
 #define __has_cpp_attribute(x) 0
 #endif
+#ifndef __has_extension
+#define __has_extension(x) 0
+#endif
 
 #ifdef unix
 #undef unix
@@ -63,20 +66,29 @@
 #define __BIGGEST_ALIGNMENT__ 16
 #endif
 
+/* TODO(jart): Remove this in favor of GetStackSize() */
+#if defined(COSMO) && (defined(MODE_DBG) || defined(__SANITIZE_ADDRESS__))
+#define STACKSIZE 262144 /* 256kb stack */
+#elif defined(COSMO)
+#define STACKSIZE 131072 /* 128kb stack */
+#else
+#define STACKSIZE 8388608 /* 8mb stack */
+#endif
+
 #define BIGPAGESIZE 0x200000
-#define STACKSIZE   0x20000
 #define FRAMESIZE   0x10000 /* 8086 */
+#define GUARDSIZE   0x4000  /* b/c apple m1 */
 #define PAGESIZE    0x1000  /* i386+ */
 #define BUFSIZ      0x1000  /* best stdio default */
 #define CACHELINE   0x40    /* nexgen32e */
 #define CHAR_BIT    8       /* b/c von neumann */
-#define ARG_MAX     0x8000  /* b/c windows */
-#define PATH_MAX    248     /* b/c win32 apis limit ~248..260 */
-#define NAME_MAX    63      /* b/c dns */
-#define CHILD_MAX   25      /* only if malloc isn't linked */
+#define ARG_MAX     0xfffe  /* for argv and envp; see CreateProcess (32767*2) */
+#define PATH_MAX    1024    /* b/c _XOPEN_PATH_MAX */
+#define NAME_MAX    255     /* 511 on netbsd */
+#define CHILD_MAX   16      /* only if malloc isn't linked */
 #define OPEN_MAX    16      /* only if malloc isn't linked */
 #define ATEXIT_MAX  32      /* only if malloc isn't linked */
-#define NSIG        128     /* it's complicated */
+#define NSIG        128     /* b/c freebsd */
 
 #if defined(__LP64__) && !defined(__INT64_TYPE__)
 #include "libc/integral/lp64.inc"

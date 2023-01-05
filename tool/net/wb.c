@@ -20,16 +20,17 @@
 #include "libc/calls/calls.h"
 #include "libc/dns/dns.h"
 #include "libc/errno.h"
+#include "libc/fmt/conv.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/sock/goodsocket.internal.h"
 #include "libc/sock/sock.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/slice.h"
 #include "libc/str/str.h"
@@ -44,6 +45,7 @@
 #include "libc/sysv/consts/tcp.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
+#include "libc/x/xsigaction.h"
 #include "net/http/http.h"
 #include "net/http/url.h"
 #include "net/https/https.h"
@@ -51,7 +53,10 @@
 #include "third_party/mbedtls/ctr_drbg.h"
 #include "third_party/mbedtls/debug.h"
 #include "third_party/mbedtls/error.h"
+#include "third_party/mbedtls/net_sockets.h"
 #include "third_party/mbedtls/ssl.h"
+
+#define OPTS "BIqksvzX:H:C:m:"
 
 #define Micros(t)       ((int64_t)((t)*1e6))
 #define HasHeader(H)    (!!msg.headers[H].a)
@@ -79,16 +84,17 @@ bool authmode = MBEDTLS_SSL_VERIFY_NONE;
 
 char *host;
 char *port;
+char *flags;
 bool usessl;
 uint32_t ip;
 struct Url url;
 struct addrinfo *addr;
 struct Buffer inbuf;
 
-long fetch_count;
 long error_count;
 long failure_count;
-long response_count;
+long message_count;
+long connect_count;
 double *latencies;
 size_t latencies_n;
 size_t latencies_c;
@@ -96,6 +102,8 @@ long double start_run;
 long double end_run;
 long double start_fetch;
 long double end_fetch;
+long connectionstobemade = 100;
+long messagesperconnection = 100;
 
 mbedtls_x509_crt *cachain;
 mbedtls_ssl_config conf;
@@ -146,7 +154,18 @@ static int TlsRecv(void *c, unsigned char *p, size_t n, uint32_t o) {
 }
 
 static wontreturn void PrintUsage(FILE *f, int rc) {
-  fprintf(f, "usage: %s [-ksvV] URL\n", program_invocation_name);
+  fprintf(f, "usage: %s [-%s] URL\n", OPTS, program_invocation_name);
+  fprintf(f, "wb - cosmopolitan http/https benchmark tool\n");
+  fprintf(f, "  -C INT   connections to be made\n");
+  fprintf(f, "  -m INT   messages per connection\n");
+  fprintf(f, "  -B       use suite b ciphersuites\n");
+  fprintf(f, "  -v       increase verbosity\n");
+  fprintf(f, "  -H K:V   append http header\n");
+  fprintf(f, "  -X NAME  specify http method\n");
+  fprintf(f, "  -k       verify ssl certs\n");
+  fprintf(f, "  -I       same as -X HEAD\n");
+  fprintf(f, "  -z       same as -H Accept-Encoding:gzip\n");
+  fprintf(f, "  -h       show this help\n");
   exit(rc);
 }
 
@@ -157,10 +176,13 @@ int fetch(void) {
   const char *body;
   int t, ret, sock;
   struct TlsBio *bio;
+  long messagesremaining;
   struct HttpMessage msg;
   struct HttpUnchunker u;
   size_t urlarglen, requestlen;
   size_t g, i, n, hdrsize, paylen;
+
+  messagesremaining = messagesperconnection;
 
   /*
    * Setup crypto.
@@ -294,13 +316,12 @@ SendAnother:
 Finished:
   status = msg.status;
   DestroyHttpMessage(&msg);
-  if (!isdone && status == 200) {
+  if (!isdone && status == 200 && --messagesremaining > 0) {
     long double now = nowl();
     end_fetch = now;
-    ++response_count;
+    ++message_count;
     latencies = realloc(latencies, ++latencies_n * sizeof(*latencies));
     latencies[latencies_n - 1] = end_fetch - start_fetch;
-    ++fetch_count;
     start_fetch = now;
     goto SendAnother;
   }
@@ -321,29 +342,45 @@ int main(int argc, char *argv[]) {
    */
   int opt;
   __log_level = kLogWarn;
-  while ((opt = getopt(argc, argv, "BqksvIX:H:")) != -1) {
+  while ((opt = getopt(argc, argv, OPTS)) != -1) {
     switch (opt) {
       case 's':
       case 'q':
         break;
       case 'B':
         suiteb = true;
+        appendf(&flags, " -B");
         break;
       case 'v':
         ++__log_level;
         break;
       case 'I':
         method = kHttpHead;
+        appendf(&flags, " -I");
         break;
       case 'H':
         headers.p = realloc(headers.p, ++headers.n * sizeof(*headers.p));
         headers.p[headers.n - 1] = optarg;
+        appendf(&flags, " -H '%s'", optarg);
+        break;
+      case 'z':
+        headers.p = realloc(headers.p, ++headers.n * sizeof(*headers.p));
+        headers.p[headers.n - 1] = "Accept-Encoding: gzip";
+        appendf(&flags, " -z");
         break;
       case 'X':
         CHECK((method = GetHttpMethod(optarg, strlen(optarg))));
+        appendf(&flags, " -X %s", optarg);
         break;
       case 'k':
         authmode = MBEDTLS_SSL_VERIFY_REQUIRED;
+        appendf(&flags, " -k");
+        break;
+      case 'm':
+        messagesperconnection = strtol(optarg, 0, 0);
+        break;
+      case 'C':
+        connectionstobemade = strtol(optarg, 0, 0);
         break;
       case 'h':
         PrintUsage(stdout, EXIT_SUCCESS);
@@ -352,15 +389,20 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  appendf(&flags, " -m %ld", messagesperconnection);
+  appendf(&flags, " -C %ld", connectionstobemade);
+
   if (optind == argc) PrintUsage(stdout, EXIT_SUCCESS);
   urlarg = argv[optind];
   cachain = GetSslRoots();
 
+  long connectsremaining = connectionstobemade;
+
   /*
    * Parse URL.
    */
-  gc(ParseUrl(urlarg, -1, &url));
-  gc(url.params.p);
+  _gc(ParseUrl(urlarg, -1, &url, kUrlPlus));
+  _gc(url.params.p);
   usessl = false;
   if (url.scheme.n) {
     if (url.scheme.n == 5 && !memcasecmp(url.scheme.p, "https", 5)) {
@@ -370,9 +412,9 @@ int main(int argc, char *argv[]) {
     }
   }
   if (url.host.n) {
-    host = gc(strndup(url.host.p, url.host.n));
+    host = _gc(strndup(url.host.p, url.host.n));
     if (url.port.n) {
-      port = gc(strndup(url.port.p, url.port.n));
+      port = _gc(strndup(url.port.p, url.port.n));
     } else {
       port = usessl ? "443" : "80";
     }
@@ -388,7 +430,7 @@ int main(int argc, char *argv[]) {
   url.host.p = 0, url.host.n = 0;
   url.port.p = 0, url.port.n = 0;
   if (!url.path.n || url.path.p[0] != '/') {
-    char *p = gc(xmalloc(1 + url.path.n));
+    char *p = _gc(xmalloc(1 + url.path.n));
     mempcpy(mempcpy(p, "/", 1), url.path.p, url.path.n);
     url.path.p = p;
     ++url.path.n;
@@ -434,13 +476,13 @@ int main(int argc, char *argv[]) {
   latencies_c = 1024;
   latencies = malloc(latencies_c * sizeof(*latencies));
   start_run = nowl();
-  while (!isdone) {
-    ++fetch_count;
+  while (!isdone && --connectsremaining >= 0) {
     start_fetch = nowl();
     status = fetch();
     end_fetch = nowl();
     if (status == 200) {
-      ++response_count;
+      ++connect_count;
+      ++message_count;
       latencies = realloc(latencies, ++latencies_n * sizeof(*latencies));
       latencies[latencies_n - 1] = end_fetch - start_fetch;
     } else if (status == 900) {
@@ -452,17 +494,17 @@ int main(int argc, char *argv[]) {
   end_run = nowl();
 
   double latencies_sum = fsum(latencies, latencies_n);
-  double avg_latency = latencies_sum / response_count;
+  double avg_latency = latencies_sum / message_count;
 
-  printf("\n");
-  printf("run time:       %,ldµs\n", Micros(end_run - start_run));
-  printf("per second:     %,ld\n",
-         (int64_t)(response_count / (end_run - start_run)));
-  printf("avg latency:    %,ldµs\n", Micros(avg_latency));
-  printf("response count: %,ld\n", response_count);
-  printf("fetch count:    %,ld\n", fetch_count - failure_count);
-  printf("error count:    %,ld (non-200 responses)\n", error_count);
-  printf("failure count:  %,ld (transport error)\n", failure_count);
+  printf("wb%s\n", flags);
+  printf("msgs / second:   %,ld qps\n",
+         (int64_t)(message_count / (end_run - start_run)));
+  printf("run time:        %,ldµs\n", Micros(end_run - start_run));
+  printf("latency / msgs:  %,ldµs\n", Micros(avg_latency));
+  printf("message count:   %,ld\n", message_count);
+  printf("connect count:   %,ld\n", connect_count);
+  printf("error count:     %,ld (non-200 responses)\n", error_count);
+  printf("failure count:   %,ld (transport error)\n", failure_count);
 
   return 0;
 }

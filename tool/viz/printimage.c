@@ -21,25 +21,18 @@
 #include "dsp/scale/scale.h"
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
-#include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/ioctl.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/dce.h"
 #include "libc/fmt/conv.h"
-#include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
-#include "libc/math.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
-#include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/fileno.h"
@@ -48,10 +41,11 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/termios.h"
-#include "libc/x/x.h"
 #include "third_party/getopt/getopt.h"
 #include "third_party/stb/stb_image.h"
 #include "tool/viz/lib/graphic.h"
+
+STATIC_YOINK("__zipos_get");
 
 static struct Flags {
   const char *out;
@@ -59,14 +53,17 @@ static struct Flags {
   bool unsharp;
   bool dither;
   bool ruler;
-  bool trailingnewline;
+  bool magikarp;
   long half;
   bool full;
+  bool ignoreaspect;
   long width;
   long height;
   enum TtyBlocksSelection blocks;
   enum TtyQuantizationAlgorithm quant;
 } g_flags;
+
+struct winsize g_winsize;
 
 static wontreturn void PrintUsage(int rc, FILE *f) {
   fprintf(f, "Usage: %s%s", program_invocation_name, "\
@@ -77,14 +74,16 @@ FLAGS\n\
   -o PATH    output path\n\
   -w INT     manual width\n\
   -h INT     manual height\n\
+  -f         display full size\n\
+  -i         ignore aspect ratio\n\
   -4         unicode blocks\n\
   -a         ansi color mode\n\
   -t         true color mode\n\
   -2         use half blocks\n\
   -3         ibm cp437 blocks\n\
-  -f         display full size\n\
   -s         unsharp sharpening\n\
   -x         xterm256 color mode\n\
+  -m         use magikarp scaling\n\
   -d         hilbert curve dithering\n\
   -r         display pixel ruler on sides\n\
   -p         convert to subpixel layout\n\
@@ -94,7 +93,6 @@ FLAGS\n\
 EXAMPLES\n\
 \n\
   printimage.com -sxd lemurs.jpg  # 256-color dither unsharp\n\
-\n\
 \n");
   exit(rc);
 }
@@ -111,14 +109,13 @@ static int ParseNumberOption(const char *arg) {
 
 static void GetOpts(int *argc, char *argv[]) {
   int opt;
-  struct winsize ws;
   g_flags.quant = kTtyQuantTrue;
   g_flags.blocks = IsWindows() ? kTtyBlocksCp437 : kTtyBlocksUnicode;
   if (*argc == 2 &&
       (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-help") == 0)) {
     PrintUsage(EXIT_SUCCESS, stdout);
   }
-  while ((opt = getopt(*argc, argv, "?vpfrtxads234o:w:h:")) != -1) {
+  while ((opt = getopt(*argc, argv, "?vpmfirtxads234o:w:h:")) != -1) {
     switch (opt) {
       case 'o':
         g_flags.out = optarg;
@@ -130,21 +127,25 @@ static void GetOpts(int *argc, char *argv[]) {
         g_flags.unsharp = true;
         break;
       case 'w':
-        g_flags.trailingnewline = true;
         g_flags.width = ParseNumberOption(optarg);
         break;
       case 'h':
-        g_flags.trailingnewline = true;
         g_flags.height = ParseNumberOption(optarg);
         break;
       case 'f':
         g_flags.full = true;
+        break;
+      case 'i':
+        g_flags.ignoreaspect = true;
         break;
       case '2':
         g_flags.half = true;
         break;
       case 'r':
         g_flags.ruler = true;
+        break;
+      case 'm':
+        g_flags.magikarp = true;
         break;
       case 'p':
         g_flags.subpixel = true;
@@ -173,18 +174,11 @@ static void GetOpts(int *argc, char *argv[]) {
         PrintUsage(EX_USAGE, stderr);
     }
   }
-  if (optind == *argc) {
-    if (!g_flags.out) g_flags.out = "-";
-    argv[(*argc)++] = "-";
-  }
-  if (!g_flags.full && (!g_flags.width || !g_flags.width)) {
-    ws.ws_col = 80;
-    ws.ws_row = 24;
-    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) != -1 ||
-        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
-      g_flags.width = ws.ws_col * (1 + !g_flags.half);
-      g_flags.height = ws.ws_row * 2;
-    }
+  g_winsize.ws_col = 80;
+  g_winsize.ws_row = 24;
+  if (!g_flags.full && (!g_flags.width || !g_flags.height)) {
+    ioctl(STDIN_FILENO, TIOCGWINSZ, &g_winsize) != -1 ||
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &g_winsize);
   }
   ttyquantsetup(g_flags.quant, kTtyQuantRgb, g_flags.blocks);
 }
@@ -325,26 +319,30 @@ static void *DeblinterlaceSubpixelBgr(long dyn, long dxn,
 }
 
 static void PrintImageSerious(long yn, long xn, unsigned char RGB[3][yn][xn],
-                              struct TtyRgb TTY[yn][xn], char *vt) {
+                              long tyn, long txn, struct TtyRgb TTY[tyn][txn],
+                              char *vt) {
   char *p;
   long y, x;
   struct TtyRgb bg = {0x12, 0x34, 0x56, 0};
   struct TtyRgb fg = {0x12, 0x34, 0x56, 0};
   if (g_flags.unsharp) unsharp(3, yn, xn, RGB, yn, xn);
   if (g_flags.dither) dither(yn, xn, RGB, yn, xn);
-  for (y = 0; y < yn; ++y) {
-    for (x = 0; x < xn; ++x) {
-      TTY[y][x] = rgb2tty(RGB[0][y][x], RGB[1][y][x], RGB[2][y][x]);
+  if (yn && xn) {
+    for (y = 0; y < tyn; ++y) {
+      for (x = 0; x < txn; ++x) {
+        TTY[y][x] = rgb2tty(RGB[0][MIN(y, yn - 1)][MIN(x, xn - 1)],
+                            RGB[1][MIN(y, yn - 1)][MIN(x, xn - 1)],
+                            RGB[2][MIN(y, yn - 1)][MIN(x, xn - 1)]);
+      }
     }
   }
-  p = ttyraster(vt, (void *)TTY, yn, xn, bg, fg);
-  *p++ = '\r';
-  if (g_flags.trailingnewline) *p++ = '\n';
-  p = stpcpy(p, "\e[0m");
+  p = ttyraster(vt, (void *)TTY, tyn, txn, bg, fg);
+  p = stpcpy(p, "\e[0m\r\n");
   ttywrite(STDOUT_FILENO, vt, p - vt);
 }
 
 static void ProcessImage(long yn, long xn, unsigned char RGB[3][yn][xn]) {
+  long tyn, txn;
   if (g_flags.half) {
     if (g_flags.subpixel) {
       PrintImageLR(yn, xn * 3, RGB, 0, yn, 0, xn * 3);
@@ -352,10 +350,12 @@ static void ProcessImage(long yn, long xn, unsigned char RGB[3][yn][xn]) {
       PrintImage(yn, xn, RGB, 0, yn, 0, xn);
     }
   } else {
+    tyn = ROUNDUP(yn, 2);
+    txn = ROUNDUP(xn, 2);
     PrintImageSerious(
-        yn, xn, RGB, gc(memalign(32, sizeof(struct TtyRgb) * yn * xn)),
-        gc(memalign(32, ((yn * xn * strlen("\e[48;2;255;48;2;255m▄")) +
-                         (yn * strlen("\e[0m\r\n")) + 128))));
+        yn, xn, RGB, tyn, txn, gc(calloc(sizeof(struct TtyRgb), tyn * txn)),
+        gc(calloc(1, ((yn * xn * strlen("\e[48;2;255;48;2;255m▄")) +
+                      (yn * strlen("\e[0m\r\n")) + 128))));
   }
 }
 
@@ -363,12 +363,12 @@ void WithImageFile(const char *path,
                    void fn(long yn, long xn, unsigned char RGB[3][yn][xn])) {
   struct stat st;
   void *map, *data, *data2;
-  int fd, yn, xn, cn, dyn, dxn, syn, sxn;
+  int fd, yn, xn, cn, dyn, dxn, syn, sxn, wyn, wxn;
   CHECK_NE(-1, (fd = open(path, O_RDONLY)), "%s", path);
   CHECK_NE(-1, fstat(fd, &st));
   CHECK_GT(st.st_size, 0);
   CHECK_LE(st.st_size, INT_MAX);
-  fadvise(fd, 0, 0, MADV_WILLNEED | MADV_SEQUENTIAL);
+  fadvise(fd, 0, st.st_size, MADV_WILLNEED | MADV_SEQUENTIAL);
   CHECK_NE(MAP_FAILED,
            (map = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0)));
   CHECK_NOTNULL(
@@ -385,27 +385,45 @@ void WithImageFile(const char *path,
                          data, 0, yn, 0, xn);
     cn = 3;
   }
-  if (g_flags.height && g_flags.width) {
+  if (!g_flags.full) {
     syn = yn;
     sxn = xn;
     dyn = g_flags.height;
     dxn = g_flags.width;
-#if 0
-    while (HALF(syn) > dyn || HALF(sxn) > dxn) {
-      if (HALF(sxn) > dxn) {
-        Magikarp2xX(yn, xn, data, syn, sxn);
-        Magikarp2xX(yn, xn, (char *)data + yn * xn, syn, sxn);
-        Magikarp2xX(yn, xn, (char *)data + yn * xn * 2, syn, sxn);
-        sxn = HALF(sxn);
-      }
-      if (HALF(syn) > dyn) {
-        Magikarp2xY(yn, xn, data, syn, sxn);
-        Magikarp2xY(yn, xn, (char *)data + yn * xn, syn, sxn);
-        Magikarp2xY(yn, xn, (char *)data + yn * xn * 2, syn, sxn);
-        syn = HALF(syn);
+    wyn = g_winsize.ws_row * 2;
+    wxn = g_winsize.ws_col;
+    if (g_flags.ignoreaspect) {
+      if (!dyn) dyn = wyn;
+      if (!dxn) dxn = wxn * (1 + !g_flags.half);
+    }
+    if (!dyn && !dxn) {
+      if (sxn * wyn > syn * wxn) {
+        dxn = wxn * (1 + !g_flags.half);
+      } else {
+        dyn = wyn;
       }
     }
-#endif
+    if (dyn && !dxn) {
+      dxn = dyn * sxn * (1 + !g_flags.half) / syn;
+    } else if (dxn && !dyn) {
+      dyn = dxn * syn / (sxn * (1 + !g_flags.half));
+    }
+    if (g_flags.magikarp) {
+      while (HALF(syn) > dyn || HALF(sxn) > dxn) {
+        if (HALF(sxn) > dxn) {
+          Magikarp2xX(yn, xn, data, syn, sxn);
+          Magikarp2xX(yn, xn, (char *)data + yn * xn, syn, sxn);
+          Magikarp2xX(yn, xn, (char *)data + yn * xn * 2, syn, sxn);
+          sxn = HALF(sxn);
+        }
+        if (HALF(syn) > dyn) {
+          Magikarp2xY(yn, xn, data, syn, sxn);
+          Magikarp2xY(yn, xn, (char *)data + yn * xn, syn, sxn);
+          Magikarp2xY(yn, xn, (char *)data + yn * xn * 2, syn, sxn);
+          syn = HALF(syn);
+        }
+      }
+    }
     data = EzGyarados(3, dyn, dxn, gc(memalign(32, dyn * dxn * 3)), cn, yn, xn,
                       data, 0, cn, dyn, dxn, syn, sxn, 0, 0, 0, 0);
     yn = dyn;
@@ -416,7 +434,9 @@ void WithImageFile(const char *path,
 
 int main(int argc, char *argv[]) {
   int i;
+  ShowCrashReports();
   GetOpts(&argc, argv);
+  if (optind == argc) PrintUsage(0, stdout);
   stbi_set_unpremultiply_on_load(true);
   for (i = optind; i < argc; ++i) {
     WithImageFile(argv[i], ProcessImage);

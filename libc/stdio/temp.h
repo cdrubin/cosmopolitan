@@ -4,16 +4,18 @@
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-nodiscard FILE *tmpfile(void);
-nodiscard int mkstemp(char *);
-nodiscard int mkostemp(char *, unsigned);
-nodiscard int mkstemps(char *, int);
-nodiscard int mkostemps(char *, int, unsigned);
-nodiscard int mkostempsm(char *, int, unsigned, int);
-compatfn char *mktemp(char *);
+FILE *tmpfile(void);
+char *mkdtemp(char *);
+char *mktemp(char *);
+char *tmpnam(char *);
+int mkostemp(char *, unsigned);
+int mkostemps(char *, int, unsigned);
+int mkostempsm(char *, int, unsigned, int);
+int mkstemp(char *);
+int mkstemps(char *, int);
 
 int mkostempsmi(char *, int, unsigned, uint64_t *, int,
-                int (*)(const char *, int, ...)) hidden nodiscard;
+                int (*)(const char *, int, ...)) _Hide dontdiscard;
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

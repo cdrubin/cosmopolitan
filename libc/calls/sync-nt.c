@@ -18,6 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -26,10 +28,8 @@
 #include "libc/nt/runtime.h"
 #include "libc/sysv/consts/ok.h"
 
-/**
- * Flushes all open file handles and, if possible, all disk drives.
- */
-int sys_sync_nt(void) {
+// Flushes all open file handles and, if possible, all disk drives.
+textwindows int sys_sync_nt(void) {
   unsigned i;
   int64_t volume;
   uint32_t drives;

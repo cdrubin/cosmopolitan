@@ -17,10 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/scale/cdecimate2xuint8x8.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/hilbert.h"
-#include "libc/bits/morton.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/ioctl.h"
 #include "libc/calls/struct/sigaction.h"
@@ -32,14 +28,21 @@
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsf.h"
+#include "libc/intrin/hilbert.h"
+#include "libc/intrin/morton.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/tpenc.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsf.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
+#include "libc/str/tab.internal.h"
+#include "libc/str/unicode.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/map.h"
@@ -49,7 +52,6 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/time/time.h"
-#include "libc/unicode/unicode.h"
 #include "third_party/getopt/getopt.h"
 
 #define USAGE \
@@ -190,11 +192,11 @@ static void GetTtySize(void) {
   struct winsize wsize;
   wsize.ws_row = tyn + 1;
   wsize.ws_col = txn;
-  getttysize(out, &wsize);
+  _getttysize(out, &wsize);
   tyn = MAX(2, wsize.ws_row) - 1;
   txn = MAX(17, wsize.ws_col) - 16;
-  tyn = rounddown2pow(tyn);
-  txn = rounddown2pow(txn);
+  tyn = _rounddown2pow(tyn);
+  txn = _rounddown2pow(txn);
   tyn = MIN(tyn, txn);
 }
 
@@ -218,11 +220,11 @@ static void OnExit(void) {
   ioctl(out, TCSETS, &oldterm);
 }
 
-static void OnSigInt(int sig, struct siginfo *sa, struct ucontext *uc) {
+static void OnSigInt(int sig, struct siginfo *sa, void *uc) {
   action |= INTERRUPTED;
 }
 
-static void OnSigWinch(int sig, struct siginfo *sa, struct ucontext *uc) {
+static void OnSigWinch(int sig, struct siginfo *sa, void *uc) {
   action |= RESIZED;
 }
 
@@ -496,7 +498,7 @@ static void OnMouse(char *p) {
 
 static void ReadKeyboard(void) {
   char buf[32], *p = buf;
-  memset(buf, 0, sizeof(buf));
+  bzero(buf, sizeof(buf));
   if (readansi(0, buf, sizeof(buf)) == -1) {
     if (errno == EINTR) return;
     exit(errno);
@@ -743,10 +745,10 @@ static void Render(void) {
           fg = InvertXtermGreyscale(fg);
         }
         p = stpcpy(p, "\e[38;5;");
-        p += int64toarray_radix10(fg, p);
+        p = FormatInt64(p, fg);
         *p++ = 'm';
       }
-      w = tpenc(kCp437[c]);
+      w = _tpenc(kCp437[c]);
       do {
         *p++ = w & 0xff;
         w >>= 8;
@@ -769,14 +771,14 @@ static void Render(void) {
   }
   p = stpcpy(p, " memzoom\e[0m ");
   if (!pid) {
-    p += uint64toarray_radix10(MIN(offset / (long double)size * 100, 100), p);
+    p = FormatUint32(p, MIN(offset / (long double)size * 100, 100));
     p = stpcpy(p, "%-");
-    p += uint64toarray_radix10(
-        MIN((offset + ((tyn * txn) << zoom)) / (long double)size * 100, 100),
-        p);
+    p = FormatUint32(
+        p,
+        MIN((offset + ((tyn * txn) << zoom)) / (long double)size * 100, 100));
     p = stpcpy(p, "% ");
   }
-  p += uint64toarray_radix10(1L << zoom, p);
+  p = FormatUint32(p, 1L << zoom);
   p = stpcpy(p, "x\e[J");
   PreventBufferbloat();
   for (i = 0, n = p - buffer; i < n; i += got) {
@@ -797,7 +799,7 @@ static void Zoom(long have) {
     n >>= 1;
   }
   if (n < tyn * txn) {
-    memset(canvas + n, 0, canvassize - n);
+    bzero(canvas + n, canvassize - n);
   }
   if (have != -1) {
     n = have >> zoom;
@@ -817,7 +819,7 @@ static void FileZoom(void) {
   have = MIN(displaysize, size - offset);
   have = pread(fd, canvas, have, offset);
   have = MAX(0, have);
-  memset(canvas + have, 0, canvassize - have);
+  bzero(canvas + have, canvassize - have);
   Zoom(have);
   Render();
 }
@@ -910,10 +912,10 @@ static void GetOpts(int argc, char *argv[]) {
   }
   if (pid) {
     p = stpcpy(path, "/proc/");
-    p += int64toarray_radix10(pid, p);
+    p = FormatInt64(p, pid);
     stpcpy(p, "/mem");
     p = stpcpy(mapspath, "/proc/");
-    p += int64toarray_radix10(pid, p);
+    p = FormatInt64(p, pid);
     stpcpy(p, "/maps");
   } else {
     if (optind == argc) {
@@ -926,7 +928,7 @@ static void GetOpts(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-  if (!NoDebug()) showcrashreports();
+  if (!NoDebug()) ShowCrashReports();
   out = 1;
   GetOpts(argc, argv);
   Open();

@@ -72,10 +72,14 @@
    └────────────┴─────────────┴────────────────────────────────┴────────────┘ */
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/mem.h"
+#include "libc/mem/gc.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/str/strwidth.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
+#include "libc/x/xgetline.h"
 
 #define IsSpace(C)  ((C) == ' ')
 #define IsPipe(C)   ((C) == '|' || (C) == u'│')
@@ -150,9 +154,9 @@ static void DoIt(int y, int x) {
 int main(int argc, char *argv[]) {
   char *s;
   int y, x;
-  showcrashreports();
+  ShowCrashReports();
   f = stdin;
-  while ((s = chomp(xgetline(f)))) {
+  while ((s = _chomp(xgetline(f)))) {
     n = strwidth(s, 0);
     xn = MAX(xn, n);
     T = xrealloc(T, ++yn * sizeof(*T));
@@ -160,14 +164,14 @@ int main(int argc, char *argv[]) {
   }
   xn += 1000;
   L = xmalloc((yn + 2) * sizeof(*L));
-  L[0] = utf8toutf16(gc(xasprintf(" %*s ", xn, " ")), -1, 0);
+  L[0] = utf8to16(_gc(xasprintf(" %*s ", xn, " ")), -1, 0);
   for (y = 0; y < yn; ++y) {
     s = xasprintf(" %s%*s ", T[y], xn - n, " ");
-    L[y + 1] = utf8toutf16(s, -1, 0);
+    L[y + 1] = utf8to16(s, -1, 0);
     free(T[y]);
     free(s);
   }
-  L[yn + 2 - 1] = utf8toutf16(gc(xasprintf(" %*s ", xn, " ")), -1, 0);
+  L[yn + 2 - 1] = utf8to16(_gc(xasprintf(" %*s ", xn, " ")), -1, 0);
   free(T);
   V = xcalloc((yn + 1) * (xn + 1), 1);
   for (y = 1; y <= yn; ++y) {
@@ -183,7 +187,7 @@ int main(int argc, char *argv[]) {
     }
   }
   for (y = 1; y + 1 < yn; ++y) {
-    s = utf16toutf8(L[y], -1, 0);
+    s = utf16to8(L[y], -1, 0);
     n = strlen(s);
     while (n && s[n - 1] == ' ') s[n - 1] = 0, --n;
     puts(s + 1);

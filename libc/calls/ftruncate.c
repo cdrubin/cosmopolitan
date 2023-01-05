@@ -17,26 +17,73 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
- * Changes size of file.
+ * Changes size of open file.
+ *
+ * If the file size is increased, the extended area shall appear as if
+ * it were zero-filled. If your file size is decreased, the extra data
+ * shall be lost.
+ *
+ * This function never changes the file position. This is true even if
+ * ftruncate() causes the position to become beyond the end of file in
+ * which case, the rules described in the lseek() documentation apply.
+ *
+ * Some operating systems implement an optimization, where `length` is
+ * treated as a logical size and the requested physical space won't be
+ * allocated until non-zero values get written into it. Our tests show
+ * this happens on Linux (usually with 4096 byte granularity), FreeBSD
+ * (which favors 512-byte granularity), and MacOS (prefers 4096 bytes)
+ * however Windows, OpenBSD, and NetBSD always reserve physical space.
+ * This may be inspected using fstat() and consulting stat::st_blocks.
  *
  * @param fd must be open for writing
- * @param length may be greater than current current file size, in which
- *      case System V guarantees it'll be zero'd but Windows NT doesn't;
- *      since the prior extends logically and the latter physically
+ * @param length may be greater than current current file size
  * @return 0 on success, or -1 w/ errno
+ * @raise EINVAL if `length` is negative
+ * @raise EINTR if signal was delivered instead
+ * @raise ECANCELED if thread was cancelled in masked mode
+ * @raise EIO if a low-level i/o error happened
+ * @raise EFBIG or EINVAL if `length` is too huge
+ * @raise ENOTSUP if `fd` is a zip file descriptor
+ * @raise EBADF if `fd` isn't an open file descriptor
+ * @raise EINVAL if `fd` is a non-file, e.g. pipe, socket
+ * @raise EINVAL if `fd` wasn't opened in a writeable mode
+ * @raise ENOSYS on bare metal
+ * @cancellationpoint
  * @asyncsignalsafe
+ * @threadsafe
  */
 int ftruncate(int fd, int64_t length) {
-  if (fd < 0) return einval();
-  if (!IsWindows()) {
-    return sys_ftruncate(fd, length, length);
+  int rc;
+  BEGIN_CANCELLATION_POINT;
+
+  if (fd < 0) {
+    rc = ebadf();
+  } else if (__isfdkind(fd, kFdZip)) {
+    rc = enotsup();
+  } else if (IsMetal()) {
+    rc = enosys();
+  } else if (!IsWindows()) {
+    rc = sys_ftruncate(fd, length, length);
+    if (IsNetbsd() && rc == -1 && errno == ENOSPC) {
+      errno = EFBIG;  // POSIX doesn't specify ENOSPC for ftruncate()
+    }
+  } else if (__isfdopen(fd)) {
+    rc = sys_ftruncate_nt(g_fds.p[fd].handle, length);
   } else {
-    if (fd >= g_fds.n) return ebadf();
-    return sys_ftruncate_nt(g_fds.p[fd].handle, length);
+    rc = ebadf();
   }
+
+  END_CANCELLATION_POINT;
+  STRACE("ftruncate(%d, %'ld) → %d% m", fd, length, rc);
+  return rc;
 }

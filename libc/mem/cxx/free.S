@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
-.source	__FILE__
 
 //	Frees memory the C++ way.
 //
@@ -64,7 +63,7 @@ _ZdaPvSt11align_val_t:
 	nop
 //	𝑠𝑙𝑖𝑑𝑒
 	.endfn	_ZdaPvSt11align_val_t,weak
-_ZdaPvm:	
+_ZdaPvm:
 //	operator delete[](void*, unsigned long):
 	nop
 //	𝑠𝑙𝑖𝑑𝑒

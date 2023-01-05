@@ -16,14 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/str/str.h"
-
-static inline noasan uint64_t UncheckedAlignedRead64(const char *p) {
-  return (uint64_t)(255 & p[7]) << 070 | (uint64_t)(255 & p[6]) << 060 |
-         (uint64_t)(255 & p[5]) << 050 | (uint64_t)(255 & p[4]) << 040 |
-         (uint64_t)(255 & p[3]) << 030 | (uint64_t)(255 & p[2]) << 020 |
-         (uint64_t)(255 & p[1]) << 010 | (uint64_t)(255 & p[0]) << 000;
-}
 
 /**
  * Compares NUL-terminated strings.
@@ -33,29 +28,33 @@ static inline noasan uint64_t UncheckedAlignedRead64(const char *p) {
  * @return is <0, 0, or >0 based on uint8_t comparison
  * @asyncsignalsafe
  */
-int strcmp(const char *a, const char *b) {
+noasan int strcmp(const char *a, const char *b) {
   int c;
   size_t i = 0;
   uint64_t v, w, d;
   if (a == b) return 0;
   if ((c = (*a & 255) - (*b & 255))) return c;
-  if (((uintptr_t)a & 7) == ((uintptr_t)b & 7)) {
+  if (!IsTiny() && ((uintptr_t)a & 7) == ((uintptr_t)b & 7)) {
     for (; (uintptr_t)(a + i) & 7; ++i) {
       if (a[i] != b[i] || !b[i]) {
         return (a[i] & 255) - (b[i] & 255);
       }
     }
     for (;; i += 8) {
-      v = UncheckedAlignedRead64(a + i);
-      w = UncheckedAlignedRead64(b + i);
+      v = *(uint64_t *)(a + i);
+      w = *(uint64_t *)(b + i);
       w = (v ^ w) | (~v & (v - 0x0101010101010101) & 0x8080808080808080);
       if (w) {
         i += (unsigned)__builtin_ctzll(w) >> 3;
-        return (a[i] & 255) - (b[i] & 255);
+        break;
       }
     }
   } else {
     while (a[i] == b[i] && b[i]) ++i;
-    return (a[i] & 255) - (b[i] & 255);
   }
+  if (IsAsan()) {
+    __asan_verify(a, i + 1);
+    __asan_verify(b, i + 1);
+  }
+  return (a[i] & 255) - (b[i] & 255);
 }

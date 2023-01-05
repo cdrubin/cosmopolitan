@@ -8,7 +8,7 @@ LIBC_LOG = $(LIBC_LOG_A_DEPS) $(LIBC_LOG_A)
 LIBC_LOG_A = o/$(MODE)/libc/log/log.a
 LIBC_LOG_A_FILES :=					\
 	$(wildcard libc/log/thunks/*)			\
-	$(wildcard libc/log/*)	
+	$(wildcard libc/log/*)
 LIBC_LOG_A_HDRS = $(filter %.h,$(LIBC_LOG_A_FILES))
 LIBC_LOG_A_SRCS_C = $(filter %.c,$(LIBC_LOG_A_FILES))
 LIBC_LOG_A_SRCS_S = $(filter %.S,$(LIBC_LOG_A_FILES))
@@ -26,7 +26,6 @@ LIBC_LOG_A_CHECKS =					\
 	$(LIBC_LOG_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_LOG_A_DIRECTDEPS =					\
-	LIBC_ALG					\
 	LIBC_CALLS					\
 	LIBC_ELF					\
 	LIBC_FMT					\
@@ -35,15 +34,15 @@ LIBC_LOG_A_DIRECTDEPS =					\
 	LIBC_NEXGEN32E					\
 	LIBC_NT_KERNEL32				\
 	LIBC_NT_NTDLL					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
 	LIBC_STUBS					\
 	LIBC_SYSV					\
+	LIBC_SYSV_CALLS					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
+	LIBC_ZIPOS					\
 	THIRD_PARTY_DLMALLOC				\
 	THIRD_PARTY_GDTOA
 
@@ -59,25 +58,30 @@ $(LIBC_LOG_A).pkg:					\
 		$(foreach x,$(LIBC_LOG_A_DIRECTDEPS),$($(x)_A).pkg)
 
 o/$(MODE)/libc/log/backtrace2.o				\
-o/$(MODE)/libc/log/backtrace3.o:			\
+o/$(MODE)/libc/log/backtrace3.o: private		\
 		OVERRIDE_CFLAGS +=			\
 			-fno-sanitize=all
 
+o/$(MODE)/libc/log/checkfail.o: private			\
+		OVERRIDE_CFLAGS +=			\
+			-mgeneral-regs-only
+
+o/$(MODE)/libc/log/watch.o: private			\
+		OVERRIDE_CFLAGS +=			\
+			-ffreestanding
+
+o/$(MODE)/libc/log/watch.o				\
 o/$(MODE)/libc/log/attachdebugger.o			\
-o/$(MODE)/libc/log/backtrace2.o				\
-o/$(MODE)/libc/log/backtrace3.o				\
 o/$(MODE)/libc/log/checkaligned.o			\
 o/$(MODE)/libc/log/checkfail.o				\
 o/$(MODE)/libc/log/checkfail_ndebug.o			\
-o/$(MODE)/libc/log/getsymboltable.o			\
-o/$(MODE)/libc/log/cancolor.o				\
 o/$(MODE)/libc/log/restoretty.o				\
 o/$(MODE)/libc/log/oncrash.o				\
 o/$(MODE)/libc/log/onkill.o				\
 o/$(MODE)/libc/log/startfatal.o				\
 o/$(MODE)/libc/log/startfatal_ndebug.o			\
 o/$(MODE)/libc/log/ubsan.o				\
-o/$(MODE)/libc/log/die.o:				\
+o/$(MODE)/libc/log/die.o: private			\
 		OVERRIDE_CFLAGS +=			\
 			$(NO_MAGIC)
 

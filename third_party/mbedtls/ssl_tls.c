@@ -6142,7 +6142,7 @@ static int ssl_session_load( mbedtls_ssl_session *session,
     start = Read64be(p);
     p += 8;
 
-    session->start = (time_t) start;
+    session->start = (int64_t) start;
 #endif /* MBEDTLS_HAVE_TIME */
 
     /*
@@ -7605,6 +7605,7 @@ static uint16_t ssl_preset_suiteb_ciphersuites[] = {
     MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
     MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384,
+    MBEDTLS_TLS_ECDHE_PSK_WITH_AES_256_GCM_SHA384,
     0
 };
 

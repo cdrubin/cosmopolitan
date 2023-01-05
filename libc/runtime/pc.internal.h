@@ -120,6 +120,7 @@
 #define GDT_LEGACY_DATA 32
 #define GDT_LONG_CODE   40
 #define GDT_LONG_DATA   48
+#define GDT_LONG_TSS    56
 
 #define PIC1         0x20 /* IO base address for master PIC */
 #define PIC2         0xA0 /* IO base address for slave PIC */
@@ -144,26 +145,32 @@
      │        (If this maps 2MB/1GB page and CR4.PGE) Global┐││││││││
      │      (If IsPage 2MB/1GB, see Intel V3A § 11.12) PAT  │││││││││
      │                                                  │   │││││││││
-     │             ┌────────────────────────────────────┤   │││││││││
-     │   Must Be 0┐│ Next Page Table Address (!IsPage)  │   │││││││││
-     │            │├────────────────────────────────────┤   │││││││││
-     │            ││ Physical Address 4KB               │   │││││││││
-     │┌───┐┌─────┐│├───────────────────────────┐        │ign│││││││││
-     ││PKE││ ign │││ Physical Address 2MB      │        │┌┴┐│││││││││
-     ││   ││     ││├──────────────────┐        │        ││ ││││││││││
-     ││   ││     │││ Phys. Addr. 1GB  │        │        ││ ││││││││││
-     ││   ││     │││                  │        │        ││ ││││││││││
+     │            ┌─────────────────────────────────────┤   │││││││││
+     │  Must Be 0┐│ Next Page Table Address (!IsPage)   │   │││││││││
+     │           │├─────────────────────────────────────┤   │││││││││
+     │           ││ Physical Address 4KB                │   │││││││││
+     │┌──┐┌─────┐│├────────────────────────────┐        │ign│││││││││
+     ││PK││ ign │││ Physical Address 2MB       │        │┌┴┐│││││││││
+     ││  ││     ││├───────────────────┐        │        ││ ││││││││││
+     ││  ││     │││ Phys. Addr. 1GB   │        │        ││ ││││││││││
+     ││  ││     │││                   │        │        ││ ││││││││││
      6666555555555544444444443333333333222222222211111111110000000000
      3210987654321098765432109876543210987654321098765432109876543210*/
-#define PAGE_V   /*                                    */ 0b000000001
-#define PAGE_RW  /*                                    */ 0b000000010
-#define PAGE_U   /*                                    */ 0b000000100
-#define PAGE_4KB /*                                    */ 0b010000000
-#define PAGE_2MB /*                                    */ 0b110000000
-#define PAGE_1GB /*                                    */ 0b110000000
-#define PAGE_TA  0x00007ffffffff000
-#define PAGE_PA2 0x00007fffffe00000
-#define PAGE_XD  0x8000000000000000
+#define PAGE_V    /*                                */ 0b000000000001
+#define PAGE_RW   /*                                */ 0b000000000010
+#define PAGE_U    /*                                */ 0b000000000100
+#define PAGE_4KB  /*                                */ 0b000010000000
+#define PAGE_2MB  /*                                */ 0b000110000000
+#define PAGE_1GB  /*                                */ 0b000110000000
+#define PAGE_IGN1 /*                                */ 0b111000000000
+#define PAGE_RSRV /* blinkenlights/libc reservation */ 0b001000000000
+#define PAGE_GROD /* blinkenlights MAP_GROWSDOWN    */ 0b010000000000
+#define PAGE_TA   0x00007ffffffff000
+#define PAGE_PA2  0x00007fffffe00000
+#define PAGE_IGN2 0x07f0000000000000
+#define PAGE_REFC PAGE_IGN2          /* libc reference counting */
+#define PAGE_1REF 0x0010000000000000 /* libc reference counting */
+#define PAGE_XD   0x8000000000000000
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 
@@ -182,7 +189,13 @@ struct IdtDescriptor {
 uint64_t *__get_virtual(struct mman *, uint64_t *, int64_t, bool);
 uint64_t __clear_page(uint64_t);
 uint64_t __new_page(struct mman *);
-void __map_phdrs(struct mman *, uint64_t *, uint64_t);
+uint64_t * __invert_memory_area(struct mman *, uint64_t *, uint64_t, uint64_t,
+                                uint64_t);
+void __map_phdrs(struct mman *, uint64_t *, uint64_t, uint64_t);
+void __reclaim_boot_pages(struct mman *, uint64_t, uint64_t);
+void __ref_page(struct mman *, uint64_t *, uint64_t);
+void __ref_pages(struct mman *, uint64_t *, uint64_t, uint64_t);
+void __unref_page(struct mman *, uint64_t *, uint64_t);
 
 forceinline unsigned char inb(unsigned short port) {
   unsigned char al;

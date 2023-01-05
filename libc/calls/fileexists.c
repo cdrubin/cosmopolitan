@@ -16,14 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
 #include "libc/calls/struct/metastat.internal.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/nt/files.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
@@ -49,9 +51,12 @@ bool fileexists(const char *path) {
   struct ZiposUri zipname;
   uint16_t path16[PATH_MAX];
   e = errno;
-  if (IsAsan() && !__asan_is_valid(path, 1)) return efault();
-  if (weaken(__zipos_open) && weaken(__zipos_parseuri)(path, &zipname) != -1) {
-    if (weaken(__zipos_stat)(&zipname, &st.cosmo) != -1) {
+  if (IsAsan() && !__asan_is_valid_str(path)) {
+    efault();
+    res = false;
+  } else if (_weaken(__zipos_open) &&
+             _weaken(__zipos_parseuri)(path, &zipname) != -1) {
+    if (_weaken(__zipos_stat)(&zipname, &st.cosmo) != -1) {
       res = true;
     } else {
       res = false;
@@ -69,8 +74,7 @@ bool fileexists(const char *path) {
   } else {
     res = false;
   }
-  SYSDEBUG("fileexists(%s) -> %s %s", path, res ? "true" : "false",
-           res ? "" : strerror(errno));
+  STRACE("%s(%#s) → %hhhd% m", "fileexists", path, res);
   if (!res && (errno == ENOENT || errno == ENOTDIR)) {
     errno = e;
   }

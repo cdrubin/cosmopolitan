@@ -16,16 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
 #include "libc/runtime/memtrack.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/stdio.h"
+
+STATIC_YOINK("strerror_wr");
 
 /**
  * Handles failure of CHECK_xx() macros.
@@ -39,62 +45,32 @@ relegated void __check_fail(const char *suffix, const char *opstr,
   size_t i;
   va_list va;
   char hostname[32];
+  strace_enabled(-1);
+  ftrace_enabled(-1);
   e = errno;
-  p = __fatalbuf;
   __start_fatal(file, line);
   __stpcpy(hostname, "unknown");
   gethostname(hostname, sizeof(hostname));
-  p = __stpcpy(p, "check failed on ");
-  p = __stpcpy(p, hostname);
-  p = __stpcpy(p, " pid ");
-  p = __intcpy(p, __getpid());
-  p = __stpcpy(p, "\n");
-  p = __stpcpy(p, "\tCHECK_");
-  for (; *suffix; ++suffix) {
-    *p++ = *suffix - ('a' <= *suffix && *suffix <= 'z') * 32;
-  }
-  p = __stpcpy(p, "(");
-  p = __stpcpy(p, wantstr);
-  p = __stpcpy(p, ", ");
-  p = __stpcpy(p, gotstr);
-  p = __stpcpy(p, ");\n\t\t → 0x");
-  p = __hexcpy(p, want);
-  p = __stpcpy(p, " (");
-  p = __stpcpy(p, wantstr);
-  p = __stpcpy(p, ")\n\t\t");
-  p = __stpcpy(p, opstr);
-  p = __stpcpy(p, " 0x");
-  p = __hexcpy(p, got);
-  p = __stpcpy(p, " (");
-  p = __stpcpy(p, gotstr);
-  p = __stpcpy(p, ")\n");
+  kprintf("check failed on %s pid %d\n"
+          "\tCHECK_%^s(%s, %s);\n"
+          "\t\t → %p (%s)\n"
+          "\t\t%s %p (%s)\n",       //
+          hostname, getpid(),       //
+          suffix, wantstr, gotstr,  //
+          want, wantstr,            //
+          opstr, got, gotstr);
   if (!isempty(fmt)) {
-    *p++ = '\t';
+    kprintf("\t");
     va_start(va, fmt);
-    p += (vsprintf)(p, fmt, va);
+    kvprintf(fmt, va);
     va_end(va);
-    *p++ = '\n';
+    kprintf("\n");
   }
-  p = __stpcpy(p, "\t");
-  p = __stpcpy(p, strerror(e));
-  p = __stpcpy(p, "\n\t");
-  p = __stpcpy(p, SUBTLE);
-  p = __stpcpy(p, program_invocation_name);
-  if (__argc > 1) p = __stpcpy(p, " \\");
-  p = __stpcpy(p, RESET);
-  p = __stpcpy(p, "\n");
-  __write(__fatalbuf, p - __fatalbuf);
+  kprintf("\t%m\n\t%s%s", SUBTLE, program_invocation_name);
   for (i = 1; i < __argc; ++i) {
-    p = __fatalbuf;
-    p = __stpcpy(p, "\t\t");
-    p = __stpcpy(p, __argv[i]);
-    if (i < __argc - 1) p = __stpcpy(p, " \\");
-    p = __stpcpy(p, "\n");
+    kprintf(" %s", __argv[i]);
   }
-  if (!IsTiny() && e == ENOMEM) {
-    __write("\n", 1);
-    PrintMemoryIntervals(2, &_mmi);
-  }
+  kprintf("%s\n", RESET);
   __die();
   unreachable;
 }

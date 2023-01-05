@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/errfuns.h"
 
@@ -26,7 +27,7 @@
  * @param af can be AF_INET or AF_INET6
  * @param src is the binary-encoded address, e.g. &addr->sin_addr
  * @param dst is the output string buffer
- * @param size needs to be 16+ for IPv4 and 72+ for IPv6
+ * @param size needs to be 16+ for IPv4 and 46+ for IPv6
  * @return dst on success or NULL w/ errno
  */
 const char *inet_ntop(int af, const void *src, char *dst, uint32_t size) {
@@ -34,23 +35,24 @@ const char *inet_ntop(int af, const void *src, char *dst, uint32_t size) {
   unsigned char *ip;
   int i, t, a, b, c, d;
   p = dst;
+  if (!size) return dst;
   if ((ip = src)) {
     if (af == AF_INET) {
       if (size >= 16) {
-        p += uint64toarray_radix10(ip[0], p);
+        p = FormatUint32(p, ip[0]);
         *p++ = '.';
-        p += uint64toarray_radix10(ip[1], p);
+        p = FormatUint32(p, ip[1]);
         *p++ = '.';
-        p += uint64toarray_radix10(ip[2], p);
+        p = FormatUint32(p, ip[2]);
         *p++ = '.';
-        p += uint64toarray_radix10(ip[3], p);
+        p = FormatUint32(p, ip[3]);
         *p = '\0';
         return dst;
       } else {
         enospc();
       }
     } else if (af == AF_INET6) {
-      if (size >= 16 * 4 + 8) {
+      if (size >= 46) {
         t = 0;
         i = 0;
         for (i = 0; i < 16; i += 2) {
@@ -98,6 +100,5 @@ const char *inet_ntop(int af, const void *src, char *dst, uint32_t size) {
   } else {
     einval();
   }
-  if (size) dst[0] = '\0';
-  return NULL;
+  return 0;
 }

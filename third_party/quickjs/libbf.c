@@ -22,9 +22,10 @@
  * THE SOFTWARE.
  */
 #include "libc/assert.h"
-#include "libc/bits/avxintrin.internal.h"
-#include "libc/bits/likely.h"
+#include "libc/intrin/avxintrin.internal.h"
+#include "libc/intrin/likely.h"
 #include "libc/inttypes.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "third_party/quickjs/cutils.h"
@@ -297,7 +298,7 @@ int bf_set(bf_t *r, const bf_t *a)
     }
     r->sign = a->sign;
     r->expn = a->expn;
-    memcpy(r->tab, a->tab, a->len * sizeof(limb_t));
+    if (a->len) memcpy(r->tab, a->tab, a->len * sizeof(limb_t));
     return 0;
 }
 

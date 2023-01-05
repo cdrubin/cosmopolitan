@@ -7,7 +7,9 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
+#include "libc/intrin/kprintf.h"
 #include "libc/log/log.h"
+#include "libc/runtime/symbols.internal.h"
 
 /**
  * @fileoverview How to print backtraces and cpu state on crash.
@@ -22,8 +24,14 @@
  *     o//examples/crashreport.com
  */
 
-int main(int argc, char *argv[]) {
+noubsan int main(int argc, char *argv[]) {
+
+  kprintf("----------------\n");
+  kprintf(" THIS IS A TEST \n");
+  kprintf("SIMULATING CRASH\n");
+  kprintf("----------------\n");
+
   volatile int64_t x;
-  showcrashreports();
+  ShowCrashReports();
   return 1 / (x = 0);
 }

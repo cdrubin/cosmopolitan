@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
@@ -52,6 +53,7 @@ TEST(readansi, test) {
   EXPECT_STREQ("\xc2\x9bM", b);
   EXPECT_EQ(0, readansi(fds[0], b, sizeof(b)));
   EXPECT_STREQ("", b);
+  close(fds[0]);
   ASSERT_NE(-1, wait(&ws));
   ASSERT_TRUE(WIFEXITED(ws));
   ASSERT_EQ(0, WEXITSTATUS(ws));
@@ -73,6 +75,7 @@ TEST(readansi, testOperatingSystemCommand) {
   EXPECT_STREQ(s, b);
   EXPECT_EQ(0, readansi(fds[0], b, sizeof(b)));
   EXPECT_STREQ("", b);
+  close(fds[0]);
   ASSERT_NE(-1, wait(&ws));
   ASSERT_TRUE(WIFEXITED(ws));
   ASSERT_EQ(0, WEXITSTATUS(ws));

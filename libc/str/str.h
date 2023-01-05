@@ -1,18 +1,13 @@
 #ifndef COSMOPOLITAN_LIBC_STR_STR_H_
 #define COSMOPOLITAN_LIBC_STR_STR_H_
+
+#define INVALID_CODEPOINT 0xfffd
+
+#define _tolower(u) (0040 | (u))
+#define _toupper(u) (0137 & (u))
+
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § characters » usas x3.4-1967                               ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│─╝
-  fourth age telecommunications */
-
-extern const int8_t kHexToInt[256];
-extern const uint8_t gperf_downcase[256];
-extern const uint8_t kToLower[256];
-extern const uint8_t kToUpper[256];
-extern const uint8_t kBase36[256];
-extern const char16_t kCp437[256];
 
 int isascii(int);
 int isspace(int);
@@ -29,38 +24,9 @@ int isgraph(int);
 int tolower(int);
 int ispunct(int);
 int toupper(int);
+int toascii(int);
 int hextoint(int);
-int cescapec(int);
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § characters » thompson-pike encoding                       ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│─╝
-  fifth age telecommunications
-
-      0123456789abcdef
-    ┌0─ ☺☻♥♦♣♠•◘○◙♂♀♪♫☼┬───Control
-    └1─►◄↕‼¶§▬↨↑↓→←∟↔▲▼┘
-    ┌2─ !"#$%&'()*+,-./┐
-    │3 0123456789:;<=>?│
-    │4 @ABCDEFGHIJKLMNO├───ASA x3.4-1967
-    │5 PQRSTUVWXYZ[\]^_│
-    │6 `abcdefghijklmno│
-    └7─pqrstuvwxyz{|}~⌂┘
-    ┌8─ÇüéâäàåçêëèïîìÄÅ┐
-    │9 ÉæÆôöòûùÿÖÜ¢£¥€ƒ├───Thompson-Pike Continuation
-    │a á¡óúñÑªº¿⌐¬½¼¡«»│    (not really characters)
-    └b─░▒▓│┤╡╢╖╕╣║╗╝╜╛┐┘
-    ┌c─└┴┬├─┼╞╟╚╔╩╦╠═╬╧┬───1 Continuation will follow
-    └d─╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀┘
-    ─e─αßΓπΣσμτΦΘΩδ∞φε∩────2 Continuations will follow
-     f─≡±≥≤⌠⌡÷≈°∙·√ⁿ²■λ
-       │      ││  │││└┤
-       │      ││  │└┤ └───5 Continuations follow (and is negative)
-       │      │└─┬┘ └─────5 Continuations follow (note: -1=λ┐┐┐┐┐)
-       └───┬──┘  └────────4 Continuations follow
-           └──────────────3 Continuations follow */
-
-#define INVALID_CODEPOINT 0xfffd
+int _cescapec(int);
 
 int iswalnum(wint_t);
 int iswalpha(wint_t);
@@ -78,17 +44,14 @@ int iswseparator(wint_t);
 wint_t towlower(wint_t);
 wint_t towupper(wint_t);
 
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § strings                                                   ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
 void bzero(void *, size_t) memcpyesque;
 void *memset(void *, int, size_t) memcpyesque;
 void *memmove(void *, const void *, size_t) memcpyesque;
 void *memcpy(void *restrict, const void *restrict, size_t) memcpyesque;
 void *mempcpy(void *restrict, const void *restrict, size_t) memcpyesque;
+char *hexpcpy(char *restrict, const void *restrict, size_t) memcpyesque;
 void *memccpy(void *restrict, const void *restrict, int, size_t) memcpyesque;
-void *memeqmask(void *, const void *, const void *, size_t) memcpyesque;
+void bcopy(const void *, void *, size_t) memcpyesque;
 void explicit_bzero(void *, size_t);
 
 int bcmp(const void *, const void *, size_t) strlenesque;
@@ -118,6 +81,7 @@ wchar_t *wcschr(const wchar_t *, wchar_t) strlenesque;
 wchar_t *wmemchr(const wchar_t *, wchar_t, size_t) strlenesque;
 wchar_t *wcschrnul(const wchar_t *, wchar_t) strlenesque returnsnonnull;
 char *strstr(const char *, const char *) strlenesque;
+char *strcasestr(const char *, const char *) strlenesque;
 char16_t *strstr16(const char16_t *, const char16_t *) strlenesque;
 wchar_t *wcsstr(const wchar_t *, const wchar_t *) strlenesque;
 void *rawwmemchr(const void *, wchar_t) strlenesque returnsnonnull;
@@ -140,7 +104,7 @@ void *memrchr(const void *, int, size_t) strlenesque;
 char16_t *strrchr16(const char16_t *, int) strlenesque;
 void *memrchr16(const void *, int, size_t) strlenesque;
 wchar_t *wcsrchr(const wchar_t *, int) strlenesque;
-void *wmemrchr(const void *, wchar_t, size_t) strlenesque;
+void *wmemrchr(const wchar_t *, wchar_t, size_t) strlenesque;
 char *strpbrk(const char *, const char *) strlenesque;
 char16_t *strpbrk16(const char16_t *, const char16_t *) strlenesque;
 wchar_t *wcspbrk(const wchar_t *, const wchar_t *) strlenesque;
@@ -172,17 +136,16 @@ wchar_t *wcsncat(wchar_t *, const wchar_t *, size_t) memcpyesque;
 char *strncpy(char *, const char *, size_t) memcpyesque;
 char *strtok(char *, const char *) paramsnonnull((2)) libcesque;
 char *strtok_r(char *, const char *, char **) paramsnonnull((2, 3));
-uint16_t *strcpyzbw(uint16_t *, const char *) memcpyesque;
 wchar_t *wcstok(wchar_t *, const wchar_t *, wchar_t **) paramsnonnull((2, 3));
 char *wstrtrunc(uint16_t *) memcpyesque;
 char *wstrntrunc(uint16_t *, size_t) memcpyesque;
-bool startswith(const char *, const char *) strlenesque;
-bool startswithi(const char *, const char *) strlenesque;
-bool startswith16(const char16_t *, const char16_t *) strlenesque;
-bool wcsstartswith(const wchar_t *, const wchar_t *) strlenesque;
-bool endswith(const char *, const char *) strlenesque;
-bool endswith16(const char16_t *, const char16_t *) strlenesque;
-bool wcsendswith(const wchar_t *, const wchar_t *) strlenesque;
+bool _startswith(const char *, const char *) strlenesque;
+bool _startswithi(const char *, const char *) strlenesque;
+bool _startswith16(const char16_t *, const char16_t *) strlenesque;
+bool _wcsstartswith(const wchar_t *, const wchar_t *) strlenesque;
+bool _endswith(const char *, const char *) strlenesque;
+bool _endswith16(const char16_t *, const char16_t *) strlenesque;
+bool _wcsendswith(const wchar_t *, const wchar_t *) strlenesque;
 const char *IndexDoubleNulString(const char *, unsigned) strlenesque;
 int strverscmp(const char *, const char *);
 wchar_t *wmemset(wchar_t *, wchar_t, size_t) memcpyesque;
@@ -192,38 +155,25 @@ wchar_t *wmempcpy(wchar_t *, const wchar_t *, size_t) memcpyesque;
 wchar_t *wmemmove(wchar_t *, const wchar_t *, size_t) memcpyesque;
 void *tinymemccpy(void *, const void *, int, size_t) memcpyesque;
 void *memmem(const void *, size_t, const void *, size_t) libcesque nosideeffect;
-char *strerror(int) returnsnonnull nothrow nocallback;
+ssize_t strfmon(char *, size_t, const char *, ...);
 long a64l(const char *);
 char *l64a(long);
 
-char *strntolower(char *, size_t);
-char *strtolower(char *) paramsnonnull();
-char *strntoupper(char *, size_t);
-char *strtoupper(char *) paramsnonnull();
-char *chomp(char *);
-char16_t *chomp16(char16_t *);
-wchar_t *wchomp(wchar_t *);
-bool IsText(const void *, size_t);
-bool IsUtf8(const void *, size_t);
-bool _isabspath(const char *) strlenesque;
-bool escapedos(char16_t *, unsigned, const char16_t *, unsigned);
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § strings » multibyte                                       ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
+char *strntolower(char *, size_t) libcesque;
+char *strtolower(char *) libcesque paramsnonnull();
+char *strntoupper(char *, size_t) libcesque;
+char *strtoupper(char *) libcesque paramsnonnull();
+char *_chomp(char *) libcesque;
+char16_t *_chomp16(char16_t *) libcesque;
+wchar_t *_wchomp(wchar_t *) libcesque;
+bool _istext(const void *, size_t) libcesque;
+bool _isutf8(const void *, size_t) libcesque;
+bool _escapedos(char16_t *, unsigned, const char16_t *, unsigned) libcesque;
 
 typedef unsigned mbstate_t;
 
 axdx_t tprecode8to16(char16_t *, size_t, const char *);
 axdx_t tprecode16to8(char *, size_t, const char16_t *);
-int strcmp8to16(const char *, const char16_t *) strlenesque;
-int strncmp8to16(const char *, const char16_t *, size_t) strlenesque;
-int strcasecmp8to16(const char *, const char16_t *) strlenesque;
-int strncasecmp8to16(const char *, const char16_t *, size_t) strlenesque;
-int strcmp16to8(const char16_t *, const char *) strlenesque;
-int strncmp16to8(const char16_t *, const char *, size_t) strlenesque;
-int strcasecmp16to8(const char16_t *, const char *) strlenesque;
-int strncasecmp16to8(const char16_t *, const char *, size_t) strlenesque;
 wchar_t *wcsncpy(wchar_t *, const wchar_t *, size_t);
 int mbtowc(wchar_t *, const char *, size_t);
 size_t mbrtowc(wchar_t *, const char *, size_t, mbstate_t *);
@@ -254,19 +204,19 @@ typedef unsigned wctype_t;
 wctype_t wctype(const char *) strlenesque;
 int iswctype(wint_t, wctype_t) pureconst;
 
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § strings » system                                          ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
+typedef const int *wctrans_t;
+wctrans_t wctrans(const char *);
+wint_t towctrans(wint_t, wctrans_t);
 
 char *strsignal(int) returnsnonnull libcesque;
+char *strsignal_r(int, char[hasatleast 15]) returnsnonnull libcesque;
+char *strerror(int) returnsnonnull dontthrow nocallback;
+int strerror_r(int, char *, size_t) dontthrow nocallback;
+int strerror_wr(int, uint32_t, char *, size_t) dontthrow nocallback;
+char *_strerrno(int) nosideeffect libcesque;
+char *_strerdoc(int) nosideeffect libcesque;
+int __xpg_strerror_r(int, char *, size_t) dontthrow nocallback;
 
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-/* gcc rewrites to memset otherwise :'( */
-void __bzero(void *, size_t) asm("bzero") memcpyesque;
-#define bzero(DEST, SIZE)                                      \
-  ((void)((__builtin_constant_p(SIZE)) ? memset(DEST, 0, SIZE) \
-                                       : __bzero(DEST, SIZE)))
-#endif /* __GNUC__ && !__STRICT_ANSI__ */
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_STR_STR_H_ */

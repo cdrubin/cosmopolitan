@@ -16,13 +16,15 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/intrin/strace.internal.h"
 #include "libc/dce.h"
-#include "libc/sysv/consts/prot.h"
-#include "libc/sysv/consts/nr.h"
-#include "libc/sysv/consts/map.h"
 #include "libc/macros.internal.h"
-#include "libc/sysv/consts/prot.h"
 #include "libc/nexgen32e/macros.h"
+#include "libc/sysv/consts/sig.h"
+#include "libc/thread/posixthread.internal.h"
+#include "libc/sysv/consts/nr.h"
+
+#define SIG_IGN 1
 
 /*                                           ▄▄▄
                        ▄▄▄                    ▀▓▓▒▄
@@ -102,15 +104,80 @@ __hostos:
 __systemfive:
 	.quad	0
 	.endobj	__systemfive,globl,hidden
+__pid:	.quad	0
+	.endobj	__pid,globl,hidden
 	.previous
 
-	.privileged
+systemfive_cp:
+	push	%rbp
+	mov	%rsp,%rbp		# so backtraces work
+systemfive_cancellable:			# our pthread_cancel() miracle code
+	cmpb	$0,__tls_enabled(%rip)	# inspired by the musl libc design!
+	je	1f			# we handle linux and bsd together!
+	mov	%fs:0,%r10		# CosmoTib::tib_self
+	mov	0x28(%r10),%r10		# CosmoTib::tib_pthread
+	test	%r10,%r10		# is it a posix thread?
+	jz	1f			# it's spawn() probably
+	testb	$PT_NOCANCEL,0x00(%r10)	# PosixThread::flags
+	jnz	1f			# canceler no cancelling
+#if IsModeDbg()
+	testb	$PT_INCANCEL,0x00(%r10)
+	jz	5f
+#endif
+	cmp	$0,0x04(%r10)		# PosixThread::cancelled
+	jne	systemfive_cancel	# we will tail call below
+1:	mov	%rcx,%r10		# move the fourth argument
+	clc				# no cancellable system calls exist
+	syscall				# that have 7+ args on the bsd OSes
+systemfive_cancellable_end:		# i/o calls park here for long time
+	pop	%rbp
+	jnc	2f
+	neg	%rax			# turns bsd errno to system v errno
+2:	cmp	$-4095,%rax		# but we still check again on eintr
+	jae	3f			# branch because system call failed
+	ret				# done if the system call succeeded
+3:	neg	%eax			# now examine the nature of failure
+	cmp	EINTR(%rip),%eax	# did the SIGTHR cancel our IO call
+	jne	systemfive_errno	# werent interrupted by OnSigCancel
+	cmpb	$0,__tls_enabled(%rip)	# make sure it's safe to grab %fs:0
+	je	systemfive_errno	# tls is disabled we can't continue
+	mov	%fs:0,%rcx		# CosmoTib::tib_self
+	mov	0x28(%rcx),%rcx		# CosmoTib::tib_pthread
+	test	%rcx,%rcx		# is it a posix thread?
+	jz	systemfive_errno	# it's spawn() probably
+	testb	$PT_NOCANCEL,0x00(%rcx)	# PosixThread::flags
+	jnz	systemfive_errno	# cancellation is disabled
+	cmp	$0,0x04(%rcx)		# PosixThread::cancelled
+	je	systemfive_errno	# we aren't actually cancelled
+	jmp	4f			# now we are in fact cancelled
+systemfive_cancel:			# SIGTHR will jump here too
+	pop	%rbp
+4:	jmp	_pthread_cancel_sys	# tail call
+	.weak	_pthread_cancel_sys	# must be linked if we're cancelled
+#if IsModeDbg()
+not_a_cancellation_point:		# need BEGIN/END_CANCELLATION_POINT
+	nop
+	.weak	report_cancellation_point
+5:	ezlea	report_cancellation_point,cx
+	test	%rcx,%rcx
+	jz	6f
+	call	*%rcx
+6:	ud2
+	nop
+#endif
+	.globl	systemfive_cancellable_end
+	.globl	systemfive_cancellable
+	.globl	systemfive_cancel
+	.endfn	systemfive_cp
+
 .Lanchorpoint:
 #if SupportsLinux() || SupportsMetal()
 systemfive_linux:
-	and	$0xfff,%eax
-	cmp	$0xfff,%eax
+	and	$0xfff,%eax		# remove nonlinux bits from ordinal
+	cmp	$0xfff,%eax		# checks if unsupported by platform
 	je	systemfive_enosys	# never taken branches cost nothing
+	btr	$11,%eax		# 0x800 means a call is cancellable
+	jc	systemfive_cp		# it is handled by the holiest code
 	mov	%rcx,%r10		# syscall instruction clobbers %rcx
 	push	%rbp			# linux never reads args from stack
 	mov	%rsp,%rbp		# having frame will help backtraces
@@ -126,7 +193,9 @@ systemfive_error:
 	.endfn	systemfive_error,globl,hidden
 #endif
 systemfive_errno:
-	mov	%eax,errno(%rip)	# normalize to c library convention
+	xchg	%eax,%ecx
+	.errno
+	mov	%ecx,(%rax)		# normalize to c library convention
 	push	$-1			# negative one is only error result
 	pop	%rax			# the push pop is to save code size
 	ret
@@ -162,7 +231,9 @@ systemfive_bsdscrub:
 systemfive_bsd:
 	cmp	$0xfff,%ax
 	je	systemfive_enosys
-	mov	%rcx,%r10		# note: we do not create a stack frame
+	btr	$11,%eax		# checks/reset the 800 cancellable bit
+	jc	systemfive_cp
+	mov	%rcx,%r10
 	syscall				# bsd will need arg on stack sometimes
 	jc	systemfive_errno	# bsd sets carry flag if %rax is errno
 	ret
@@ -196,27 +267,36 @@ systemfive_xnu:
 	.init.start 300,_init_systemfive
 	push	%rbx
 	push	%rsi
-	mov	(%rdi),%eax
+//	Detect the operating system.
+	mov	(%rdi),%eax			# __hostos
+#if SupportsWindows() || SupportsXnu() || SupportsFreebsd()
+//	set by	libc/ape.S		for XNU
+//	set by	libc/crt/crt.S		for XNU/FreeBSD
+//	set by	libc/nt/winmain.greg.c	for New Technology
+	test	%eax,%eax
+	jnz	_init_systemfive_detected	# os is already known
+#endif
 #if SupportsOpenbsd()
 	cmpq	$0,(%r15)			# OpenBSD has no auxv
 	jnz	0f
-	mov	$OPENBSD,%al
+	mov	$_HOSTOPENBSD,%al
+	jmp	_init_systemfive_detected
 0:
 #endif
 #if SupportsNetbsd()
 	xor	%ecx,%ecx
-0:	cmpq	$2014,(%r15,%rcx,8)		# NetBSD AT_EXECFN
+0:	cmpq	$2014,(%r15,%rcx,8)		# NetBSD's AT_EXECFN
 	jne	1f
-	mov	$NETBSD,%al
+	mov	$_HOSTNETBSD,%al
+	jmp	_init_systemfive_detected
 1:	cmpq	$0,(%r15,%rcx,8)
 	lea	2(%ecx),%ecx
 	jnz	0b
 2:
 #endif
-	test	%eax,%eax
-	jnz	1f
-	mov	$LINUX,%al
-1:	stosq	#→ __hostos
+	mov	$_HOSTLINUX,%al
+_init_systemfive_detected:
+	stosq	#→ __hostos
 	bsr	%eax,%eax
 	mov	$_init_systemfive_jmptab,%ebx
 	movzbl	(%rbx,%rax),%eax
@@ -304,122 +384,70 @@ _init_systemfive_magnums:
 	jnz	3b
 	xchg	%rbx,%rax
 	stosq
+#ifdef SYSDEBUG
+	inc	%r8d
+#endif
 	jmp	2b
-5:	pop	%rdi
+5:	nop
+#ifdef SYSDEBUG
+	push	%rdi
+	push	%rsi
+	push	%r8
+	call	__describe_os
+	mov	%rax,%rdx
+	pop	%r8
+	.weak	__stracef
+	ezlea	__stracef,ax
+	test	%rax,%rax
+	jz	5f
+	ezlea	.Llog,di
+	mov	%r8d,%esi
+	call	*%rax
+5:	pop	%rsi
+	pop	%rdi
+#endif /* DEBUGSYS */
+	pop	%rdi
 	pop	%rsi
 	pop	%rbx
 //	𝑠𝑙𝑖𝑑𝑒
 	.endfn	_init_systemfive_magnums
-#if SupportsSystemv() && !defined(TINY)
-_init_systemfive_stack:					# determinism ftw!
-#if SupportsWindows() || SupportsMetal()
-	testb	$WINDOWS|METAL,__hostos(%rip)
-	jnz	_init_systemfive_done
-#endif
-	push	%rdi
-	push	%rsi
-	mov	__NR_mmap,%eax
-	movabs	$ape_stack_vaddr,%rdi
-	mov	$ape_stack_memsz,%esi
-	mov	$PROT_READ|PROT_WRITE,%edx
-	mov	$MAP_PRIVATE|MAP_FIXED,%r10d
-	or	MAP_ANONYMOUS,%r10d
-	or	$-1,%r8d
-	xor	%r9d,%r9d
-	push	%rdi					# vaddr of stack
-	push	%rsi					# size of stack
-	push	%r9					# openbsd:pad
-	push	%r9					# openbsd:align
-#if SupportsOpenbsd()
-	testb	IsOpenbsd()
-	jz	0f
-	syscall						# openbsd:dubstack
-	jc	1f
-	mov	__NR_mmap,%eax
-#endif
-0:	or	MAP_GROWSDOWN,%r10d			# openbsd:mapstack
-	clc
+#if SupportsSystemv()
+_init_systemfive_pid:
+	ezlea	__hostos,cx
+	mov	(%rcx),%al
+	mov	(%rdi),%eax
+	testb	$_HOSTWINDOWS|_HOSTMETAL,(%rcx)
+	jnz	1f
+	mov	__NR_getpid,%eax
 	syscall
-	pop	%r9
-	pop	%r9
-	pop	%r9					# size of stack
-	pop	%r11					# vaddr of stack
-	jnc	2f
-1:	mov	%eax,%edi
-	mov	__NR_exit_group,%eax
-	syscall
-2:	test	%rax,%rax
-	js	1b
-
-//	prevent operating system from auto-mapping stack
-//	we guarantee stack overflows are always detected
-//	so long as you never use -DSTACK_FRAME_UNLIMITED
-//	TODO: Why does this fail sometimes with FreeBSD?
-	testb	IsFreebsd()
-	jnz	9f
+1:	stosq
+	.endfn	_init_systemfive_pid
+#endif
+#if SupportsBsd() && !defined(TINY)
+_init_systemfive_sigsys:
+	testb	IsBsd()					# BSDs will trap SIGSYS!
+	jz	1f					# We want ENOSYS instead
+	push	%rdi					# XNU removed some calls
+	push	%rsi					# in past, so this makes
+	xor	%eax,%eax				# troubleshooting easier
+	push	%rax					# but it's non-essential
 	push	%rax
-	push	%rdx
-	push	%r11
-	mov	__NR_mprotect,%eax
-	mov	$PAGESIZE,%esi
-	xor	%edx,%edx				# PROT_NONE
+	push	%rax
+	push	%rax
+	push	%rax
+	push	$SIG_IGN				# sigaction_meta size 48
+	mov	__NR_sigaction,%eax			# mag
+	mov	SIGSYS,%edi				# sig
+	mov	%rsp,%rsi				# new
+	xor	%edx,%edx				# old
+	mov	$8,%r10d				# for linux
+	xor	%r8d,%r8d				# for netbsd
 	syscall
-	pop	%r11
-	pop	%rdx
-	pop	%rax
-9:	
-
-//	update the memory intervals
-//	m.i		0	4
-//	m.n		8	4
-//	m.p		16	8
-//	m.p[0].x	24	4
-//	m.p[0].y	28	4
-//	m.p[0].h	32	8
-//	m.p[0].prot	40	4
-//	m.p[0].flags	44	4
-	.weak	_mmi
-	ezlea	_mmi,cx
-	test	%rcx,%rcx
-	push	%r9					# save the stack size
-	jz	3f
-	lea	-1(%r11,%r9),%r9			# need incl. interval
-	shr	$16,%r11				# for the stack range
-	shr	$16,%r9
-	movb	$1,(%rcx)				# _mmi.i
-	mov	%r11d,24(%rcx)				# _mmi.s[0].x
-	mov	%r9d,28(%rcx)				# _mmi.s[0].y
-	orq	$-1,32(%rcx)				# _mmi.s[0].h
-	mov	%edx,40(%rcx)				# _mmi.s[0].prot
-	mov	%r10d,44(%rcx)				# _mmi.s[0].flags
-3:	pop	%r9					# restore stack size
+	add	$6*8,%rsp
 	pop	%rsi
 	pop	%rdi
-	leave
-//	switch stacks
-	pop	%rcx
-	lea	(%rax,%r9),%rsp
-	sub	$ape_stack_align,%rsp			# openbsd:stackbound
-	mov	%rbp,(%rsp)
-	push	%rcx
-	push	%rbp
-	mov	%rsp,%rbp
-//	𝑠𝑙𝑖𝑑𝑒
-_init_systemfive_syscall:
-	mov	__NR_msyscall,%eax			# syscall origin protect
-	cmp	$0xfff,%ax				# openbsd is pretty cool
-	jae	_init_systemfive_done
-	push	%rdi
-	push	%rsi
-	.weak	__privileged_addr
-	.weak	__privileged_size
-	mov	$__privileged_addr,%edi
-	mov	$__privileged_size,%esi
-	syscall
-	pop	%rsi
-	pop	%rdi
-//	𝑠𝑙𝑖𝑑𝑒
-#endif /* TINY */
+1:	.endfn	_init_systemfive_sigsys
+#endif
 _init_systemfive_done:
 	nop
 	.init.end 300,_init_systemfive,globl,hidden
@@ -498,6 +526,10 @@ syscon_windows:/*
 	.globl	syscon_windows
 #endif
 
-	.weak	ape_stack_vaddr
-	.weak	ape_stack_memsz
-	.weak	ape_stack_align
+#ifdef SYSDEBUG
+	.rodata.str1.1
+.Llog:	.ascii	STRACE_PROLOGUE
+	.ascii	"bell system five system call support"
+	.asciz	" %'u magnums loaded on %s\n"
+	.previous
+#endif /* DEBUGSYS */

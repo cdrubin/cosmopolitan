@@ -22,7 +22,7 @@ TOOL_HASH_DIRECTDEPS =				\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_UNICODE				\
+	LIBC_MEM				\
 	LIBC_STUBS
 
 TOOL_HASH_DEPS :=				\
@@ -37,7 +37,7 @@ o/$(MODE)/tool/hash/%.com.dbg:			\
 		o/$(MODE)/tool/hash/%.o		\
 		o/$(MODE)/tool/hash/hash.pkg	\
 		$(CRT)				\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 $(TOOL_HASH_OBJS):				\

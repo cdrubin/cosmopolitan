@@ -16,7 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
+#include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/stat.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -39,8 +41,8 @@ textwindows int sys_fstatat_nt(int dirfd, const char *path, struct stat *st,
            0)) != -1) {
     rc = st ? sys_fstat_nt(fh, st) : 0;
     CloseHandle(fh);
-    return rc;
   } else {
-    return __winerr();
+    rc = __winerr();
   }
+  return __fix_enotdir(rc, path16);
 }

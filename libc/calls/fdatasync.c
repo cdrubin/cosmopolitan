@@ -17,20 +17,40 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
+#include "libc/calls/cp.internal.h"
+#include "libc/calls/struct/stat.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/runtime/runtime.h"
 
 /**
  * Blocks until kernel flushes non-metadata buffers for fd to disk.
  *
  * @return 0 on success, or -1 w/ errno
- * @see fsync(), sync_file_range()
+ * @see sync(), fsync(), sync_file_range()
+ * @see __nosync to secretly disable
+ * @raise ECANCELED if thread was cancelled in masked mode
+ * @raise EINTR if signal was delivered
+ * @cancellationpoint
  * @asyncsignalsafe
  */
 int fdatasync(int fd) {
-  if (!IsWindows()) {
-    return sys_fdatasync(fd);
+  int rc;
+  struct stat st;
+  if (__nosync != 0x5453455454534146) {
+    BEGIN_CANCELLATION_POINT;
+    if (!IsWindows()) {
+      rc = sys_fdatasync(fd);
+    } else {
+      rc = sys_fdatasync_nt(fd);
+    }
+    END_CANCELLATION_POINT;
+    STRACE("fdatasync(%d) → %d% m", fd, rc);
   } else {
-    return sys_fdatasync_nt(fd);
+    rc = fstat(fd, &st);
+    STRACE("fdatasync_fake(%d) → %d% m", fd, rc);
   }
+  return rc;
 }

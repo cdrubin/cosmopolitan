@@ -16,7 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
+#include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/timeval.h"
+#include "libc/calls/struct/timeval.internal.h"
+#include "libc/fmt/conv.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/utime.h"
@@ -26,21 +29,29 @@
 int sys_utimensat_xnu(int dirfd, const char *path, const struct timespec ts[2],
                       int flags) {
   int i;
+  struct stat st;
   struct timeval now, tv[2];
   if (flags) return einval();
   if (!ts || ts[0].tv_nsec == UTIME_NOW || ts[1].tv_nsec == UTIME_NOW) {
     gettimeofday(&now, NULL);
   }
+  if (ts && (ts[0].tv_nsec == UTIME_NOW || ts[1].tv_nsec == UTIME_NOW)) {
+    if (fstatat(dirfd, path, &st, flags) == -1) return -1;
+  }
   if (ts) {
-    for (i = 0; i < 2; ++i) {
-      if (ts[i].tv_nsec == UTIME_NOW) {
-        tv[i] = now;
-      } else if (ts[i].tv_nsec == UTIME_OMIT) {
-        return einval();
-      } else {
-        tv[i].tv_sec = ts[i].tv_sec;
-        tv[i].tv_usec = div1000int64(ts[i].tv_nsec);
-      }
+    if (ts[0].tv_nsec == UTIME_NOW) {
+      tv[0] = now;
+    } else if (ts[0].tv_nsec == UTIME_OMIT) {
+      tv[0] = timespec_totimeval(st.st_atim);
+    } else {
+      tv[0] = timespec_totimeval(ts[0]);
+    }
+    if (ts[1].tv_nsec == UTIME_NOW) {
+      tv[1] = now;
+    } else if (ts[1].tv_nsec == UTIME_OMIT) {
+      tv[1] = timespec_totimeval(st.st_mtim);
+    } else {
+      tv[1] = timespec_totimeval(ts[1]);
     }
   } else {
     tv[0] = now;

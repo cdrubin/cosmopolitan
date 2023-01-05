@@ -16,38 +16,45 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/alg.h"
-#include "libc/alg/arraylist.internal.h"
-#include "libc/alg/arraylist2.internal.h"
-#include "libc/alg/bisectcarleft.internal.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/alg.h"
+#include "libc/mem/alloca.h"
+#include "libc/mem/arraylist.internal.h"
+#include "libc/mem/arraylist2.internal.h"
+#include "libc/mem/bisectcarleft.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/ezmap.internal.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/runtime/stack.h"
+#include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/clone.h"
 #include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/thread/spawn.h"
+#include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
+#include "libc/thread/wait0.internal.h"
+#include "libc/time/time.h"
 #include "libc/x/x.h"
 #include "third_party/getopt/getopt.h"
 #include "tool/build/lib/getargs.h"
-
-#define MAX_READ FRAMESIZE
 
 /**
  * @fileoverview Make dependency generator.
@@ -65,10 +72,13 @@
  *   - #  include "foo.h"
  *   - #include   "foo.h"
  *
- * Only the first 64kb of each source file is considered.
  */
 
-_Alignas(16) const char kIncludePrefix[] = "include \"";
+#define kIncludePrefix "include \""
+
+#define THREADS 1       // _getcpucount()
+#define LOCK    (void)  // if (__threaded) pthread_spin_lock
+#define UNLOCK  (void)  // pthread_spin_unlock
 
 const char kSourceExts[][5] = {".s", ".S", ".c", ".cc", ".cpp"};
 
@@ -112,14 +122,19 @@ struct Edges {
 };
 
 char *out;
-char *bout;
+char **bouts;
+pthread_t *th;
 unsigned counter;
-uint32_t *visited;
+struct GetArgs ga;
 struct Edges edges;
 struct Sauce *sauces;
 struct Strings strings;
 struct Sources sources;
 const char *buildroot;
+pthread_spinlock_t galock;
+pthread_spinlock_t readlock;
+pthread_spinlock_t writelock;
+pthread_spinlock_t reportlock;
 
 unsigned Hash(const void *s, size_t l) {
   return max(1, crc32c(0, s, l));
@@ -153,8 +168,8 @@ void Crunch(void) {
   free(sources.p);
   sources.p = 0;
   sources.i = j;
-  longsort((const long *)sauces, sources.i);
-  longsort((const long *)edges.p, edges.i);
+  _longsort((const long *)sauces, sources.i);
+  _longsort((const long *)edges.p, edges.i);
 }
 
 void Rehash(void) {
@@ -185,7 +200,7 @@ unsigned GetSourceId(const char *name, size_t len) {
     do {
       i = (hash + step * (step + 1) / 2) & (sources.n - 1);
       if (sources.p[i].hash == hash &&
-          !timingsafe_bcmp(name, &strings.p[sources.p[i].name], len)) {
+          !memcmp(name, &strings.p[sources.p[i].name], len)) {
         return sources.p[i].id;
       }
       step++;
@@ -208,7 +223,7 @@ unsigned GetSourceId(const char *name, size_t len) {
 bool ShouldSkipSource(const char *src) {
   unsigned j;
   for (j = 0; j < ARRAYLEN(kIgnorePrefixes); ++j) {
-    if (startswith(src, kIgnorePrefixes[j])) {
+    if (_startswith(src, kIgnorePrefixes[j])) {
       return true;
     }
   }
@@ -225,47 +240,82 @@ wontreturn void OnMissingFile(const char *list, const char *src) {
    * automatically restart itself.
    */
   if (list) {
-    fprintf(stderr, "%s %s...\n", "Refreshing", list);
+    kprintf("%s %s...\n", "Refreshing", list);
     unlink(list);
   }
   exit(1);
 }
 
-void LoadRelationships(int argc, char *argv[]) {
+void *LoadRelationshipsWorker(void *arg) {
   int fd;
-  char *buf;
   ssize_t rc;
   bool skipme;
+  struct stat st;
   struct Edge edge;
-  struct GetArgs ga;
+  size_t i, n, size, inclen;
   unsigned srcid, dependency;
-  size_t i, inclen, size;
+  char *buf, srcbuf[PATH_MAX];
   const char *p, *pe, *src, *path, *pathend;
   inclen = strlen(kIncludePrefix);
-  buf = gc(xmemalign(PAGESIZE, PAGESIZE + MAX_READ + 16));
-  buf += PAGESIZE;
-  buf[-1] = '\n';
-  getargs_init(&ga, argv + optind);
-  while ((src = getargs_next(&ga))) {
+  for (;;) {
+    LOCK(&galock);
+    if ((src = getargs_next(&ga))) strcpy(srcbuf, src);
+    UNLOCK(&galock);
+    if (!src) break;
+    src = srcbuf;
     if (ShouldSkipSource(src)) continue;
-    srcid = GetSourceId(src, strlen(src));
-    if ((fd = open(src, O_RDONLY)) == -1) OnMissingFile(ga.path, src);
-    CHECK_NE(-1, (rc = read(fd, buf, MAX_READ)));
-    close(fd);
-    size = rc;
-    bzero(buf + size, 16);
-    for (p = buf, pe = p + size; p < pe; ++p) {
-      p = strstr(p, kIncludePrefix);
-      if (!p) break;
-      path = p + inclen;
-      pathend = memchr(path, '"', pe - path);
-      if (pathend && (p[-1] == '#' || p[-1] == '.') && p[-2] == '\n') {
-        dependency = GetSourceId(path, pathend - path);
-        edge.from = srcid;
-        edge.to = dependency;
-        append(&edges, &edge);
-        p = pathend;
+    n = strlen(src);
+    LOCK(&readlock);
+    srcid = GetSourceId(src, n);
+    UNLOCK(&readlock);
+    if ((fd = open(src, O_RDONLY)) == -1) {
+      LOCK(&reportlock);
+      OnMissingFile(ga.path, src);
+    }
+    CHECK_NE(-1, fstat(fd, &st));
+    if ((size = st.st_size)) {
+      CHECK_NE(MAP_FAILED, (buf = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0)));
+      for (p = buf + 1, pe = buf + size; p < pe; ++p) {
+        if (!(p = memmem(p, pe - p, kIncludePrefix, inclen))) break;
+        path = p + inclen;
+        pathend = memchr(path, '"', pe - path);
+        if (pathend &&                          //
+            (p[-1] == '#' || p[-1] == '.') &&   //
+            (p - buf == 1 || p[-2] == '\n')) {  //
+          LOCK(&readlock);
+          dependency = GetSourceId(path, pathend - path);
+          UNLOCK(&readlock);
+          edge.from = srcid;
+          edge.to = dependency;
+          LOCK(&writelock);
+          append(&edges, &edge);
+          UNLOCK(&writelock);
+          p = pathend;
+        }
       }
+      munmap(buf, size);
+    }
+    close(fd);
+  }
+  return 0;
+}
+
+void LoadRelationships(int argc, char *argv[]) {
+  int i;
+  getargs_init(&ga, argv + optind);
+  if (THREADS == 1) {
+    LoadRelationshipsWorker((void *)(intptr_t)0);
+  } else {
+    for (i = 0; i < THREADS; ++i) {
+      if (pthread_create(th + i, 0, LoadRelationshipsWorker,
+                         (void *)(intptr_t)i)) {
+        LOCK(&reportlock);
+        kprintf("error: _spawn(%d) failed %m\n", i);
+        exit(1);
+      }
+    }
+    for (i = 0; i < THREADS; ++i) {
+      pthread_join(th[i], 0);
     }
   }
   getargs_destroy(&ga);
@@ -282,34 +332,27 @@ void GetOpts(int argc, char *argv[]) {
         buildroot = optarg;
         break;
       default:
-        fprintf(stderr, "%s: %s [-r %s] [-o %s] [%s...]\n", "Usage", argv[0],
+        kprintf("%s: %s [-r %s] [-o %s] [%s...]\n", "Usage", argv[0],
                 "BUILDROOT", "OUTPUT", "PATHSFILE");
         exit(1);
     }
   }
-  if (isempty(out)) fprintf(stderr, "need -o FILE"), exit(1);
-  if (isempty(buildroot)) fprintf(stderr, "need -r o/$(MODE)"), exit(1);
+  if (isempty(out)) kprintf("need -o FILE"), exit(1);
+  if (isempty(buildroot)) kprintf("need -r o/$(MODE)"), exit(1);
 }
 
-const char *StripExt(const char *s) {
-  static bool once;
-  static size_t i, n;
-  static char *p, *dot;
-  if (!once) {
-    once = true;
-    __cxa_atexit(free_s, &p, NULL);
-  }
-  i = 0;
-  CONCAT(&p, &i, &n, s, strlen(s) + 1);
-  dot = strrchr(p, '.');
+const char *StripExt(char pathbuf[PATH_MAX], const char *s) {
+  static char *dot;
+  strcpy(pathbuf, s);
+  dot = strrchr(pathbuf, '.');
   if (dot) *dot = '\0';
-  return p;
+  return pathbuf;
 }
 
 bool IsObjectSource(const char *name) {
   int i;
   for (i = 0; i < ARRAYLEN(kSourceExts); ++i) {
-    if (endswith(name, kSourceExts[i])) return true;
+    if (_endswith(name, kSourceExts[i])) return true;
   }
   return false;
 }
@@ -323,16 +366,6 @@ forceinline bool Bts(uint32_t *p, size_t i) {
   return false;
 }
 
-void Dive(unsigned id) {
-  int i;
-  for (i = FindFirstFromEdge(id); i < edges.i && edges.p[i].from == id; ++i) {
-    if (Bts(visited, edges.p[i].to)) continue;
-    appendw(&bout, READ32LE(" \\\n\t"));
-    appends(&bout, strings.p + sauces[edges.p[i].to].name);
-    Dive(edges.p[i].to);
-  }
-}
-
 size_t GetFileSizeOrZero(const char *path) {
   struct stat st;
   st.st_size = 0;
@@ -340,66 +373,88 @@ size_t GetFileSizeOrZero(const char *path) {
   return st.st_size;
 }
 
-/* prevents gnu make from restarting unless necessary */
-bool HasSameContent(void) {
-  bool r;
-  int fd;
-  char *m;
-  size_t s;
-  s = GetFileSizeOrZero(out);
-  if (s == appendz(bout).i) {
-    if (s) {
-      CHECK_NE(-1, (fd = open(out, O_RDONLY)));
-      CHECK_NE(MAP_FAILED, (m = mmap(0, s, PROT_READ, MAP_SHARED, fd, 0)));
-      r = !bcmp(bout, m, s);
-      munmap(m, s);
-      close(fd);
-    } else {
-      r = true;
-    }
-  } else {
-    r = false;
+void Dive(char **bout, uint32_t *visited, unsigned id) {
+  int i;
+  for (i = FindFirstFromEdge(id); i < edges.i && edges.p[i].from == id; ++i) {
+    if (Bts(visited, edges.p[i].to)) continue;
+    appendw(bout, READ32LE(" \\\n\t"));
+    appends(bout, strings.p + sauces[edges.p[i].to].name);
+    Dive(bout, visited, edges.p[i].to);
   }
-  return r;
 }
 
-int main(int argc, char *argv[]) {
-  int fd;
+void *Diver(void *arg) {
+  char *bout = 0;
   const char *path;
+  uint32_t *visited;
   size_t i, visilen;
-  if (argc == 2 && !strcmp(argv[1], "-n")) exit(0);
-  out = "/dev/stdout";
-  GetOpts(argc, argv);
-  LoadRelationships(argc, argv);
-  Crunch();
+  char pathbuf[PATH_MAX];
+  int x = (intptr_t)arg;
   visilen = (sources.i + sizeof(*visited) * CHAR_BIT - 1) /
             (sizeof(*visited) * CHAR_BIT);
   visited = malloc(visilen * sizeof(*visited));
-  for (i = 0; i < sources.i; ++i) {
+  for (i = x; i < sources.i; i += THREADS) {
     path = strings.p + sauces[i].name;
     if (!IsObjectSource(path)) continue;
     appendw(&bout, '\n');
-    if (!startswith(path, "o/")) {
+    if (!_startswith(path, "o/")) {
       appends(&bout, buildroot);
     }
-    appends(&bout, StripExt(path));
+    appends(&bout, StripExt(pathbuf, path));
     appendw(&bout, READ64LE(".o: \\\n\t"));
     appends(&bout, path);
     bzero(visited, visilen * sizeof(*visited));
     Bts(visited, i);
-    Dive(i);
+    Dive(&bout, visited, i);
     appendw(&bout, '\n');
   }
-  /* if (!fileexists(out) || !HasSameContent()) { */
-  CHECK_NE(-1, (fd = open(out, O_CREAT | O_WRONLY, 0644)));
-  CHECK_NE(-1, ftruncate(fd, appendz(bout).i));
-  CHECK_NE(-1, xwrite(fd, bout, appendz(bout).i));
+  free(visited);
+  appendw(&bout, '\n');
+  bouts[x] = bout;
+  return 0;
+}
+
+void Explore(void) {
+  int i;
+  if (THREADS == 1) {
+    Diver((void *)(intptr_t)0);
+  } else {
+    for (i = 0; i < THREADS; ++i) {
+      if (pthread_create(th + i, 0, Diver, (void *)(intptr_t)i)) {
+        LOCK(&reportlock);
+        kprintf("error: _spawn(%d) failed %m\n", i);
+        exit(1);
+      }
+    }
+    for (i = 0; i < THREADS; ++i) {
+      pthread_join(th[i], 0);
+    }
+  }
+}
+
+int main(int argc, char *argv[]) {
+  int i, fd;
+  ShowCrashReports();
+  if (argc == 2 && !strcmp(argv[1], "-n")) exit(0);
+  GetOpts(argc, argv);
+  th = calloc(THREADS, sizeof(*th));
+  bouts = calloc(THREADS, sizeof(*bouts));
+  LoadRelationships(argc, argv);
+  Crunch();
+  Explore();
+  CHECK_NE(-1, (fd = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0644)),
+           "open(%#s)", out);
+  for (i = 0; i < THREADS; ++i) {
+    CHECK_NE(-1, xwrite(fd, bouts[i], appendz(bouts[i]).i));
+  }
   CHECK_NE(-1, close(fd));
-  /* } */
+  for (i = 0; i < THREADS; ++i) {
+    free(bouts[i]);
+  }
   free(strings.p);
   free(edges.p);
-  free(visited);
   free(sauces);
-  free(bout);
+  free(bouts);
+  free(th);
   return 0;
 }

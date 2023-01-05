@@ -16,11 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/errno.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/lockcmpxchg.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
@@ -30,6 +31,7 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/time/time.h"
 #include "net/https/sslcache.h"
 #include "third_party/mbedtls/ssl.h"
 #include "third_party/mbedtls/x509_crt.h"
@@ -82,7 +84,7 @@ struct SslCache *CreateSslCache(const char *path, size_t bytes, int lifetime) {
   struct SslCache *c;
   if (!bytes) bytes = 10 * 1024 * 1024;
   if (lifetime <= 0) lifetime = 24 * 60 * 60;
-  ents = rounddown2pow(MAX(2, bytes / sizeof(struct SslCacheEntry)));
+  ents = _rounddown2pow(MAX(2, bytes / sizeof(struct SslCacheEntry)));
   size = sizeof(struct SslCache) + sizeof(struct SslCacheEntry) * ents;
   size = ROUNDUP(size, FRAMESIZE);
   c = OpenSslCache(path, size);
@@ -129,7 +131,7 @@ int UncacheSslSession(void *data, mbedtls_ssl_session *session) {
   ts = time(0);
   if (!(e->time <= ts && ts <= e->time + cache->lifetime)) {
     DEBUGF("%u sslcache expired", i);
-    lockcmpxchg(&e->tick, tick, 0);
+    _lockcmpxchg(&e->tick, tick, 0);
     return 1;
   }
   cert = 0;
@@ -199,7 +201,7 @@ int CacheSslSession(void *data, const mbedtls_ssl_session *session) {
   e->time = time(0);
   tick = rdtsc();
   asm volatile("" ::: "memory");
-  if (tick && lockcmpxchg(&e->pid, pid, 0)) {
+  if (tick && _lockcmpxchg(&e->pid, pid, 0)) {
     DEBUGF("%u saved %s%s %`#.*s", i,
            mbedtls_ssl_get_ciphersuite_name(session->ciphersuite),
            session->compression ? " DEFLATE" : "", session->id_len,

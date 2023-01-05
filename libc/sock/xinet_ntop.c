@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
+#include "libc/intrin/weaken.h"
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -34,7 +34,7 @@ char *sys_xinet_ntop(int af, const void *src) {
   if (inet_ntop(af, src, ip, sizeof(ip)) && (res = strdup(ip))) {
     return res;
   } else {
-    if (weaken(__die)) weaken(__die)();
+    if (_weaken(__die)) _weaken(__die)();
     abort();
     unreachable;
   }

@@ -54,6 +54,10 @@ asm(".include \"libc/disclaimer.inc\"");
 #define asuint64(f) ((union{double _f; uint64_t _i;}){f})._i
 #define gethighw(hi,d) (hi) = asuint64(d) >> 32
 
+/**
+ * Returns sine and cosine of 𝑥.
+ * @note should take ~10ns
+ */
 void sincos(double x, double *sin, double *cos)
 {
 	double y[2], s, c;

@@ -18,24 +18,35 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/sysdebug.internal.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/sysv/errfuns.h"
 
 /**
- * Duplicates file descriptor/handle.
+ * Duplicates file descriptor.
+ *
+ * The `O_CLOEXEC` flag shall be cleared from the resulting file
+ * descriptor; see dup3() to preserve it.
  *
  * @param fd remains open afterwards
  * @return some arbitrary new number for fd
+ * @raise EPERM if pledge() is in play without stdio
+ * @raise ENOTSUP if `fd` is a zip file descriptor
+ * @raise EBADF if `fd` is negative or not open
  * @asyncsignalsafe
  * @vforksafe
  */
 int dup(int fd) {
-  int fd2;
-  if (!IsWindows()) {
-    fd2 = sys_dup(fd);
+  int rc;
+  if (__isfdkind(fd, kFdZip)) {
+    rc = enotsup();
+  } else if (!IsWindows()) {
+    rc = sys_dup(fd);
   } else {
-    fd2 = sys_dup_nt(fd, -1, 0);
+    rc = sys_dup_nt(fd, -1, 0, -1);
   }
-  SYSDEBUG("dup(%d) -> %d", fd, fd2);
-  return fd2;
+  STRACE("%s(%d) → %d% m", "dup", fd, rc);
+  return rc;
 }

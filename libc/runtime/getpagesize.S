@@ -17,9 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
-.source	__FILE__
 
 //	Returns granularity of memory manager.
+//
+//	@see	sysconf(_SC_PAGE_SIZE) which is portable
 getpagesize:
 	.leafprologue
 	.profilable

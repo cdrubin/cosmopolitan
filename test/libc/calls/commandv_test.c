@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/stat.h"
@@ -24,7 +24,7 @@
 #include "libc/fmt/fmt.h"
 #include "libc/log/check.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -38,6 +38,10 @@ char *oldpath;
 char tmp[PATH_MAX];
 char pathbuf[PATH_MAX];
 char testlib_enable_tmp_setup_teardown;
+
+void SetUpOnce(void) {
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+}
 
 void SetUp(void) {
   static int x;
@@ -54,34 +58,34 @@ void TearDown(void) {
 
 TEST(commandv, testPathSearch) {
   EXPECT_NE(-1, touch("bin/sh", 0755));
-  EXPECT_STREQ("bin/sh", commandv("sh", pathbuf));
+  EXPECT_STREQ("bin/sh", commandv("sh", pathbuf, sizeof(pathbuf)));
 }
 
 TEST(commandv, testPathSearch_appendsComExtension) {
   EXPECT_NE(-1, touch("bin/sh.com", 0755));
-  EXPECT_STREQ("bin/sh.com", commandv("sh", pathbuf));
+  EXPECT_STREQ("bin/sh.com", commandv("sh", pathbuf, sizeof(pathbuf)));
 }
 
 TEST(commandv, testSlashes_wontSearchPath_butChecksAccess) {
   EXPECT_NE(-1, touch("home/sh", 0755));
-  i = g_syscount;
-  EXPECT_STREQ("home/sh", commandv("home/sh", pathbuf));
-  if (!IsWindows()) EXPECT_EQ(i + 1, g_syscount);
+  i = __syscount;
+  EXPECT_STREQ("home/sh", commandv("home/sh", pathbuf, sizeof(pathbuf)));
+  if (!IsWindows()) EXPECT_EQ(i + 1, __syscount);
 }
 
 TEST(commandv, testSlashes_wontSearchPath_butStillAppendsComExtension) {
   EXPECT_NE(-1, touch("home/sh.com", 0755));
-  i = g_syscount;
-  EXPECT_STREQ("home/sh.com", commandv("home/sh", pathbuf));
-  if (!IsWindows()) EXPECT_EQ(i + 2, g_syscount);
+  i = __syscount;
+  EXPECT_STREQ("home/sh.com", commandv("home/sh", pathbuf, sizeof(pathbuf)));
+  if (!IsWindows()) EXPECT_EQ(i + 2, __syscount);
 }
 
 TEST(commandv, testSameDir_doesntHappenByDefaultUnlessItsWindows) {
   EXPECT_NE(-1, touch("bog", 0755));
   if (IsWindows()) {
-    EXPECT_STREQ("./bog", commandv("bog", pathbuf));
+    EXPECT_STREQ("./bog", commandv("bog", pathbuf, sizeof(pathbuf)));
   } else {
-    EXPECT_EQ(NULL, commandv("bog", pathbuf));
+    EXPECT_EQ(NULL, commandv("bog", pathbuf, sizeof(pathbuf)));
   }
 }
 
@@ -89,9 +93,9 @@ TEST(commandv, testSameDir_willHappenWithColonBlank) {
   CHECK_NE(-1, setenv("PATH", "bin:", true));
   EXPECT_NE(-1, touch("bog", 0755));
   if (IsWindows()) {
-    EXPECT_STREQ("./bog", commandv("bog", pathbuf));
+    EXPECT_STREQ("./bog", commandv("bog", pathbuf, sizeof(pathbuf)));
   } else {
-    EXPECT_STREQ("bog", commandv("bog", pathbuf));
+    EXPECT_STREQ("bog", commandv("bog", pathbuf, sizeof(pathbuf)));
   }
 }
 
@@ -99,8 +103,8 @@ TEST(commandv, testSameDir_willHappenWithColonBlank2) {
   CHECK_NE(-1, setenv("PATH", ":bin", true));
   EXPECT_NE(-1, touch("bog", 0755));
   if (IsWindows()) {
-    EXPECT_STREQ("./bog", commandv("bog", pathbuf));
+    EXPECT_STREQ("./bog", commandv("bog", pathbuf, sizeof(pathbuf)));
   } else {
-    EXPECT_STREQ("bog", commandv("bog", pathbuf));
+    EXPECT_STREQ("bog", commandv("bog", pathbuf, sizeof(pathbuf)));
   }
 }

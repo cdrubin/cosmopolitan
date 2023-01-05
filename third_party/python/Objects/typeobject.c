@@ -5,7 +5,7 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/likely.h"
+#include "libc/intrin/likely.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/countbranch.h"
 #include "third_party/python/Include/abstract.h"
@@ -32,6 +32,11 @@
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Include/weakrefobject.h"
 /* clang-format off */
+
+static const short slotoffsets[] = {
+    -1, /* invalid slot */
+#include "third_party/python/Objects/typeslots.inc"
+};
 
 /* Type object implementation */
 
@@ -2791,11 +2796,6 @@ error:
     return NULL;
 }
 
-static const short slotoffsets[] = {
-    -1, /* invalid slot */
-#include "typeslots.inc"
-};
-
 PyObject *
 PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases)
 {
@@ -3345,7 +3345,7 @@ static PyMethodDef type_methods[] = {
     {"__subclasses__", (PyCFunction)type_subclasses, METH_NOARGS,
      PyDoc_STR("__subclasses__() -> list of immediate subclasses")},
     {"__prepare__", (PyCFunction)type_prepare,
-     METH_FASTCALL | METH_CLASS,
+     METH_FASTCALL | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("__prepare__() -> dict\n"
                "used to create the namespace for the class statement")},
     {"__instancecheck__", type___instancecheck__, METH_O,

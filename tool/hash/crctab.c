@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
   static uint32_t tab[256];
-  crc32init(tab, strtoimax(argv[1], NULL, 0));
+  crc32init(tab, strtol(argv[1], NULL, 0));
   for (unsigned i = 0; i < ARRAYLEN(tab); ++i) {
     if (i > 0) {
       printf(",");

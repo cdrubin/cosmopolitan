@@ -21,6 +21,7 @@
 #include "libc/fmt/strtol.internal.h"
 #include "libc/limits.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 
 /**
  * Decodes signed integer from ASCII string.
@@ -44,6 +45,8 @@
  *     on the the prefixes 0 (octal), 0x (hexadecimal), 0b (binary), or
  *     decimal (base 10) by default
  * @return the decoded signed saturated number
+ * @raise EINVAL if `base` isn't 0 or 2..36
+ * @raise ERANGE on overflow
  */
 long strtol(const char *s, char **endptr, int base) {
   char t = 0;

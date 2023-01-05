@@ -16,24 +16,84 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
 #include "libc/calls/internal.h"
-#include "libc/mem/mem.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/calls/state.internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/cmpxchg.h"
+#include "libc/intrin/extend.internal.h"
+#include "libc/macros.internal.h"
+#include "libc/runtime/memtrack.internal.h"
+#include "libc/str/str.h"
+#include "libc/sysv/consts/map.h"
+
+// TODO(jart): make more of this code lockless
+
+static volatile size_t mapsize;
+
+/**
+ * Grows file descriptor array memory if needed.
+ *
+ * @see libc/runtime/memtrack64.txt
+ * @see libc/runtime/memtrack32.txt
+ * @asyncsignalsafe
+ */
+int __ensurefds_unlocked(int fd) {
+  bool relocate;
+  if (fd < g_fds.n) return fd;
+  g_fds.n = fd + 1;
+  g_fds.e = _extend(g_fds.p, g_fds.n * sizeof(*g_fds.p), g_fds.e, MAP_PRIVATE,
+                    kMemtrackFdsStart + kMemtrackFdsSize);
+  return fd;
+}
+
+/**
+ * Grows file descriptor array memory if needed.
+ * @asyncsignalsafe
+ * @threadsafe
+ */
+int __ensurefds(int fd) {
+  __fds_lock();
+  fd = __ensurefds_unlocked(fd);
+  __fds_unlock();
+  return fd;
+}
 
 /**
  * Finds open file descriptor slot.
+ * @asyncsignalsafe
  */
-int __reservefd(void) {
-  int fd;
+int __reservefd_unlocked(int start) {
+  int fd, f1, f2;
   for (;;) {
-    fd = g_fds.f;
-    if (fd >= g_fds.n) {
-      if (__ensurefds(fd) == -1) return -1;
+    f1 = atomic_load_explicit(&g_fds.f, memory_order_acquire);
+    for (fd = MAX(start, f1); fd < g_fds.n; ++fd) {
+      if (!g_fds.p[fd].kind) {
+        break;
+      }
     }
-    cmpxchg(&g_fds.f, fd, fd + 1);
-    if (cmpxchg(&g_fds.p[fd].kind, kFdEmpty, kFdReserved)) {
+    fd = __ensurefds_unlocked(fd);
+    bzero(g_fds.p + fd, sizeof(*g_fds.p));
+    if (_cmpxchg(&g_fds.p[fd].kind, kFdEmpty, kFdReserved)) {
+      // g_fds.f isn't guarded by our mutex
+      do {
+        f2 = MAX(fd + 1, f1);
+      } while (!atomic_compare_exchange_weak_explicit(
+          &g_fds.f, &f1, f2, memory_order_release, memory_order_relaxed));
       return fd;
     }
   }
+}
+
+/**
+ * Finds open file descriptor slot.
+ * @asyncsignalsafe
+ * @threadsafe
+ */
+int __reservefd(int start) {
+  int fd;
+  __fds_lock();
+  fd = __reservefd_unlocked(start);
+  __fds_unlock();
+  return fd;
 }

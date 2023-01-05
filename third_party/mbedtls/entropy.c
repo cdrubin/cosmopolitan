@@ -17,6 +17,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "third_party/mbedtls/common.h"
 #include "third_party/mbedtls/entropy.h"
 #include "third_party/mbedtls/entropy_poll.h"
@@ -57,7 +58,7 @@ asm(".include \"libc/disclaimer.inc\"");
 #warning "**** THIS BUILD IS *NOT* SUITABLE FOR PRODUCTION USE "
 #endif
 
-#define ENTROPY_MAX_LOOP    256     /**< Maximum amount to loop before error */
+#define ENTROPY_MAX_LOOP    256     /*< Maximum amount to loop before error */
 
 /**
  * \brief           Initialize the context

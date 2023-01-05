@@ -22,8 +22,8 @@
 #include "dsp/tty/ttyrgb.h"
 #include "dsp/tty/windex.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -731,19 +731,19 @@ static bool ChunkEq(struct TtyRgb c[hasatleast 4],
 }
 
 static struct TtyRgb *CopyChunk(struct TtyRgb chunk[hasatleast 4],
-                                const struct TtyRgb *c, size_t n) {
-  chunk[TL] = c[0 + 0];
-  chunk[TR] = c[0 + 1];
-  chunk[BL] = c[n + 0];
-  chunk[BR] = c[n + 1];
+                                const struct TtyRgb *c, size_t xn) {
+  chunk[TL] = c[00 + 0];
+  chunk[TR] = c[00 + 1];
+  chunk[BL] = c[xn + 0];
+  chunk[BR] = c[xn + 1];
   return chunk;
 }
 
 static dontinline char *CopyRun(char *v, size_t n,
-                              struct TtyRgb lastchunk[hasatleast 4],
-                              const struct TtyRgb **c, size_t *x,
-                              struct TtyRgb *bg, struct TtyRgb *fg,
-                              struct Glyph *glyph) {
+                                struct TtyRgb lastchunk[hasatleast 4],
+                                const struct TtyRgb **c, size_t *x,
+                                struct TtyRgb *bg, struct TtyRgb *fg,
+                                struct Glyph *glyph) {
   struct TtyRgb chunk[4];
   if (memcmp(glyph, &kGlyphs[1][0], sizeof(*glyph)) == 0) {
     if (!ttyeq(*bg, *fg)) {
@@ -766,17 +766,21 @@ static dontinline char *CopyRun(char *v, size_t n,
 /**
  * Maps 2×2 pixel chunks onto ANSI UNICODE cells.
  * @note h/t Nick Black for his quadrant blitting work on notcurses
+ * @note yn and xn need to be even
  */
-char *ttyraster(char *v, const struct TtyRgb *c, size_t yn, size_t n,
+char *ttyraster(char *v, const struct TtyRgb *c, size_t yn, size_t xn,
                 struct TtyRgb bg, struct TtyRgb fg) {
   unsigned y, x;
   struct Pick p;
   struct Glyph glyph;
   struct TtyRgb chun[4], lastchunk[4];
-  for (y = 0; y < yn; y += 2, c += n) {
-    if (y) *v++ = '\r', *v++ = '\n';
-    for (x = 0; x < n; x += 2, c += 2) {
-      CopyChunk(chun, c, n);
+  for (y = 0; y < yn; y += 2, c += xn) {
+    if (y) {
+      v = stpcpy(v, "\e[0m\r\n");
+      v = setbgfg(v, bg, fg);
+    }
+    for (x = 0; x < xn; x += 2, c += 2) {
+      CopyChunk(chun, c, xn);
       if (ttyquant()->alg == kTtyQuantTrue) {
         if (ttyquant()->blocks == kTtyBlocksCp437) {
           p = PickBlockCp437True(chun[TL], chun[TR], chun[BL], chun[BR]);
@@ -794,6 +798,6 @@ char *ttyraster(char *v, const struct TtyRgb *c, size_t yn, size_t n,
       memcpy(lastchunk, chun, sizeof(chun));
     }
   }
-  *v = '\0';
+  v = stpcpy(v, "\e[0m");
   return v;
 }

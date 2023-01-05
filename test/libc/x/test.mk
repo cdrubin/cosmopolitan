@@ -31,11 +31,11 @@ TEST_LIBC_X_DIRECTDEPS =			\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_RAND				\
+	LIBC_SOCK				\
 	LIBC_STUBS				\
 	LIBC_SYSV				\
+	LIBC_THREAD				\
 	LIBC_TESTLIB				\
-	LIBC_UNICODE				\
 	LIBC_X					\
 	THIRD_PARTY_GDTOA
 
@@ -52,7 +52,7 @@ o/$(MODE)/test/libc/x/%.com.dbg:		\
 		o/$(MODE)/test/libc/x/x.pkg	\
 		$(LIBC_TESTMAIN)		\
 		$(CRT)				\
-		$(APE)
+		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
 .PHONY: o/$(MODE)/test/libc/x

@@ -17,10 +17,15 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/intrin/strace.internal.h"
 
 /**
  * Sets effective user ID.
+ *
+ * @return 0 on success, or -1 w/ errno
+ * @raise EINVAL if euid not in legal range
+ * @raise EPERM if lack privileges
  */
-int seteuid(unsigned euid) {
-  return setreuid(-1, euid);
+int seteuid(uint32_t euid) {
+  return setregid(euid, -1);
 }

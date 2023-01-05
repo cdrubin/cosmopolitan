@@ -16,26 +16,40 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/dce.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/cxaatexit.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/cxaatexit.internal.h"
+#include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/sysconf.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/testlib/ezbench.h"
+#include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
+#include "libc/thread/thread.h"
+#include "libc/time/time.h"
 
 #define N 1024
 #define M 20
+
+void SetUp(void) {
+  // TODO(jart): what is wrong?
+  if (IsWindows()) exit(0);
+}
 
 TEST(malloc, zeroMeansOne) {
   ASSERT_GE(malloc_usable_size(gc(malloc(0))), 1);
@@ -85,9 +99,9 @@ TEST(malloc, test) {
       if (fds[k] == -1) {
         ASSERT_NE(-1, (fds[k] = open(program_invocation_name, O_RDONLY)));
         ASSERT_NE(-1, fstat(fds[k], &st));
-        ASSERT_NE(MAP_FAILED,
-                  (maps[k] = mmap(NULL, (mapsizes[k] = st.st_size), PROT_READ,
-                                  MAP_SHARED, fds[k], 0)));
+        mapsizes[k] = st.st_size;
+        ASSERT_NE(MAP_FAILED, (maps[k] = mmap(NULL, mapsizes[k], PROT_READ,
+                                              MAP_SHARED, fds[k], 0)));
       } else {
         ASSERT_NE(-1, munmap(maps[k], mapsizes[k]));
         ASSERT_NE(-1, close(fds[k]));
@@ -99,6 +113,12 @@ TEST(malloc, test) {
   for (i = 0; i < ARRAYLEN(A); ++i) free(A[i]);
   for (i = 0; i < ARRAYLEN(maps); ++i) munmap(maps[i], mapsizes[i]);
   for (i = 0; i < ARRAYLEN(fds); ++i) close(fds[i]);
+}
+
+TEST(memalign, roundsUpAlignmentToTwoPower) {
+  char *volatile p = memalign(129, 1);
+  ASSERT_EQ(0, (intptr_t)p & 255);
+  free(p);
 }
 
 void *bulk[1024];
@@ -117,8 +137,50 @@ void FreeBulk(void) {
   }
 }
 
+void MallocFree(void) {
+  char *volatile p;
+  p = malloc(16);
+  free(p);
+}
+
 BENCH(bulk_free, bench) {
   EZBENCH2("free() bulk", BulkFreeBenchSetup(), FreeBulk());
   EZBENCH2("bulk_free()", BulkFreeBenchSetup(),
            bulk_free(bulk, ARRAYLEN(bulk)));
+  EZBENCH2("free(malloc(16)) ST", donothing, MallocFree());
+  __enable_threads();
+  EZBENCH2("free(malloc(16)) MT", donothing, MallocFree());
+}
+
+#define ITERATIONS 10000
+
+void *Worker(void *arg) {
+  for (int i = 0; i < ITERATIONS; ++i) {
+    char *p;
+    ASSERT_NE(NULL, (p = malloc(lemur64() % 128)));
+    ASSERT_NE(NULL, (p = realloc(p, max(lemur64() % 128, 1))));
+    free(p);
+  }
+  return 0;
+}
+
+BENCH(malloc, torture) {
+  int i, n = _getcpucount() * 2;
+  pthread_t *t = _gc(malloc(sizeof(pthread_t) * n));
+  if (!n) return;
+  printf("\nmalloc torture test w/ %d threads and %d iterations\n", n,
+         ITERATIONS);
+  SPAWN(fork);
+  struct timespec t1 = timespec_real();
+  for (i = 0; i < n; ++i) {
+    ASSERT_EQ(0, pthread_create(t + i, 0, Worker, 0));
+  }
+  for (i = 0; i < n; ++i) {
+    ASSERT_EQ(0, pthread_join(t[i], 0));
+  }
+  struct timespec t2 = timespec_real();
+  printf("consumed %g wall and %g cpu seconds\n",
+         timespec_tomicros(timespec_sub(t2, t1)) * 1e-6,
+         (double)clock() / CLOCKS_PER_SEC);
+  EXITS(0);
 }

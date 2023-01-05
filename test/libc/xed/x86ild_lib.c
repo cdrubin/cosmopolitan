@@ -18,14 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/bing.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 #include "test/libc/xed/lib.h"
 #include "third_party/xed/x86.h"
 
-testonly nodiscard uint8_t *unbingx86op(const char16_t *codez) {
+dontdiscard uint8_t *unbingx86op(const char16_t *codez) {
   size_t len;
   len = strlen16(codez);
   return unbingbuf(xmalloc(ROUNDUP(len, 16)), len, codez, 0x90);
@@ -34,9 +34,9 @@ testonly nodiscard uint8_t *unbingx86op(const char16_t *codez) {
 /**
  * Long mode instruction length decoder.
  */
-testonly int ild(const char16_t *codez) {
+int ild(const char16_t *codez) {
+  int error;
   struct XedDecodedInst xedd;
-  enum XedError error;
   error = xed_instruction_length_decode(
       xed_decoded_inst_zero_set_mode(&xedd, XED_MACHINE_MODE_LONG_64),
       gc(unbingx86op(codez)), strlen16(codez) + 16);
@@ -46,9 +46,9 @@ testonly int ild(const char16_t *codez) {
 /**
  * Real mode instruction length decoder.
  */
-testonly int ildreal(const char16_t *codez) {
+int ildreal(const char16_t *codez) {
+  int error;
   struct XedDecodedInst xedd;
-  enum XedError error;
   error = xed_instruction_length_decode(
       xed_decoded_inst_zero_set_mode(&xedd, XED_MACHINE_MODE_REAL),
       gc(unbingx86op(codez)), strlen16(codez) + 16);
@@ -58,9 +58,9 @@ testonly int ildreal(const char16_t *codez) {
 /**
  * Legacy mode instruction length decoder.
  */
-testonly int ildlegacy(const char16_t *codez) {
+int ildlegacy(const char16_t *codez) {
+  int error;
   struct XedDecodedInst xedd;
-  enum XedError error;
   error = xed_instruction_length_decode(
       xed_decoded_inst_zero_set_mode(&xedd, XED_MACHINE_MODE_LEGACY_32),
       gc(unbingx86op(codez)), strlen16(codez) + 16);

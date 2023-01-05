@@ -26,8 +26,8 @@
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/likely.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/likely.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
@@ -405,6 +405,7 @@ static wontreturn void stbtt__assert_fail(const char *x, int line) {
       longjmp(stbtt_jmpbuf, line);
    } else {
       __assert_fail(x, __FILE__, line);
+      abort();
    }
 }
 

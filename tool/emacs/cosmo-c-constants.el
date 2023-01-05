@@ -27,6 +27,7 @@
     "__STDC_NO_COMPLEX__"
     "__STDC_NO_THREADS__"
     "__STDC_NO_VLA__"
+    "__FLT_EVAL_METHOD__"
     "__STDC_WANT_LIB_EXT1__"))
 
 (defconst cosmo-c-constants-limits
@@ -42,6 +43,7 @@
     "LLONG_MAX"
     "LONG_LONG_MAX"
     "SIZE_MAX"
+    "SSIZE_MAX"
     "INT8_MAX"
     "INT16_MAX"
     "INT32_MAX"
@@ -101,7 +103,8 @@
     "DBL_MIN"
     "DBL_MAX"
     "FLT_MIN"
-    "FLT_MAX"))
+    "FLT_MAX"
+    "PIPE_BUF"))
 
 (defconst cosmo-c-constants-math
   '("NAN"

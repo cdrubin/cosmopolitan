@@ -19,7 +19,9 @@
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/_getauxval.internal.h"
 #include "libc/runtime/clktck.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/auxv.h"
 
 struct clockinfo_netbsd {
@@ -47,13 +49,13 @@ static dontinline int __clk_tck_init(void) {
     cmd[0] = 1;   // CTL_KERN
     cmd[1] = 12;  // KERN_CLOCKRATE
     len = sizeof(clock);
-    if (sysctl(cmd, 2, &clock, &len, NULL, 0) != -1) {
+    if (sys_sysctl(cmd, 2, &clock, &len, NULL, 0) != -1) {
       x = clock.hz;
     } else {
       x = -1;
     }
   } else {
-    x = getauxval(AT_CLKTCK);
+    x = _getauxval(AT_CLKTCK).value;
   }
   if (x < 1) x = 100;
   clk_tck = x;

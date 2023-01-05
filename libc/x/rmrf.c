@@ -20,11 +20,13 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/errno.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/dt.h"
+#include "libc/sysv/consts/s.h"
 #include "libc/x/x.h"
 
 static int rmrfdir(const char *dirpath) {
@@ -36,7 +38,7 @@ static int rmrfdir(const char *dirpath) {
   while ((e = readdir(d))) {
     if (!strcmp(e->d_name, ".")) continue;
     if (!strcmp(e->d_name, "..")) continue;
-    assert(!strchr(e->d_name, '/'));
+    _npassert(!strchr(e->d_name, '/'));
     path = xjoinpaths(dirpath, e->d_name);
     if (e->d_type == DT_DIR) {
       rc = rmrfdir(path);
@@ -56,10 +58,24 @@ static int rmrfdir(const char *dirpath) {
 
 /**
  * Recursively removes file or directory.
+ *
+ * @return 0 on success, or -1 w/ errno
  */
 int rmrf(const char *path) {
+  int e;
   struct stat st;
-  if (stat(path, &st) == -1) return -1;
-  if (!S_ISDIR(st.st_mode)) return unlink(path);
-  return rmrfdir(path);
+  e = errno;
+  if (stat(path, &st) == -1) {
+    if (errno == ENOENT) {
+      errno = e;
+      return 0;
+    } else {
+      return -1;
+    }
+  }
+  if (!S_ISDIR(st.st_mode)) {
+    return unlink(path);
+  } else {
+    return rmrfdir(path);
+  }
 }

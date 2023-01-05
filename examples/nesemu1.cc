@@ -10,25 +10,25 @@
 #include "dsp/tty/itoa8.h"
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
-#include "libc/alg/arraylist2.internal.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/itimerval.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/inttypes.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/ohmyplus/vector.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
@@ -39,13 +39,15 @@
 #include "libc/sysv/consts/poll.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/time/time.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
+#include "libc/x/xsigaction.h"
 #include "libc/zip.h"
 #include "libc/zipos/zipos.internal.h"
 #include "third_party/getopt/getopt.h"
+#include "third_party/libcxx/vector"
 #include "tool/viz/lib/knobs.h"
 
-STATIC_YOINK("zip_uri_support");
+STATIC_YOINK("zipos");
 
 #define USAGE \
   " [ROM] [FMV]\n\
@@ -285,7 +287,7 @@ void GetTermSize(void) {
   struct winsize wsize_;
   wsize_.ws_row = 25;
   wsize_.ws_col = 80;
-  getttysize(STDIN_FILENO, &wsize_);
+  _getttysize(0, &wsize_);
   FreeSamplingSolution(ssy_);
   FreeSamplingSolution(ssx_);
   tyn_ = wsize_.ws_row * 2;
@@ -1673,7 +1675,7 @@ char* GetLine(void) {
   static char* line;
   static size_t linesize;
   if (getline(&line, &linesize, stdin) > 0) {
-    return chomp(line);
+    return _chomp(line);
   } else {
     return NULL;
   }
@@ -1703,7 +1705,7 @@ int PlayGame(const char* romfile, const char* opt_tasfile) {
   if ((ffplay = commandvenv("FFPLAY", "ffplay"))) {
     devnull = open("/dev/null", O_WRONLY | O_CLOEXEC);
     pipe2(pipefds, O_CLOEXEC);
-    if (!(playpid_ = vfork())) {
+    if (!(playpid_ = fork())) {
       const char* const args[] = {
           "ffplay",   "-nodisp", "-loglevel", "quiet", "-fflags",
           "nobuffer", "-ac",     "1",         "-ar",   "1789773",

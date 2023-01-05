@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/intrin/bits.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -38,7 +38,7 @@ const struct IdName kXedModeNames[] = {
     {XED_MACHINE_MODE_UNREAL, "unreal"},
 };
 
-enum XedMachineMode g_mode;
+int g_mode;
 struct XedDecodedInst g_xedd;
 
 wontreturn void ShowUsage(int rc, FILE *f) {

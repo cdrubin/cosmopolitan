@@ -24,9 +24,10 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
-#include "libc/x/x.h"
+#include "libc/x/xsigaction.h"
 
 #define CTRL(C)                ((C) ^ 0b01000000)
+#define WRITE(FD, SLIT)        write(FD, SLIT, strlen(SLIT))
 #define ENABLE_SAFE_PASTE      "\e[?2004h"
 #define ENABLE_MOUSE_TRACKING  "\e[?1000;1002;1015;1006h"
 #define DISABLE_MOUSE_TRACKING "\e[?1000;1002;1015;1006l"
@@ -46,7 +47,7 @@ void onkilled(int sig) {
 }
 
 void restoretty(void) {
-  write(1, DISABLE_MOUSE_TRACKING, strlen(DISABLE_MOUSE_TRACKING));
+  WRITE(1, DISABLE_MOUSE_TRACKING);
   ioctl(1, TCSETS, &oldterm);
 }
 
@@ -72,14 +73,14 @@ int rawmode(void) {
   t.c_cflag |= CS8;
   t.c_iflag |= IUTF8;
   ioctl(1, TCSETS, &t);
-  write(1, ENABLE_SAFE_PASTE, strlen(ENABLE_SAFE_PASTE));
-  write(1, ENABLE_MOUSE_TRACKING, strlen(ENABLE_MOUSE_TRACKING));
-  write(1, PROBE_DISPLAY_SIZE, strlen(PROBE_DISPLAY_SIZE));
+  WRITE(1, ENABLE_SAFE_PASTE);
+  WRITE(1, ENABLE_MOUSE_TRACKING);
+  WRITE(1, PROBE_DISPLAY_SIZE);
   return 0;
 }
 
 void getsize(void) {
-  if (getttysize(1, &wsize) != -1) {
+  if (_getttysize(1, &wsize) != -1) {
     printf("termios says terminal size is %hu×%hu\r\n", wsize.ws_col,
            wsize.ws_row);
   } else {
@@ -147,12 +148,12 @@ int main(int argc, char *argv[]) {
     if (iscntrl(code[0]) && !code[1]) {
       printf("is CTRL-%c a.k.a. ^%c\r\n", CTRL(code[0]), CTRL(code[0]));
       if (code[0] == CTRL('C') || code[0] == CTRL('D')) break;
-    } else if (startswith(code, "\e[") && endswith(code, "R")) {
+    } else if (_startswith(code, "\e[") && _endswith(code, "R")) {
       yn = 1, xn = 1;
       sscanf(code, "\e[%d;%dR", &yn, &xn);
       printf("inband signalling says terminal size is %d×%d\r\n", xn, yn);
-    } else if (startswith(code, "\e[<") &&
-               (endswith(code, "m") || endswith(code, "M"))) {
+    } else if (_startswith(code, "\e[<") &&
+               (_endswith(code, "m") || _endswith(code, "M"))) {
       e = 0, y = 1, x = 1;
       sscanf(code, "\e[<%d;%d;%d%c", &e, &y, &x, &c);
       printf("mouse %s at %d×%d\r\n", describemouseevent(e | (c == 'm') << 2),

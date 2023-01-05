@@ -5,6 +5,7 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
+#include "libc/mem/mem.h"
 #include "libc/nt/enum/formatmessageflags.h"
 #include "libc/nt/enum/lang.h"
 #include "libc/nt/memory.h"
@@ -153,7 +154,7 @@ PyErr_SetString(PyObject *exception, const char *string)
     Py_XDECREF(value);
 }
 
-PyObject *
+PyObject * _Py_HOT_FUNCTION
 PyErr_Occurred(void)
 {
     PyThreadState *tstate = _PyThreadState_UncheckedGet();

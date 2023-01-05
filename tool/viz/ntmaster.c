@@ -18,9 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/x/x.h"
+#include "libc/x/xgetline.h"
 
 #define DLL "iphlpapi"
 
@@ -35,10 +36,10 @@ int main(int argc, char *argv[]) {
   FILE *f;
   int i, n, t;
   char *sym, tabs[64];
-  showcrashreports();
+  ShowCrashReports();
   f = fopen("/tmp/syms.txt", "r");
   memset(tabs, '\t', 64);
-  while ((sym = chomp(xgetline(f)))) {
+  while ((sym = _chomp(xgetline(f)))) {
     if (strlen(sym)) {
       printf("imp\t");
 

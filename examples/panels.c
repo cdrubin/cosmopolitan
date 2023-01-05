@@ -12,17 +12,20 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/dce.h"
 #include "libc/log/check.h"
 #include "libc/log/gdb.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 #include "tool/build/lib/panel.h"
 
 /**
@@ -74,7 +77,7 @@ void GetTtySize(void) {
   struct winsize wsize;
   wsize.ws_row = tyn;
   wsize.ws_col = txn;
-  getttysize(1, &wsize);
+  _getttysize(1, &wsize);
   tyn = wsize.ws_row;
   txn = wsize.ws_col;
 }
@@ -152,7 +155,7 @@ void Draw(void) {
 int main(int argc, char *argv[]) {
   struct sigaction sa[2] = {{.sa_handler = OnShutdown},
                             {.sa_handler = OnInvalidate}};
-  showcrashreports();
+  if (!NoDebug()) ShowCrashReports();
   Setup();
   Enter();
   GetTtySize();

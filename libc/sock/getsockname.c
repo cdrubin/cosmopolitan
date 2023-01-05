@@ -19,8 +19,12 @@
 #include "libc/calls/internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/sockaddr.h"
+#include "libc/sock/struct/sockaddr.internal.h"
+#include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -28,13 +32,20 @@
  * @return 0 on success or -1 w/ errno
  * @see getpeername()
  */
-int getsockname(int fd, void *out_addr, uint32_t *out_addrsize) {
-  if (IsAsan() && !__asan_is_valid(out_addr, *out_addrsize)) return efault();
-  if (!IsWindows()) {
-    return sys_getsockname(fd, out_addr, out_addrsize);
+int getsockname(int fd, struct sockaddr *out_addr, uint32_t *out_addrsize) {
+  int rc;
+  if (!out_addrsize || !out_addrsize ||
+      (IsAsan() && (!__asan_is_valid(out_addrsize, 4) ||
+                    !__asan_is_valid(out_addr, *out_addrsize)))) {
+    rc = efault();
+  } else if (!IsWindows()) {
+    rc = sys_getsockname(fd, out_addr, out_addrsize);
   } else if (__isfdkind(fd, kFdSocket)) {
-    return sys_getsockname_nt(&g_fds.p[fd], out_addr, out_addrsize);
+    rc = sys_getsockname_nt(&g_fds.p[fd], out_addr, out_addrsize);
   } else {
-    return ebadf();
+    rc = ebadf();
   }
+  STRACE("getsockname(%d, [%s]) -> %d% lm", fd,
+         DescribeSockaddr(out_addr, out_addrsize ? *out_addrsize : 0), rc);
+  return rc;
 }

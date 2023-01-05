@@ -26,22 +26,26 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/ioctl.h"
+#include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
-#include "libc/calls/typedef/sighandler_t.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/limits.h"
+#include "libc/mem/mem.h"
 #include "libc/nt/synchronization.h"
 #include "libc/runtime/dlfcn.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sock/select.h"
 #include "libc/stdio/temp.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/time/time.h"
@@ -610,28 +614,6 @@ static JSValue js_std_getenv(JSContext *ctx, JSValueConst this_val,
     else
         return JS_NewString(ctx, str);
 }
-
-#if defined(_WIN32)
-static void setenv(const char *name, const char *value, int overwrite)
-{
-    char *str;
-    size_t name_len, value_len;
-    name_len = strlen(name);
-    value_len = strlen(value);
-    str = malloc(name_len + 1 + value_len + 1);
-    memcpy(str, name, name_len);
-    str[name_len] = '=';
-    memcpy(str + name_len + 1, value, value_len);
-    str[name_len + 1 + value_len] = '\0';
-    _putenv(str);
-    free(str);
-}
-
-static void unsetenv(const char *name)
-{
-    setenv(name, "", TRUE);
-}
-#endif /* _WIN32 */
 
 static JSValue js_std_setenv(JSContext *ctx, JSValueConst this_val,
                            int argc, JSValueConst *argv)
@@ -3063,7 +3045,7 @@ typedef struct {
 
 typedef struct {
     char *filename; /* module filename */
-    char *basename; /* module base name */
+    char *basename_; /* module base name */
     JSWorkerMessagePipe *recv_pipe, *send_pipe;
 } WorkerFuncArgs;
 
@@ -3231,10 +3213,10 @@ static void *worker_func(void *opaque)
 
     js_std_add_helpers(ctx, -1, NULL);
 
-    if (!JS_RunModule(ctx, args->basename, args->filename))
+    if (!JS_RunModule(ctx, args->basename_, args->filename))
         js_std_dump_error(ctx);
     free(args->filename);
-    free(args->basename);
+    free(args->basename_);
     free(args);
 
     js_std_loop(ctx);
@@ -3315,7 +3297,7 @@ static JSValue js_worker_ctor(JSContext *ctx, JSValueConst new_target,
         goto oom_fail;
     bzero(args, sizeof(*args));
     args->filename = strdup(filename);
-    args->basename = strdup(basename);
+    args->basename_ = strdup(basename);
 
     /* ports */
     args->recv_pipe = js_new_message_pipe();
@@ -3349,7 +3331,7 @@ static JSValue js_worker_ctor(JSContext *ctx, JSValueConst new_target,
     JS_FreeCString(ctx, filename);
     if (args) {
         free(args->filename);
-        free(args->basename);
+        free(args->basename_);
         js_free_message_pipe(args->recv_pipe);
         js_free_message_pipe(args->send_pipe);
         free(args);
