@@ -33,6 +33,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/tls.h"
+#ifdef __x86_64__
 
 /**
  * Allocates piece of memory for storing pending signal.
@@ -132,7 +133,7 @@ static bool __sig_deliver(bool restartable, int sig, int si_code,
   }
 
   // handover control to user
-  ((sigaction_f)(_base + rva))(sig, infop, ctx);
+  ((sigaction_f)(__executable_start + rva))(sig, infop, ctx);
 
   if ((~flags & SA_NODEFER) && (~flags & SA_RESETHAND)) {
     // it's now safe to reenter the signal so we need to restore it.
@@ -304,3 +305,5 @@ textwindows void __sig_check_ignore(const int sig, const unsigned rva) {
     __sig_unlock();
   }
 }
+
+#endif /* __x86_64__ */

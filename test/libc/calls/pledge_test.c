@@ -18,12 +18,11 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/pledge.internal.h"
-#include "libc/calls/struct/bpf.h"
-#include "libc/calls/struct/filter.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
 #include "libc/calls/struct/flock.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/stat.h"
@@ -32,12 +31,12 @@
 #include "libc/errno.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/copyfd.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/sockaddr.h"
+#include "libc/sock/struct/sockaddr6.h"
 #include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/af.h"
@@ -72,7 +71,10 @@ int sys_memfd_secret(unsigned int);  // our ENOSYS threshold
 
 void SetUp(void) {
   __enable_threads();
-  if (!__is_linux_2_6_23() && !IsOpenbsd()) exit(0);
+  if (pledge(0, 0) == -1) {
+    fprintf(stderr, "warning: pledge() not supported on this system\n");
+    exit(0);
+  }
   testlib_extract("/zip/life.elf", "life.elf", 0755);
   testlib_extract("/zip/sock.elf", "sock.elf", 0755);
   __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
@@ -349,6 +351,9 @@ TEST(pledge, inet_forbidsOtherSockets) {
     ASSERT_SYS(EPERM, -1, setsockopt(3, SOL_SOCKET, SO_TIMESTAMP, &yes, 4));
     struct sockaddr_in sin = {AF_INET, 0, {htonl(0x7f000001)}};
     ASSERT_SYS(0, 0, bind(4, (struct sockaddr *)&sin, sizeof(sin)));
+    struct sockaddr_in6 sin6 = {.sin6_family = AF_INET6,
+                                .sin6_addr.s6_addr[15] = 1};
+    ASSERT_SYS(0, 0, bind(6, (struct sockaddr *)&sin6, sizeof(sin6)));
     uint32_t az = sizeof(sin);
     ASSERT_SYS(0, 0, getsockname(4, (struct sockaddr *)&sin, &az));
     ASSERT_SYS(0, 5,
@@ -357,6 +362,23 @@ TEST(pledge, inet_forbidsOtherSockets) {
   }
   EXPECT_NE(-1, wait(&ws));
   EXPECT_TRUE(WIFEXITED(ws) && !WEXITSTATUS(ws));
+}
+
+TEST(pledge, anet_forbidsUdpSocketsAndConnect) {
+  if (IsOpenbsd()) return;  // b/c testing linux bpf
+  int ws, pid, yes = 1;
+  ASSERT_NE(-1, (pid = fork()));
+  if (!pid) {
+    ASSERT_SYS(0, 0, pledge("stdio anet", 0));
+    ASSERT_SYS(0, 3, socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+    ASSERT_SYS(EPERM, -1, socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP));
+    ASSERT_SYS(EPERM, -1, setsockopt(3, SOL_SOCKET, SO_TIMESTAMP, &yes, 4));
+    struct sockaddr_in sin = {AF_INET, 0, {htonl(0x7f000001)}};
+    ASSERT_SYS(EPERM, -1, connect(4, (struct sockaddr *)&sin, sizeof(sin)));
+    _Exit(0);
+  }
+  EXPECT_NE(-1, wait(&ws));
+  EXPECT_EQ(0, ws);
 }
 
 TEST(pledge, mmap) {

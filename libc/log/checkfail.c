@@ -36,18 +36,22 @@ STATIC_YOINK("strerror_wr");
 /**
  * Handles failure of CHECK_xx() macros.
  */
-relegated void __check_fail(const char *suffix, const char *opstr,
-                            uint64_t want, const char *wantstr, uint64_t got,
-                            const char *gotstr, const char *file, int line,
-                            const char *fmt, ...) {
-  int e;
+relegated void __check_fail(const char *suffix,   //
+                            const char *opstr,    //
+                            uint64_t want,        //
+                            const char *wantstr,  //
+                            uint64_t got,         //
+                            const char *gotstr,   //
+                            const char *file,     //
+                            int line,             //
+                            const char *fmt,      //
+                            ...) {
   char *p;
   size_t i;
   va_list va;
   char hostname[32];
   strace_enabled(-1);
   ftrace_enabled(-1);
-  e = errno;
   __start_fatal(file, line);
   __stpcpy(hostname, "unknown");
   gethostname(hostname, sizeof(hostname));
@@ -72,5 +76,5 @@ relegated void __check_fail(const char *suffix, const char *opstr,
   }
   kprintf("%s\n", RESET);
   __die();
-  unreachable;
+  __builtin_unreachable();
 }

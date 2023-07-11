@@ -34,10 +34,10 @@ DSP_MPEG_A_DIRECTDEPS =				\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_TIME				\
-	LIBC_TINYMATH
+	LIBC_TINYMATH				\
+	THIRD_PARTY_COMPILER_RT
 
 DSP_MPEG_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(DSP_MPEG_A_DIRECTDEPS),$($(x))))
@@ -51,7 +51,7 @@ $(DSP_MPEG_A).pkg:				\
 		$(foreach x,$(DSP_MPEG_A_DIRECTDEPS),$($(x)_A).pkg)
 
 o/$(MODE)/dsp/mpeg/clamp4int256-k8.o: private	\
-		OVERRIDE_CFLAGS +=		\
+		CFLAGS +=			\
 			-Os
 
 DSP_MPEG_LIBS = $(foreach x,$(DSP_MPEG_ARTIFACTS),$($(x)))

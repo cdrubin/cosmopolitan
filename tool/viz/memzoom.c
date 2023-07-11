@@ -18,13 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/scale/cdecimate2xuint8x8.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/calls/ucontext.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
@@ -33,7 +34,6 @@
 #include "libc/intrin/hilbert.h"
 #include "libc/intrin/morton.h"
 #include "libc/intrin/safemacros.internal.h"
-#include "libc/intrin/tpenc.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
@@ -52,7 +52,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/time/time.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
   " [-hznmHNW] [-p PID] [PATH]\n\
@@ -192,7 +192,7 @@ static void GetTtySize(void) {
   struct winsize wsize;
   wsize.ws_row = tyn + 1;
   wsize.ws_col = txn;
-  _getttysize(out, &wsize);
+  tcgetwinsize(out, &wsize);
   tyn = MAX(2, wsize.ws_row) - 1;
   txn = MAX(17, wsize.ws_col) - 16;
   tyn = _rounddown2pow(tyn);
@@ -210,14 +210,14 @@ static void EnableRaw(void) {
   term.c_cflag &= ~(CSIZE | PARENB);
   term.c_cflag |= CS8;
   term.c_iflag |= IUTF8;
-  ioctl(out, TCSETS, &term);
+  tcsetattr(out, TCSANOW, &term);
 }
 
 static void OnExit(void) {
   LeaveScreen();
   ShowCursor();
   DisableMouse();
-  ioctl(out, TCSETS, &oldterm);
+  tcsetattr(out, TCSANOW, &oldterm);
 }
 
 static void OnSigInt(int sig, struct siginfo *sa, void *uc) {
@@ -232,7 +232,7 @@ static void Setup(void) {
   tyn = 80;
   txn = 24;
   action = RESIZED;
-  ioctl(out, TCGETS, &oldterm);
+  tcgetattr(out, &oldterm);
   HideCursor();
   EnableRaw();
   EnableMouse();
@@ -706,7 +706,7 @@ static void LoadRanges(void) {
           }
           break;
         default:
-          unreachable;
+          __builtin_unreachable();
       }
     }
   }

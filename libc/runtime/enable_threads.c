@@ -26,10 +26,8 @@
 #include "libc/runtime/runtime.h"
 #include "libc/thread/tls.h"
 
-extern int __threadcalls_end[];
-extern int __threadcalls_start[];
-#pragma weak __threadcalls_start
-#pragma weak __threadcalls_end
+extern int __threadcalls_end[] __attribute__((__weak__));
+extern int __threadcalls_start[] __attribute__((__weak__));
 
 static privileged dontinline void FixupLockNops(void) {
   sigset_t mask;
@@ -53,16 +51,18 @@ static privileged dontinline void FixupLockNops(void) {
    * binary the offsets of all the instructions we need to change.
    */
   for (int *p = __threadcalls_start; p < __threadcalls_end; ++p) {
-    _base[*p + 0] = 0x67;
-    _base[*p + 1] = 0x67;
-    _base[*p + 2] = 0xe8;
+    __executable_start[*p + 0] = 0x67;
+    __executable_start[*p + 1] = 0x67;
+    __executable_start[*p + 2] = 0xe8;
   }
   __morph_end(&mask);
 }
 
 void __enable_threads(void) {
   if (__threaded) return;
+#ifdef __x86_64__
   STRACE("__enable_threads()");
   FixupLockNops();
-  __threaded = sys_gettid();
+#endif
+  __threaded = __tls_enabled ? __get_tls()->tib_tid : sys_gettid();
 }

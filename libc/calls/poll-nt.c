@@ -41,6 +41,8 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 
+#ifdef __x86_64__
+
 /*
  * Polls on the New Technology.
  *
@@ -104,7 +106,7 @@ textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint64_t *ms,
             pipefds[pn].events = fds[i].events & (POLLIN | POLLOUT);
             break;
           default:
-            unreachable;
+            __builtin_unreachable();
         }
         ++pn;
       } else {
@@ -218,3 +220,5 @@ ReturnPath:
   }
   return rc;
 }
+
+#endif /* __x86_64__ */

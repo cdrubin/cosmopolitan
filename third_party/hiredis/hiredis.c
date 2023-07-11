@@ -35,7 +35,7 @@
 #include "libc/mem/alg.h"
 #include "libc/str/str.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/dprintf.h"
+#include "libc/stdio/dprintf.h"
 #include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
 #include "libc/limits.h"
@@ -47,11 +47,11 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
 #include "third_party/gdtoa/gdtoa.h"
-#include "third_party/getopt/getopt.h"
 #include "third_party/musl/crypt.h"
 #include "third_party/musl/rand48.h"
 #include "libc/assert.h"
 #include "libc/errno.h"
+#include "libc/mem/gc.h"
 #include "libc/str/str.h"
 
 #include "third_party/hiredis/hiredis.h"
@@ -977,7 +977,7 @@ redisPushFn *redisSetPushCallback(redisContext *c, redisPushFn *fn) {
  * After this function is called, you may use redisGetReplyFromReader to
  * see if there is a reply available. */
 int redisBufferRead(redisContext *c) {
-    char buf[1024*16];
+    char *buf = _gc(malloc(1024*16));
     int nread;
 
     /* Return early when the context has seen an error. */

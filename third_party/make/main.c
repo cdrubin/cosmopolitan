@@ -28,9 +28,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "third_party/make/rule.h"
 /**/
 #include "libc/calls/calls.h"
-#include "libc/calls/struct/bpf.h"
-#include "libc/calls/struct/filter.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/limits.h"
@@ -636,13 +636,11 @@ expand_command_line_file (const char *name)
 
 /* Toggle -d on receipt of SIGUSR1.  */
 
-#ifdef SIGUSR1
 static RETSIGTYPE
 debug_signal_handler (int sig UNUSED)
 {
   db_level = db_level ? DB_NONE : DB_BASIC;
 }
-#endif
 
 static void
 decode_debug_flags (void)
@@ -1609,9 +1607,7 @@ main (int argc, char **argv, char **envp)
 #endif
 
   /* Let the user send us SIGUSR1 to toggle the -d flag during the run.  */
-#ifdef SIGUSR1
   bsd_signal (SIGUSR1, debug_signal_handler);
-#endif
 
   /* Define the initial list of suffixes for old-style rules.  */
   set_default_suffixes ();

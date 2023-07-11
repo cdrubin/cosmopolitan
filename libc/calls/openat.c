@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
@@ -53,7 +54,7 @@
  *
  * If your main() source file has this statement:
  *
- *     STATIC_YOINK("zip_uri_support");
+ *     STATIC_YOINK("zipos");
  *
  * Then you can read zip assets by adding a `"/zip/..."` prefix to `file`, e.g.
  *

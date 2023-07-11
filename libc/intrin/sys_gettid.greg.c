@@ -24,7 +24,8 @@
 
 __msabi extern typeof(GetCurrentThreadId) *const __imp_GetCurrentThreadId;
 
-privileged int sys_gettid(void) {
+int sys_gettid(void) {
+#ifdef __x86_64__
   int tid;
   int64_t wut;
   if (IsWindows()) {
@@ -61,4 +62,17 @@ privileged int sys_gettid(void) {
     tid = __pid;
   }
   return tid;
+#elif defined(__aarch64__)
+  // this can't be used on xnu
+  if (!IsLinux()) notpossible;
+  register long res asm("x0");
+  asm volatile("mov\tx8,%1\n\t"
+               "svc\t0"
+               : "=r"(res)
+               : "i"(178)
+               : "x8", "memory");
+  return res;
+#else
+#error "arch unsupported"
+#endif
 }

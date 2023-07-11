@@ -16,12 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
+
+#define TIOCGPGRP_linux 0x0000540f
+#define TIOCGPGRP_bsd   0x40047477
 
 /**
  * Returns which process group controls terminal.
@@ -34,10 +38,14 @@
  */
 int tcgetpgrp(int fd) {
   int rc, pgrp;
-  if (IsWindows() || IsMetal()) {
-    rc = enosys();
+  if (IsLinux()) {
+    rc = sys_ioctl(fd, TIOCGPGRP_linux, &pgrp);
+  } else if (IsBsd()) {
+    rc = sys_ioctl(fd, TIOCGPGRP_bsd, &pgrp);
+  } else if (IsWindows()) {
+    rc = getpid();
   } else {
-    rc = sys_ioctl(fd, TIOCGPGRP, &pgrp);
+    rc = enosys();
   }
   STRACE("tcgetpgrp(%d) → %d% m", fd, rc == -1 ? rc : pgrp);
   return rc == -1 ? rc : pgrp;

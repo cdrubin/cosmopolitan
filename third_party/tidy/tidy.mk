@@ -26,8 +26,7 @@ THIRD_PARTY_TIDY_A_DIRECTDEPS =							\
 	LIBC_CALLS								\
 	LIBC_STDIO								\
 	LIBC_SYSV								\
-	LIBC_STR								\
-	LIBC_STUBS
+	LIBC_STR
 
 THIRD_PARTY_TIDY_A_DEPS :=							\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_TIDY_A_DIRECTDEPS),$($(x))))
@@ -56,7 +55,8 @@ o/$(MODE)/third_party/tidy/tidy.com.dbg:					\
 o/$(MODE)/third_party/tidy/tidy.com:						\
 		o/$(MODE)/third_party/tidy/tidy.com.dbg				\
 		o/$(MODE)/third_party/zip/zip.com				\
-		o/$(MODE)/tool/build/symtab.com
+		o/$(MODE)/tool/build/symtab.com					\
+		$(VM)
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)

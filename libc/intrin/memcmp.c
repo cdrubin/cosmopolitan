@@ -16,14 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/likely.h"
 #include "libc/dce.h"
+#include "libc/intrin/likely.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
+#ifndef __aarch64__
 
 #define PMOVMSKB(x) __builtin_ia32_pmovmskb128(x)
 
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
+
+#ifdef __x86_64__
 
 static dontinline antiquity int memcmp_sse(const unsigned char *p,
                                            const unsigned char *q, size_t n) {
@@ -54,9 +57,9 @@ static dontinline antiquity int memcmp_sse(const unsigned char *p,
   }
 }
 
-microarchitecture("avx") static int memcmp_avx(const unsigned char *p,
-                                               const unsigned char *q,
-                                               size_t n) {
+_Microarchitecture("avx") static int memcmp_avx(const unsigned char *p,
+                                                const unsigned char *q,
+                                                size_t n) {
   uint64_t w;
   unsigned u;
   if (n > 32) {
@@ -99,6 +102,8 @@ microarchitecture("avx") static int memcmp_avx(const unsigned char *p,
   }
 }
 
+#endif /* __x86_64__ */
+
 /**
  * Compares memory byte by byte.
  *
@@ -125,7 +130,9 @@ microarchitecture("avx") static int memcmp_avx(const unsigned char *p,
  *     memcmp n=32768                      29 ps/byte         32,851 mb/s
  *     memcmp n=131072                     33 ps/byte         28,983 mb/s
  *
- * @return unsigned char subtraction at stop index
+ * @return an integer that's (1) equal to zero if `a` is equal to `b`,
+ *     (2) less than zero if `a` is less than `b`, or (3) greater than
+ *     zero if `a` is greater than `b`
  * @asyncsignalsafe
  */
 int memcmp(const void *a, const void *b, size_t n) {
@@ -136,6 +143,7 @@ int memcmp(const void *a, const void *b, size_t n) {
   const unsigned char *p, *q;
   if ((p = a) == (q = b) || !n) return 0;
   if ((c = *p - *q)) return c;
+#ifdef __x86_64__
   if (!IsTiny()) {
     if (n <= 16) {
       if (n >= 8) {
@@ -187,6 +195,7 @@ int memcmp(const void *a, const void *b, size_t n) {
       return memcmp_sse(p, q, n);
     }
   }
+#endif /* __x86_64__ */
   for (; n; ++p, ++q, --n) {
     if ((c = *p - *q)) {
       return c;
@@ -194,3 +203,5 @@ int memcmp(const void *a, const void *b, size_t n) {
   }
   return 0;
 }
+
+#endif /* __aarch64__ */

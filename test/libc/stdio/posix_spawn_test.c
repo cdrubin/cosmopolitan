@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdio/posix_spawn.h"
 #include "libc/atomic.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/state.internal.h"
@@ -28,7 +29,6 @@
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/posix_spawn.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/o.h"
@@ -36,6 +36,7 @@
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
+#ifdef __x86_64__
 
 char testlib_enable_tmp_setup_teardown;
 
@@ -51,7 +52,7 @@ __attribute__((__constructor__)) static void init(void) {
 TEST(posix_spawn, test) {
   int rc, ws, pid;
   char *prog = GetProgramExecutableName();
-  char *args[] = {program_invocation_name, NULL};
+  char *args[] = {prog, NULL};
   char *envs[] = {"THE_DOGE=42", NULL};
   EXPECT_EQ(0, posix_spawn(&pid, prog, NULL, NULL, args, envs));
   EXPECT_NE(-1, waitpid(pid, &ws, 0));
@@ -102,7 +103,7 @@ TEST(posix_spawn, torture) {
   ASSERT_EQ(0, posix_spawnattr_setflags(
                    &attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGDEF |
                               POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK |
-                              (IsNetbsd() ? 0 : POSIX_SPAWN_SETSCHEDULER)));
+                              (IsLinux() ? POSIX_SPAWN_SETSCHEDULER : 0)));
   ASSERT_EQ(0, posix_spawnattr_setsigmask(&attr, &allsig));
   ASSERT_EQ(0, posix_spawnattr_setsigdefault(&attr, &allsig));
   ASSERT_EQ(0, posix_spawn_file_actions_init(&fa));
@@ -193,3 +194,5 @@ const char kTinyLinuxExit[128] = {
 /*     unlink("/tmp/tiny64"); */
 /*   } */
 /* } */
+
+#endif /* __x86_64__ */

@@ -9,12 +9,8 @@ NET_HTTP_A = o/$(MODE)/net/http/http.a
 NET_HTTP_A_FILES := $(wildcard net/http/*)
 NET_HTTP_A_HDRS = $(filter %.h,$(NET_HTTP_A_FILES))
 NET_HTTP_A_INCS = $(filter %.inc,$(NET_HTTP_A_FILES))
-NET_HTTP_A_SRCS_C = $(filter %.c,$(NET_HTTP_A_FILES))
-NET_HTTP_A_SRCS_S = $(filter %.S,$(NET_HTTP_A_FILES))
-NET_HTTP_A_SRCS = $(NET_HTTP_A_SRCS_S) $(NET_HTTP_A_SRCS_C)
-NET_HTTP_A_OBJS_C = $(NET_HTTP_A_SRCS_C:%.c=o/$(MODE)/%.o)
-NET_HTTP_A_OBJS_S = $(NET_HTTP_A_SRCS_S:%.S=o/$(MODE)/%.o)
-NET_HTTP_A_OBJS = $(NET_HTTP_A_OBJS_S) $(NET_HTTP_A_OBJS_C)
+NET_HTTP_A_SRCS = $(filter %.c,$(NET_HTTP_A_FILES))
+NET_HTTP_A_OBJS = $(NET_HTTP_A_SRCS:%.c=o/$(MODE)/%.o)
 
 NET_HTTP_A_CHECKS =				\
 	$(NET_HTTP_A).pkg			\
@@ -26,7 +22,6 @@ NET_HTTP_A_DIRECTDEPS =				\
 	LIBC_MEM				\
 	LIBC_NEXGEN32E				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_TIME
 
@@ -54,13 +49,13 @@ o/$(MODE)/net/http/isloopbackip.o		\
 o/$(MODE)/net/http/ismulticastip.o		\
 o/$(MODE)/net/http/isripeip.o			\
 o/$(MODE)/net/http/istestnetip.o: private	\
-		OVERRIDE_CFLAGS +=		\
+		CFLAGS +=			\
 			-Os
 
 # we need -O3 because:
 #   we're dividing by constants
 o/$(MODE)/net/http/formathttpdatetime.o: private\
-		OVERRIDE_CFLAGS +=		\
+		CFLAGS +=			\
 			-O3
 
 NET_HTTP_LIBS = $(foreach x,$(NET_HTTP_ARTIFACTS),$($(x)))

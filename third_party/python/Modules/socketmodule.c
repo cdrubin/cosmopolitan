@@ -4,8 +4,8 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "third_party/python/Modules/socketmodule.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/dns/dns.h"
@@ -50,11 +50,11 @@
 #include "third_party/python/Include/pyerrors.h"
 #include "third_party/python/Include/pymacro.h"
 #include "third_party/python/Include/pymem.h"
+#include "third_party/python/Include/pythread.h"
 #include "third_party/python/Include/structmember.h"
 #include "third_party/python/Include/tupleobject.h"
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Include/yoink.h"
-#include "third_party/python/Modules/socketmodule.h"
 #include "third_party/python/pyconfig.h"
 /* clang-format off */
 
@@ -7199,7 +7199,12 @@ PyInit__socket(void)
     return m;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab__socket = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab__socket = {
     "_socket",
     PyInit__socket,
 };

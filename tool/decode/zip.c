@@ -19,6 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/fmt/conv.h"
+#include "libc/fmt/libgen.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/log/check.h"
@@ -34,7 +35,7 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/x/xasprintf.h"
 #include "libc/x/xiso8601.h"
-#include "libc/zip.h"
+#include "libc/zip.internal.h"
 #include "tool/decode/lib/asmcodegen.h"
 #include "tool/decode/lib/disassemblehex.h"
 #include "tool/decode/lib/flagger.h"
@@ -402,7 +403,8 @@ uint8_t *GetZipCdir32(const uint8_t *p, size_t n) {
   if (n >= kZipCdirHdrMinSize) {
     i = n - kZipCdirHdrMinSize;
     do {
-      if (READ32LE(p + i) == kZipCdirHdrMagic && IsZipCdir32(p, n, i)) {
+      if (READ32LE(p + i) == kZipCdirHdrMagic &&
+          IsZipEocd32(p, n, i) == kZipOk) {
         return (/*unconst*/ uint8_t *)(p + i);
       }
     } while (i--);
@@ -429,10 +431,6 @@ void DisassembleZip(const char *path, uint8_t *p, size_t n) {
   uint16_t i;
   static int records;
   uint8_t *eocd32, *eocd64, *cdir, *cf, *lf, *q;
-  if (_endswith(path, ".com.dbg") && (q = memmem(p, n, "MZqFpD", 6))) {
-    n -= q - p;
-    p += q - p;
-  }
   eocd32 = GetZipCdir32(p, n);
   eocd64 = GetZipCdir64(p, n);
   CHECK(eocd32 || eocd64);

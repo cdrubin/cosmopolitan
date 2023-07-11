@@ -22,6 +22,7 @@
 // standard's wording:
 // https://github.com/rui314/chibicc/wiki/cpp.algo.pdf
 
+#include "libc/fmt/libgen.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/mem/arena.h"
 #include "libc/runtime/runtime.h"
@@ -1021,10 +1022,6 @@ volatile\000\
 __unix\000\
 1\000\
 __unix__\000\
-1\000\
-__linux\000\
-1\000\
-__linux__\000\
 1\000\
 __gnu_linux__\000\
 1\000\

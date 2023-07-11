@@ -9,7 +9,6 @@
 #endif
 #include "dsp/tty/tty.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/termios.h"
 #include "libc/errno.h"
@@ -48,14 +47,14 @@ void onkilled(int sig) {
 
 void restoretty(void) {
   WRITE(1, DISABLE_MOUSE_TRACKING);
-  ioctl(1, TCSETS, &oldterm);
+  tcsetattr(1, TCSANOW, &oldterm);
 }
 
 int rawmode(void) {
   static bool once;
   struct termios t;
   if (!once) {
-    if (ioctl(1, TCGETS, &oldterm) != -1) {
+    if (tcgetattr(1, &oldterm) != -1) {
       atexit(restoretty);
     } else {
       return -1;
@@ -72,7 +71,7 @@ int rawmode(void) {
   t.c_oflag &= ~OPOST;
   t.c_cflag |= CS8;
   t.c_iflag |= IUTF8;
-  ioctl(1, TCSETS, &t);
+  tcsetattr(1, TCSANOW, &t);
   WRITE(1, ENABLE_SAFE_PASTE);
   WRITE(1, ENABLE_MOUSE_TRACKING);
   WRITE(1, PROBE_DISPLAY_SIZE);
@@ -80,7 +79,7 @@ int rawmode(void) {
 }
 
 void getsize(void) {
-  if (_getttysize(1, &wsize) != -1) {
+  if (tcgetwinsize(1, &wsize) != -1) {
     printf("termios says terminal size is %hu×%hu\r\n", wsize.ws_col,
            wsize.ws_row);
   } else {
@@ -113,7 +112,7 @@ const char *describemouseevent(int e) {
         strcat(buf, " right");
         break;
       default:
-        unreachable;
+        __builtin_unreachable();
     }
     if (e & 0x20) {
       strcat(buf, " drag");

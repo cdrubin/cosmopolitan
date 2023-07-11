@@ -19,7 +19,9 @@ TEST_LIBC_CALLS_BINS =							\
 	$(TEST_LIBC_CALLS_COMS)						\
 	$(TEST_LIBC_CALLS_COMS:%=%.dbg)					\
 	o/$(MODE)/test/libc/calls/life-nomod.com			\
-	o/$(MODE)/test/libc/calls/life-classic.com
+	o/$(MODE)/test/libc/calls/life-classic.com			\
+	o/$(MODE)/test/libc/calls/zipread.com.dbg			\
+	o/$(MODE)/test/libc/calls/zipread.com
 
 TEST_LIBC_CALLS_TESTS =							\
 	$(TEST_LIBC_CALLS_SRCS_TEST:%.c=o/$(MODE)/%.com.ok)
@@ -42,7 +44,6 @@ TEST_LIBC_CALLS_DIRECTDEPS =						\
 	LIBC_SYSV_CALLS							\
 	LIBC_RUNTIME							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_THREAD							\
 	LIBC_TIME							\
@@ -50,6 +51,7 @@ TEST_LIBC_CALLS_DIRECTDEPS =						\
 	LIBC_X								\
 	LIBC_ZIPOS							\
 	TOOL_DECODE_LIB							\
+	THIRD_PARTY_COMPILER_RT						\
 	THIRD_PARTY_XED
 
 TEST_LIBC_CALLS_DEPS :=							\
@@ -62,12 +64,50 @@ o/$(MODE)/test/libc/calls/calls.pkg:					\
 o/$(MODE)/test/libc/calls/%.com.dbg:					\
 		$(TEST_LIBC_CALLS_DEPS)					\
 		o/$(MODE)/test/libc/calls/%.o				\
-		o/$(MODE)/test/libc/calls/life-nomod.com.zip.o		\
-		o/$(MODE)/test/libc/calls/life-classic.com.zip.o	\
-		o/$(MODE)/test/libc/calls/tiny64.elf.zip.o		\
+		o/$(MODE)/test/libc/calls/calls.pkg			\
+		$(LIBC_TESTMAIN)					\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/calls/stat_test.com.dbg:				\
+		$(TEST_LIBC_CALLS_DEPS)					\
+		o/$(MODE)/test/libc/calls/stat_test.o			\
+		o/$(MODE)/third_party/python/Lib/test/tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt.zip.o	\
+		o/$(MODE)/test/libc/calls/calls.pkg			\
+		$(LIBC_TESTMAIN)					\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/calls/unveil_test.com.dbg:				\
+		$(TEST_LIBC_CALLS_DEPS)					\
+		o/$(MODE)/test/libc/calls/unveil_test.o			\
 		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o		\
 		o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o		\
-		o/$(MODE)/third_party/python/Lib/test/tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt.zip.o	\
+		o/$(MODE)/test/libc/calls/calls.pkg			\
+		$(LIBC_TESTMAIN)					\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/calls/pledge_test.com.dbg:				\
+		$(TEST_LIBC_CALLS_DEPS)					\
+		o/$(MODE)/test/libc/calls/pledge_test.o			\
+		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o		\
+		o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o		\
+		o/$(MODE)/test/libc/calls/calls.pkg			\
+		$(LIBC_TESTMAIN)					\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/calls/execve_test.com.dbg:				\
+		$(TEST_LIBC_CALLS_DEPS)					\
+		o/$(MODE)/test/libc/calls/execve_test.o			\
+		o/$(MODE)/test/libc/calls/life-nomod.com.zip.o		\
+		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o		\
+		o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o		\
 		o/$(MODE)/test/libc/calls/calls.pkg			\
 		$(LIBC_TESTMAIN)					\
 		$(CRT)							\
@@ -92,7 +132,10 @@ o/$(MODE)/test/libc/calls/fexecve_test.com.dbg:				\
 		$(TEST_LIBC_CALLS_DEPS)					\
 		o/$(MODE)/test/libc/calls/fexecve_test.o		\
 		o/$(MODE)/test/libc/calls/calls.pkg			\
+		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o		\
 		o/$(MODE)/tool/build/echo.zip.o				\
+		o/$(MODE)/test/libc/calls/life-nomod.com.zip.o		\
+		o/$(MODE)/test/libc/calls/zipread.com.zip.o		\
 		$(LIBC_TESTMAIN)					\
 		$(CRT)							\
 		$(APE_NO_MODIFY_SELF)
@@ -100,33 +143,32 @@ o/$(MODE)/test/libc/calls/fexecve_test.com.dbg:				\
 
 o/$(MODE)/test/libc/calls/tiny64.elf.zip.o				\
 o/$(MODE)/test/libc/calls/life-nomod.com.zip.o				\
-o/$(MODE)/test/libc/calls/life-classic.com.zip.o: private		\
+o/$(MODE)/test/libc/calls/life-classic.com.zip.o			\
+o/$(MODE)/test/libc/calls/zipread.com.zip.o: private			\
 		ZIPOBJ_FLAGS +=						\
 			-B
 
 # TODO(jart): Have pledge() support SIOCGIFCONF
-o/$(MODE)/test/libc/calls/ioctl_siocgifconf_test.com.runs:		\
+o/$(MODE)/test/libc/calls/ioctl_test.com.runs:				\
 		private .PLEDGE =
 
 o/$(MODE)/test/libc/calls/poll_test.com.runs:				\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
 
-o/$(MODE)/test/libc/calls/fcntl_test.com.runs:				\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc flock
-
-o/$(MODE)/test/libc/calls/lock_test.com.runs:				\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc flock
-
-o/$(MODE)/test/libc/calls/lock2_test.com.runs:				\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc flock
-
+o/$(MODE)/test/libc/calls/fcntl_test.com.runs				\
+o/$(MODE)/test/libc/calls/lock_test.com.runs				\
+o/$(MODE)/test/libc/calls/lock2_test.com.runs				\
 o/$(MODE)/test/libc/calls/lock_ofd_test.com.runs:			\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc flock
 
+o/$(MODE)/test/libc/calls/unveil_test.com.runs				\
 o/$(MODE)/test/libc/calls/openbsd_test.com.runs:			\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc unveil
 
 o/$(MODE)/test/libc/calls/fexecve_test.com.runs:			\
+		private .UNSANDBOXED = 1  # for memfd_create()
+
+o/$(MODE)/test/libc/calls/execve_test.com.runs:				\
 		private .UNSANDBOXED = 1  # for memfd_create()
 
 o/$(MODE)/test/libc/calls/read_test.com.runs:				\

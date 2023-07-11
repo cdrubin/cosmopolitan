@@ -42,10 +42,9 @@ LIBC_RUNTIME_A_DIRECTDEPS =				\
 	LIBC_NT_KERNEL32				\
 	LIBC_NT_SYNCHRONIZATION				\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
-	THIRD_PARTY_ZLIB				\
+	THIRD_PARTY_PUFF				\
 	THIRD_PARTY_XED
 
 LIBC_RUNTIME_A_DEPS :=					\
@@ -64,13 +63,16 @@ $(LIBC_RUNTIME_A).pkg:					\
 #   asan and ubsan can be function traced
 # we can't use function tracing because:
 #   this is the function tracing runtime
+o/$(MODE)/libc/runtime/cosmo2.o: private		\
+		CFLAGS += -O0
+
 o/$(MODE)/libc/runtime/ftracer.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-x-no-pg			\
-			-mno-fentry			\
 			-ffreestanding			\
 			-fno-sanitize=all
 
+o/$(MODE)/libc/runtime/cosmo2.o				\
 o/$(MODE)/libc/runtime/fork-nt.o			\
 o/$(MODE)/libc/runtime/printmemoryintervals.o		\
 o/$(MODE)/libc/runtime/arememoryintervalsok.o		\
@@ -90,7 +92,7 @@ o/$(MODE)/libc/runtime/stackchkfail.o			\
 o/$(MODE)/libc/runtime/stackchkfaillocal.o		\
 o/$(MODE)/libc/runtime/winmain.greg.o			\
 o/$(MODE)/libc/runtime/opensymboltable.o: private	\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-Os				\
 			-ffreestanding			\
 			$(NO_MAGIC)
@@ -98,11 +100,11 @@ o/$(MODE)/libc/runtime/opensymboltable.o: private	\
 # must use alloca()
 # can't use asan or any runtime services
 o/$(MODE)/libc/runtime/fork-nt.o: private		\
-		OVERRIDE_CPPFLAGS +=			\
+		CPPFLAGS +=				\
 			-DSTACK_FRAME_UNLIMITED
 
 o/$(MODE)/libc/runtime/qsort.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-Og
 
 # make always linked runtimes less huge when it's profitable
@@ -110,8 +112,44 @@ o//libc/runtime/mmap.o					\
 o//libc/runtime/munmap.o				\
 o//libc/runtime/memtrack.greg.o				\
 o//libc/runtime/opensymboltable.greg.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-Os
+
+ifeq ($(ARCH), aarch64)
+o/$(MODE)/libc/runtime/mmap.o				\
+o/$(MODE)/libc/runtime/enable_tls.o: private		\
+		CFLAGS +=				\
+			-mcmodel=large
+endif
+
+# privileged functions
+o/$(MODE)/libc/runtime/getsymbol.o			\
+o/$(MODE)/libc/runtime/enable_threads.o			\
+o/$(MODE)/libc/runtime/morph_tls.o: private		\
+		CFLAGS +=				\
+			-ffreestanding			\
+			-fno-sanitize=all		\
+			-fno-stack-protector
+
+# TODO(jart): We need a way to avoid WinThreadEntry() being hooked.
+o/$(MODE)/libc/runtime/clone.o: private			\
+		COPTS +=				\
+			-fno-sanitize=all		\
+			-fpatchable-function-entry=0,0
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/runtime/init.o: libc/runtime/init.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/wipe.o: libc/runtime/wipe.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/vfork.o: libc/runtime/vfork.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/clone-linux.o: libc/runtime/clone-linux.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/ftrace-hook.o: libc/runtime/ftrace-hook.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/dsohandle.o: libc/runtime/dsohandle.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 LIBC_RUNTIME_LIBS = $(foreach x,$(LIBC_RUNTIME_ARTIFACTS),$($(x)))
 LIBC_RUNTIME_SRCS = $(foreach x,$(LIBC_RUNTIME_ARTIFACTS),$($(x)_SRCS))

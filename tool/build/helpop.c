@@ -24,7 +24,7 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
   " [FLAGS] OPERAND..\n\
@@ -52,7 +52,7 @@ void PrintUsage(int rc, FILE *f) {
 void GetOpts(int argc, char *argv[]) {
   int opt;
   bits_ = 64;
-  while ((opt = getopt(argc, argv, "?hbs")) != -1) {
+  while ((opt = getopt(argc, argv, "hbs")) != -1) {
     switch (opt) {
       case 's':
         succinct_ = true;
@@ -60,7 +60,6 @@ void GetOpts(int argc, char *argv[]) {
       case 'b':
         bits_ = atoi(optarg);
         break;
-      case '?':
       case 'h':
         PrintUsage(EXIT_SUCCESS, stdout);
       default:

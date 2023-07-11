@@ -30,11 +30,7 @@
 int32_t sys_fstat(int32_t fd, struct stat *st) {
   void *p;
   union metastat ms;
-  if (IsLinux()) {
-    _Static_assert(sizeof(*st) == sizeof(ms.linux), "assumption broken");
-    if (IsAsan() && !__asan_is_valid(st, sizeof(*st))) return efault();
-    p = st;
-  } else if (st) {
+  if (st) {
     p = &ms;
   } else {
     p = 0;

@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "tool/build/runit.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/itimerval.h"
@@ -24,6 +25,7 @@
 #include "libc/dns/dns.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/fmt/libgen.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
@@ -31,7 +33,6 @@
 #include "libc/log/log.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/ipclassify.internal.h"
 #include "libc/stdio/stdio.h"
@@ -54,7 +55,6 @@
 #include "third_party/zlib/zlib.h"
 #include "tool/build/lib/eztls.h"
 #include "tool/build/lib/psk.h"
-#include "tool/build/runit.h"
 
 #define MAX_WAIT_CONNECT_SECONDS 12
 #define INITIAL_CONNECT_TIMEOUT  100000
@@ -129,14 +129,14 @@ wontreturn void ShowUsage(FILE *f, int rc) {
   fprintf(f, "Usage: %s RUNITD PROGRAM HOSTNAME[:RUNITDPORT[:SSHPORT]]...\n",
           program_invocation_name);
   exit(rc);
-  unreachable;
+  __builtin_unreachable();
 }
 
 void CheckExists(const char *path) {
   if (!isregularfile(path)) {
     fprintf(stderr, "error: %s: not found or irregular\n", path);
     ShowUsage(stderr, EX_USAGE);
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -148,14 +148,14 @@ void Connect(void) {
   if ((rc = getaddrinfo(g_hostname, _gc(xasprintf("%hu", g_runitdport)),
                         &kResolvHints, &ai)) != 0) {
     FATALF("%s:%hu: EAI_%s %m", g_hostname, g_runitdport, gai_strerror(rc));
-    unreachable;
+    __builtin_unreachable();
   }
   ip4 = (const char *)&ai->ai_addr4->sin_addr;
   if (ispublicip(ai->ai_family, &ai->ai_addr4->sin_addr)) {
     FATALF("%s points to %hhu.%hhu.%hhu.%hhu"
            " which isn't part of a local/private/testing subnet",
            g_hostname, ip4[0], ip4[1], ip4[2], ip4[3]);
-    unreachable;
+    __builtin_unreachable();
   }
   DEBUGF("connecting to %d.%d.%d.%d port %d", ip4[0], ip4[1], ip4[2], ip4[3],
          ntohs(ai->ai_addr4->sin_port));
@@ -181,7 +181,7 @@ TryAgain:
       if (t2 > t1 + MAX_WAIT_CONNECT_SECONDS) {
         FATALF("timeout connecting to %s (%hhu.%hhu.%hhu.%hhu:%d)", g_hostname,
                ip4[0], ip4[1], ip4[2], ip4[3], ntohs(ai->ai_addr4->sin_port));
-        unreachable;
+        __builtin_unreachable();
       }
       goto TryAgain;
     }
@@ -245,7 +245,7 @@ bool SendRequest(int tmpfd) {
   CHECK_LE((namesize = strlen((name = basename(g_prog)))), PATH_MAX);
   CHECK_LE((progsize = st.st_size), INT_MAX);
   CHECK_NOTNULL((hdr = _gc(calloc(1, (hdrsize = 17 + namesize)))));
-  crc = crc32_z(0, p, st.st_size);
+  crc = crc32_z(0, (unsigned char *)p, st.st_size);
   q = hdr;
   q = WRITE32BE(q, RUNITD_MAGIC);
   *q++ = kRunitExecute;
@@ -464,11 +464,11 @@ int main(int argc, char *argv[]) {
   if (argc > 1 &&
       (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)) {
     ShowUsage(stdout, 0);
-    unreachable;
+    __builtin_unreachable();
   }
   if (argc < 3) {
     ShowUsage(stderr, EX_USAGE);
-    unreachable;
+    __builtin_unreachable();
   }
   CheckExists((g_runitd = argv[1]));
   CheckExists((g_prog = argv[2]));

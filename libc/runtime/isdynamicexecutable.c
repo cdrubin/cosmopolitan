@@ -33,7 +33,7 @@
 /**
  * Returns true if ELF executable uses dynamic loading magic.
  */
-bool IsDynamicExecutable(const char *prog) {
+bool _IsDynamicExecutable(const char *prog) {
   bool res;
   Elf64_Ehdr *e;
   Elf64_Phdr *p;
@@ -64,7 +64,7 @@ bool IsDynamicExecutable(const char *prog) {
     goto Finish;
   }
   for (i = 0; i < e->e_phnum; ++i) {
-    p = GetElfSegmentHeaderAddress(e, st.st_size, i);
+    p = GetElfProgramHeaderAddress(e, st.st_size, i);
     if (p->p_type == PT_INTERP || p->p_type == PT_DYNAMIC) {
       res = true;
       goto Finish;

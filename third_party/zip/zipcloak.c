@@ -37,7 +37,7 @@
 #include "libc/sysv/consts/ss.h"
 #ifndef NO_STDLIB_H
 #include "libc/calls/calls.h"
-#include "libc/calls/dprintf.h"
+#include "libc/stdio/dprintf.h"
 #include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
 #include "libc/limits.h"
@@ -49,7 +49,6 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
 #include "third_party/gdtoa/gdtoa.h"
-#include "third_party/getopt/getopt.h"
 #include "third_party/musl/crypt.h"
 #include "third_party/musl/rand48.h"
 #endif

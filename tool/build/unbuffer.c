@@ -31,7 +31,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/w.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define GETOPTS "o:"
 
@@ -95,8 +95,8 @@ int main(int argc, char *argv[]) {
   wsz.ws_col = 80;
   wsz.ws_row = 45;
 
-  if (ioctl(1, TCGETS, &tio)) {
-    perror("tcgets");
+  if (tcgetattr(1, &tio)) {
+    perror("tcgetattr");
     return __COUNTER__ + 1;
   }
 

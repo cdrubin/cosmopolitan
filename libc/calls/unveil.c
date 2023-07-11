@@ -20,15 +20,18 @@
 #include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/landlock.h"
-#include "libc/calls/struct/bpf.h"
-#include "libc/calls/struct/filter.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/stat.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/fmt/libgen.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/vendor.internal.h"
@@ -48,13 +51,22 @@
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/tls.h"
 
+#ifdef __x86_64__
+#define ARCHITECTURE AUDIT_ARCH_X86_64
+#elif defined(__aarch64__)
+#define ARCHITECTURE AUDIT_ARCH_AARCH64
+#else
+#error "unsupported architecture"
+#endif
+
 #define OFF(f) offsetof(struct seccomp_data, f)
 
 #define UNVEIL_READ                                             \
   (LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR | \
    LANDLOCK_ACCESS_FS_REFER)
-#define UNVEIL_WRITE (LANDLOCK_ACCESS_FS_WRITE_FILE)
-#define UNVEIL_EXEC  (LANDLOCK_ACCESS_FS_EXECUTE)
+#define UNVEIL_WRITE \
+  (LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_TRUNCATE)
+#define UNVEIL_EXEC (LANDLOCK_ACCESS_FS_EXECUTE)
 #define UNVEIL_CREATE                                             \
   (LANDLOCK_ACCESS_FS_MAKE_CHAR | LANDLOCK_ACCESS_FS_MAKE_DIR |   \
    LANDLOCK_ACCESS_FS_MAKE_REG | LANDLOCK_ACCESS_FS_MAKE_SOCK |   \
@@ -65,9 +77,9 @@
   (LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_WRITE_FILE | \
    LANDLOCK_ACCESS_FS_EXECUTE)
 
-static const struct sock_filter kUnveilBlacklist[] = {
+static const struct sock_filter kUnveilBlacklistAbiVersionBelow3[] = {
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(arch)),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, ARCHITECTURE, 1, 0),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(nr)),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_truncate, 1, 0),
@@ -76,13 +88,34 @@ static const struct sock_filter kUnveilBlacklist[] = {
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 };
 
+static const struct sock_filter kUnveilBlacklistLatestAbi[] = {
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(arch)),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, ARCHITECTURE, 1, 0),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(nr)),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_setxattr, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (1 & SECCOMP_RET_DATA)),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+};
+
+static int landlock_abi_version;
+static int landlock_abi_errno;
+
+__attribute__((__constructor__)) void init_landlock_version() {
+  int e = errno;
+  landlock_abi_version =
+      landlock_create_ruleset(0, 0, LANDLOCK_CREATE_RULESET_VERSION);
+  landlock_abi_errno = errno;
+  errno = e;
+}
+
 /**
  * Long living state for landlock calls.
  * fs_mask is set to use all the access rights from the latest landlock ABI.
  * On init, the current supported abi is checked and unavailable rights are
  * masked off.
  *
- * As of 5.19, the latest abi is v2.
+ * As of 6.2, the latest abi is v3.
  *
  * TODO:
  *  - Integrate with pledge and remove the file access?
@@ -96,9 +129,15 @@ _Thread_local static struct {
 static int unveil_final(void) {
   int e, rc;
   struct sock_fprog sandbox = {
-      .filter = kUnveilBlacklist,
-      .len = ARRAYLEN(kUnveilBlacklist),
+      .filter = kUnveilBlacklistLatestAbi,
+      .len = ARRAYLEN(kUnveilBlacklistLatestAbi),
   };
+  if (landlock_abi_version < 3) {
+    sandbox = (struct sock_fprog){
+        .filter = kUnveilBlacklistAbiVersionBelow3,
+        .len = ARRAYLEN(kUnveilBlacklistAbiVersionBelow3),
+    };
+  }
   e = errno;
   prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
   errno = e;
@@ -120,20 +159,23 @@ static int err_close(int rc, int fd) {
 static int unveil_init(void) {
   int rc, fd;
   State.fs_mask = UNVEIL_READ | UNVEIL_WRITE | UNVEIL_EXEC | UNVEIL_CREATE;
-  if ((rc = landlock_create_ruleset(0, 0, LANDLOCK_CREATE_RULESET_VERSION)) ==
-      -1) {
+  if (landlock_abi_version == -1) {
+    errno = landlock_abi_errno;
     if (errno == EOPNOTSUPP) {
       errno = ENOSYS;
     }
     return -1;
   }
-  if (rc < 2) {
+  if (landlock_abi_version < 2) {
     State.fs_mask &= ~LANDLOCK_ACCESS_FS_REFER;
+  }
+  if (landlock_abi_version < 3) {
+    State.fs_mask &= ~LANDLOCK_ACCESS_FS_TRUNCATE;
   }
   const struct landlock_ruleset_attr attr = {
       .handled_access_fs = State.fs_mask,
   };
-  // [undocumented] landlock_create_ruleset() always returns o_cloexec
+  // [undocumented] landlock_create_ruleset() always returns O_CLOEXEC
   //                assert(__sys_fcntl(rc, F_GETFD, 0) == FD_CLOEXEC);
   if ((rc = landlock_create_ruleset(&attr, sizeof(attr), 0)) < 0) return -1;
   // grant file descriptor a higher number that's less likely to interfere
@@ -145,6 +187,56 @@ static int unveil_init(void) {
   }
   State.fd = fd;
   return 0;
+}
+
+/**
+ * Joins paths, e.g.
+ *
+ *     0    + 0    → 0
+ *     ""   + ""   → ""
+ *     "a"  + 0    → "a"
+ *     "a"  + ""   → "a/"
+ *     0    + "b"  → "b"
+ *     ""   + "b"  → "b"
+ *     "."  + "b"  → "./b"
+ *     "b"  + "."  → "b/."
+ *     "a"  + "b"  → "a/b"
+ *     "a/" + "b"  → "a/b"
+ *     "a"  + "b/" → "a/b/"
+ *     "a"  + "/b" → "/b"
+ *
+ * @return joined path, which may be `buf`, `path`, or `other`, or null
+ *     if (1) `buf` didn't have enough space, or (2) both `path` and
+ *     `other` were null
+ */
+static char *JoinPaths(char *buf, size_t size, const char *path,
+                       const char *other) {
+  size_t pathlen, otherlen;
+  if (!other) return path;
+  if (!path) return other;
+  pathlen = strlen(path);
+  if (!pathlen || *other == '/') {
+    return (/*unconst*/ char *)other;
+  }
+  otherlen = strlen(other);
+  if (path[pathlen - 1] == '/') {
+    if (pathlen + otherlen + 1 <= size) {
+      memmove(buf, path, pathlen);
+      memmove(buf + pathlen, other, otherlen + 1);
+      return buf;
+    } else {
+      return 0;
+    }
+  } else {
+    if (pathlen + 1 + otherlen + 1 <= size) {
+      memmove(buf, path, pathlen);
+      buf[pathlen] = '/';
+      memmove(buf + pathlen + 1, other, otherlen + 1);
+      return buf;
+    } else {
+      return 0;
+    }
+  }
 }
 
 int sys_unveil_linux(const char *path, const char *permissions) {
@@ -208,7 +300,7 @@ int sys_unveil_linux(const char *path, const char *permissions) {
         // next = join(dirname(next), link)
         strcpy(b.buf2, next);
         dir = dirname(b.buf2);
-        if ((next = _joinpaths(b.buf3, PATH_MAX, dir, b.lbuf))) {
+        if ((next = JoinPaths(b.buf3, PATH_MAX, dir, b.lbuf))) {
           // next now points to either: buf3, buf2, lbuf, rodata
           strcpy(b.buf4, next);
           next = b.buf4;
@@ -237,7 +329,7 @@ int sys_unveil_linux(const char *path, const char *permissions) {
 
   // now we can open the path
   BLOCK_CANCELLATIONS;
-  rc = sys_open(path, O_PATH | O_NOFOLLOW | O_CLOEXEC, 0);
+  rc = sys_openat(AT_FDCWD, path, O_PATH | O_NOFOLLOW | O_CLOEXEC, 0);
   ALLOW_CANCELLATIONS;
   if (rc == -1) return rc;
 
@@ -271,9 +363,16 @@ int sys_unveil_linux(const char *path, const char *permissions) {
  * should become unhidden. When you're finished, you call `unveil(0,0)`
  * which commits your policy.
  *
- * This function requires OpenBSD or Linux 5.13+. We don't consider lack
- * of system support to be an ENOSYS error, because the files will still
- * become unveiled. Therefore we return 0 in such cases.
+ * This function requires OpenBSD or Linux 5.13+ (2022+). If the kernel
+ * support isn't available (or we're in an emulator like Qemu or Blink)
+ * then zero is returned and nothing happens (instead of raising ENOSYS)
+ * because the files are still unveiled. Use `unveil("", 0)` to feature
+ * check the host system, which is defined as a no-op that'll fail if
+ * the host system doesn't have the necessary features that allow
+ * unveil() impose bona-fide security restrictions. Otherwise, if
+ * everything is good, a return value `>=0` is returned, where `0` means
+ * OpenBSD, and `>=1` means Linux with Landlock LSM, in which case the
+ * return code shall be the maximum supported Landlock ABI version.
  *
  * There are some differences between unveil() on Linux versus OpenBSD.
  *
@@ -301,14 +400,19 @@ int sys_unveil_linux(const char *path, const char *permissions) {
  *    possible to use opendir() and go fishing for paths which weren't
  *    previously known.
  *
- * 5. Use ftruncate() rather than truncate(). One issue Landlock hasn't
- *    addressed yet is restrictions over truncate() and setxattr() which
- *    could permit certain kinds of modifications to files outside the
- *    sandbox. When your policy is committed, we install a SECCOMP BPF
- *    filter to disable those calls, however similar trickery may be
- *    possible through other unaddressed calls like ioctl(). Using the
- *    pledge() function in addition to unveil() will solve this, since
- *    it installs a strong system call access policy.
+ * 5. Use ftruncate() rather than truncate() if you wish for portability
+ *    to Linux kernels versions released before February 2022. One issue
+ *    Landlock hadn't addressed as of ABI version 2 was restrictions
+ *    over truncate() and setxattr() which could permit certain kinds of
+ *    modifications to files outside the sandbox. When your policy is
+ *    committed, we install a SECCOMP BPF filter to disable those calls,
+ *    however similar trickery may be possible through other unaddressed
+ *    calls like ioctl(). Using the pledge() function in addition to
+ *    unveil() will solve this, since it installs a strong system call
+ *    access policy. Linux 6.2 has improved this situation with Landlock
+ *    ABI v3, which added the ability to control truncation operations -
+ *    this means the SECCOMP BPF filter will only disable truncate() on
+ *    Linux 6.1 or older.
  *
  * 6. Set your process-wide policy at startup from the main thread. On
  *    OpenBSD unveil() will apply process-wide even when called from a
@@ -343,19 +447,41 @@ int sys_unveil_linux(const char *path, const char *permissions) {
  *     - `c` allows `path` to be created and removed, corresponding to
  *       the pledge promise "cpath".
  *
- * @return 0 on success, or -1 w/ errno
+ * @return 0 on success, or -1 w/ errno; note: if `unveil("",0)` is used
+ *     to perform a feature check, then on Linux a value greater than 0
+ *     shall be returned which is the supported Landlock ABI version
+ * @raise EPERM if unveil() is called after locking
  * @raise EINVAL if one argument is set and the other is not
  * @raise EINVAL if an invalid character in `permissions` was found
- * @raise EPERM if unveil() is called after locking
- * @note on Linux this function requires Linux Kernel 5.13+
+ * @raise ENOSYS if `unveil("",0)` was used and security isn't possible
+ * @raise EOPNOTSUPP if `unveil("",0)` was used and Landlock LSM is disabled
+ * @note on Linux this function requires Linux Kernel 5.13+ and version 6.2+
+ *     to properly support truncation operations
  * @see [1] https://docs.kernel.org/userspace-api/landlock.html
  * @threadsafe
  */
 int unveil(const char *path, const char *permissions) {
   int e, rc;
   e = errno;
-  if (IsGenuineCosmo() || IsGenuineBlink()) {
-    rc = 0;  // blink doesn't support landlock
+  if (path && !*path) {
+    // OpenBSD will always fail on both unveil("",0) and unveil("",""),
+    // since an empty `path` is invalid and `permissions` is mandatory.
+    // Cosmopolitan Libc uses it as a feature check convention, to test
+    // if the host environment enables unveil() to impose true security
+    // restrictions because the default behavior is to silently succeed
+    // so that programs will err on the side of working if distributed.
+    if (permissions) return einval();
+    if (IsOpenbsd()) return 0;
+    if (landlock_abi_version != -1) {
+      _unassert(landlock_abi_version >= 1);
+      return landlock_abi_version;
+    } else {
+      _unassert(landlock_abi_errno);
+      errno = landlock_abi_errno;
+      return -1;
+    }
+  } else if (!IsTiny() && IsGenuineBlink()) {
+    rc = 0;  // blink doesn't support landlock; avoid noisy log warnings
   } else if (IsLinux()) {
     rc = sys_unveil_linux(path, permissions);
   } else {

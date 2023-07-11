@@ -137,13 +137,15 @@ THIRD_PARTY_QUICKJS_CHECKS =							\
 
 o/$(MODE)/third_party/quickjs/qjscalc.c:					\
 		third_party/quickjs/qjscalc.js					\
-		o/$(MODE)/third_party/quickjs/qjsc.com
-	@$(COMPILE) -wAQJSC o/$(MODE)/third_party/quickjs/qjsc.com -fbignum -o $@ -c $<
+		o/$(MODE)/third_party/quickjs/qjsc.com				\
+		$(VM)
+	@$(COMPILE) -wAQJSC $(VM) o/$(MODE)/third_party/quickjs/qjsc.com -fbignum -o $@ -c $<
 
 o/$(MODE)/third_party/quickjs/repl.c:						\
 		third_party/quickjs/repl.js					\
-		o/$(MODE)/third_party/quickjs/qjsc.com
-	@$(COMPILE) -wAQJSC o/$(MODE)/third_party/quickjs/qjsc.com -o $@ -m -c $<
+		o/$(MODE)/third_party/quickjs/qjsc.com				\
+		$(VM)
+	@$(COMPILE) -wAQJSC $(VM) o/$(MODE)/third_party/quickjs/qjsc.com -o $@ -m -c $<
 
 o/$(MODE)/third_party/quickjs/qjs.com.dbg:					\
 		$(THIRD_PARTY_QUICKJS)						\
@@ -157,7 +159,8 @@ o/$(MODE)/third_party/quickjs/qjs.com.dbg:					\
 o/$(MODE)/third_party/quickjs/qjs.com:						\
 		o/$(MODE)/third_party/quickjs/qjs.com.dbg			\
 		o/$(MODE)/third_party/zip/zip.com				\
-		o/$(MODE)/tool/build/symtab.com
+		o/$(MODE)/tool/build/symtab.com					\
+		$(VM)
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)
@@ -191,18 +194,18 @@ o/$(MODE)/third_party/quickjs/unicode_gen.com.dbg:				\
 	@$(APELINK)
 
 $(THIRD_PARTY_QUICKJS_OBJS): private						\
-		OVERRIDE_CPPFLAGS +=						\
+		CPPFLAGS +=							\
 			-DCONFIG_BIGNUM						\
 			-DCONFIG_VERSION=\"2021-03-27\"
 
 o/tiny/third_party/quickjs/call.o: private					\
-		OVERRIDE_CFLAGS +=						\
+		CFLAGS +=							\
 			-O2
 
 # TODO(jart): Replace alloca() calls with malloc().
 o/$(MODE)/third_party/quickjs/libregexp.o					\
 o/$(MODE)/third_party/quickjs/quickjs.o: private				\
-		OVERRIDE_CPPFLAGS +=						\
+		CPPFLAGS +=							\
 			-DSTACK_FRAME_UNLIMITED
 
 o/$(MODE)/third_party/quickjs/call.o: private QUOTA = -M1024m -C32 -L180

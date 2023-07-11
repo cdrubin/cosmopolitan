@@ -18,9 +18,9 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/struct/bpf.h"
-#include "libc/calls/struct/filter.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
@@ -44,6 +44,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #include "net/http/ip.h"
+#ifdef __x86_64__
 
 #define ORIG_RAX 120
 #define RAX      80
@@ -337,3 +338,5 @@ int nointernet(void) {
     HandleSeccompTrace(act);
   }
 }
+
+#endif /* __x86_64__ */

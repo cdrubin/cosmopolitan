@@ -105,7 +105,7 @@ struct sdb {
     int busy_cb;        /* busy callback */
     int busy_udata;
 
-    int wal_hook_cb; /* wal_hook callback */
+    int wal_hook_cb;    /* wal_hook callback */
     int wal_hook_udata;
 
     int update_hook_cb; /* update_hook callback */
@@ -131,6 +131,9 @@ static int sqlite_ses_meta_ref;
 static int sqlite_reb_meta_ref;
 static int sqlite_itr_meta_ref;
 #endif
+/* global config configuration */
+static int log_cb = LUA_NOREF; /* log callback */
+static int log_udata;
 
 /*
 ** =======================================================
@@ -191,29 +194,19 @@ static sdb_vm *newvm(lua_State *L, sdb *db) {
     /* add an entry on the database table: svm -> db to keep db live while svm is live */
     lua_pushlightuserdata(L, db);     /* db sql svm_ud db_lud -- */
     lua_rawget(L, LUA_REGISTRYINDEX); /* db sql svm_ud reg[db_lud] -- */
-    lua_pushlightuserdata(L, svm);    /* db sql svm_ud reg[db_lud] svm_lud -- */
-    lua_pushvalue(L, -5);             /* db sql svm_ud reg[db_lud] svm_lud db -- */
-    lua_rawset(L, -3);                /* (reg[db_lud])[svm_lud] = db ; set the db for this vm */
+    lua_pushvalue(L, -2);             /* db sql svm_ud reg[db_lud] svm_ud -- */
+    lua_pushvalue(L, -5);             /* db sql svm_ud reg[db_lud] svm_ud db -- */
+    lua_rawset(L, -3);                /* (reg[db_lud])[svm_ud] = db ; set the db for this vm */
     lua_pop(L, 1);                    /* db sql svm_ud -- */
 
     return svm;
 }
 
 static int cleanupvm(lua_State *L, sdb_vm *svm) {
-
-    /* remove entry in database table - no harm if not present in the table */
-    lua_pushlightuserdata(L, svm->db);
-    lua_rawget(L, LUA_REGISTRYINDEX);
-    lua_pushlightuserdata(L, svm);
-    lua_pushnil(L);
-    lua_rawset(L, -3);
-    lua_pop(L, 1);
-
     svm->columns = 0;
     svm->has_values = 0;
 
     if (!svm->vm) return 0;
-
     lua_pushinteger(L, sqlite3_finalize(svm->vm));
     svm->vm = NULL;
     return 1;
@@ -242,7 +235,7 @@ static int dbvm_isopen(lua_State *L) {
 }
 
 static int dbvm_tostring(lua_State *L) {
-    char buff[39];
+    char buff[40];
     sdb_vm *svm = lsqlite_getvm(L, 1);
     if (svm->vm == NULL)
         strcpy(buff, "closed");
@@ -253,9 +246,7 @@ static int dbvm_tostring(lua_State *L) {
 }
 
 static int dbvm_gc(lua_State *L) {
-    sdb_vm *svm = lsqlite_getvm(L, 1);
-    if (svm->vm != NULL)  /* ignore closed vms */
-        cleanupvm(L, svm);
+    cleanupvm(L, lsqlite_getvm(L, 1));
     return 0;
 }
 
@@ -613,41 +604,47 @@ static sdb *newdb (lua_State *L) {
     db->commit_hook_udata =
     db->rollback_hook_cb =
     db->rollback_hook_udata =
-     LUA_NOREF;
+        LUA_NOREF;
 
     luaL_getmetatable(L, sqlite_meta);
     lua_setmetatable(L, -2);        /* set metatable */
 
-    /* to keep track of 'open' virtual machines */
+    /* to keep track of 'open' virtual machines; make keys week */
     lua_pushlightuserdata(L, db);
-    lua_newtable(L);
+    lua_newtable(L);                    // t
+    lua_newtable(L);                    // t mt
+    lua_pushstring(L, "k");             // t mt v
+    lua_setfield(L, -2, "__mode");      // t mt
+    lua_setmetatable(L, -2);            // t
     lua_rawset(L, LUA_REGISTRYINDEX);
 
     return db;
 }
 
-static int cleanupdb(lua_State *L, sdb *db) {
-    sdb_func *func;
-    sdb_func *func_next;
-    int top;
-    int result;
-
+/* cleanup all vms or just temporary ones */
+static void closevms(lua_State *L, sdb *db, int temp) {
     /* free associated virtual machines */
     lua_pushlightuserdata(L, db);
     lua_rawget(L, LUA_REGISTRYINDEX);
 
     /* close all used handles */
-    top = lua_gettop(L);
     lua_pushnil(L);
     while (lua_next(L, -2)) {
         sdb_vm *svm = lua_touserdata(L, -2); /* key: vm; val: sql text */
-        cleanupvm(L, svm);
-
-        lua_settop(L, top);
-        lua_pushnil(L);
+        if ((!temp || svm->temp)) lua_pop(L, cleanupvm(L, svm));
+        lua_pop(L, 1); /* pop value; leave key in the stack */
     }
+}
 
-    lua_pop(L, 1); /* pop vm table */
+static int cleanupdb(lua_State *L, sdb *db) {
+    sdb_func *func;
+    sdb_func *func_next;
+    int top = lua_gettop(L);
+    int result;
+
+    if (!db->db) return SQLITE_MISUSE;
+
+    closevms(L, db, 0);
 
     /* remove entry in lua registry table */
     lua_pushlightuserdata(L, db);
@@ -666,8 +663,9 @@ static int cleanupdb(lua_State *L, sdb *db) {
     luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_cb);
     luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_udata);
 
-    /* close database */
-    result = sqlite3_close(db->db);
+    /* close database; _v2 is intended for use with garbage collected languages
+       and where the order in which destructors are called is arbitrary. */
+    result = sqlite3_close_v2(db->db);
     db->db = NULL;
 
     /* free associated memory with created functions */
@@ -681,6 +679,8 @@ static int cleanupdb(lua_State *L, sdb *db) {
         func = func_next;
     }
     db->func = NULL;
+
+    lua_settop(L, top);
     return result;
 }
 
@@ -729,7 +729,7 @@ static lcontext *lsqlite_checkcontext(lua_State *L, int index) {
 }
 
 static int lcontext_tostring(lua_State *L) {
-    char buff[39];
+    char buff[41];
     lcontext *ctx = lsqlite_getcontext(L, 1);
     if (ctx->ctx == NULL)
         strcpy(buff, "closed");
@@ -1218,7 +1218,7 @@ static int db_wal_hook_callback(void *user, sqlite3 *dbh, char const *dbname, in
     lua_pushstring(L, dbname); /* hook database name */
     lua_pushinteger(L, pnum);
 
-    if (lua_pcall(L, 3, 0, 0) != SQLITE_OK) return lua_error(L);
+    if (lua_pcall(L, 3, 0, 0) != LUA_OK) return lua_error(L);
 
     lua_settop(L, top);
     return SQLITE_OK;
@@ -1227,10 +1227,9 @@ static int db_wal_hook_callback(void *user, sqlite3 *dbh, char const *dbname, in
 static int db_wal_hook(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
 
+    luaL_unref(L, LUA_REGISTRYINDEX, db->wal_hook_cb);
+    luaL_unref(L, LUA_REGISTRYINDEX, db->wal_hook_udata);
     if (lua_gettop(L) < 2 || lua_isnil(L, 2)) {
-        luaL_unref(L, LUA_REGISTRYINDEX, db->wal_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->wal_hook_udata);
-
         db->wal_hook_cb =
         db->wal_hook_udata = LUA_NOREF;
 
@@ -1242,9 +1241,6 @@ static int db_wal_hook(lua_State *L) {
 
         /* make sure we have an userdata field (even if nil) */
         lua_settop(L, 3);
-
-        luaL_unref(L, LUA_REGISTRYINDEX, db->wal_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->wal_hook_udata);
 
         db->wal_hook_udata = luaL_ref(L, LUA_REGISTRYINDEX);
         db->wal_hook_cb = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -1289,9 +1285,9 @@ static void db_update_hook_callback(void *user, int op, char const *dbname, char
 static int db_update_hook(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
 
+    luaL_unref(L, LUA_REGISTRYINDEX, db->update_hook_cb);
+    luaL_unref(L, LUA_REGISTRYINDEX, db->update_hook_udata);
     if (lua_gettop(L) < 2 || lua_isnil(L, 2)) {
-        luaL_unref(L, LUA_REGISTRYINDEX, db->update_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->update_hook_udata);
 
         db->update_hook_cb =
         db->update_hook_udata = LUA_NOREF;
@@ -1304,9 +1300,6 @@ static int db_update_hook(lua_State *L) {
 
         /* make sure we have an userdata field (even if nil) */
         lua_settop(L, 3);
-
-        luaL_unref(L, LUA_REGISTRYINDEX, db->update_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->update_hook_udata);
 
         db->update_hook_udata = luaL_ref(L, LUA_REGISTRYINDEX);
         db->update_hook_cb = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -1348,9 +1341,9 @@ static int db_commit_hook_callback(void *user) {
 static int db_commit_hook(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
 
+    luaL_unref(L, LUA_REGISTRYINDEX, db->commit_hook_cb);
+    luaL_unref(L, LUA_REGISTRYINDEX, db->commit_hook_udata);
     if (lua_gettop(L) < 2 || lua_isnil(L, 2)) {
-        luaL_unref(L, LUA_REGISTRYINDEX, db->commit_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->commit_hook_udata);
 
         db->commit_hook_cb =
         db->commit_hook_udata = LUA_NOREF;
@@ -1363,9 +1356,6 @@ static int db_commit_hook(lua_State *L) {
 
         /* make sure we have an userdata field (even if nil) */
         lua_settop(L, 3);
-
-        luaL_unref(L, LUA_REGISTRYINDEX, db->commit_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->commit_hook_udata);
 
         db->commit_hook_udata = luaL_ref(L, LUA_REGISTRYINDEX);
         db->commit_hook_cb = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -1403,9 +1393,9 @@ static void db_rollback_hook_callback(void *user) {
 static int db_rollback_hook(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
 
+    luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_cb);
+    luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_udata);
     if (lua_gettop(L) < 2 || lua_isnil(L, 2)) {
-        luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_udata);
 
         db->rollback_hook_cb =
         db->rollback_hook_udata = LUA_NOREF;
@@ -1418,9 +1408,6 @@ static int db_rollback_hook(lua_State *L) {
 
         /* make sure we have an userdata field (even if nil) */
         lua_settop(L, 3);
-
-        luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->rollback_hook_udata);
 
         db->rollback_hook_udata = luaL_ref(L, LUA_REGISTRYINDEX);
         db->rollback_hook_cb = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -1461,9 +1448,9 @@ static int db_busy_callback(void *user, int tries) {
 static int db_busy_handler(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
 
+    luaL_unref(L, LUA_REGISTRYINDEX, db->busy_cb);
+    luaL_unref(L, LUA_REGISTRYINDEX, db->busy_udata);
     if (lua_gettop(L) < 2 || lua_isnil(L, 2)) {
-        luaL_unref(L, LUA_REGISTRYINDEX, db->busy_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->busy_udata);
 
         db->busy_cb =
         db->busy_udata = LUA_NOREF;
@@ -1475,9 +1462,6 @@ static int db_busy_handler(lua_State *L) {
         luaL_checktype(L, 2, LUA_TFUNCTION);
         /* make sure we have an userdata field (even if nil) */
         lua_settop(L, 3);
-
-        luaL_unref(L, LUA_REGISTRYINDEX, db->busy_cb);
-        luaL_unref(L, LUA_REGISTRYINDEX, db->busy_udata);
 
         db->busy_udata = luaL_ref(L, LUA_REGISTRYINDEX);
         db->busy_cb = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -1736,7 +1720,7 @@ static int db_urows(lua_State *L) {
 }
 
 static int db_tostring(lua_State *L) {
-    char buff[32];
+    char buff[33];
     sdb *db = lsqlite_getdb(L, 1);
     if (db->db == NULL)
         strcpy(buff, "closed");
@@ -1754,27 +1738,7 @@ static int db_close(lua_State *L) {
 
 static int db_close_vm(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
-    /* cleanup temporary only tables? */
-    int temp = lua_toboolean(L, 2);
-
-    /* free associated virtual machines */
-    lua_pushlightuserdata(L, db);
-    lua_rawget(L, LUA_REGISTRYINDEX);
-
-    /* close all used handles */
-    lua_pushnil(L);
-    while (lua_next(L, -2)) {
-        sdb_vm *svm = lua_touserdata(L, -2); /* key: vm; val: sql text */
-
-        if ((!temp || svm->temp) && svm->vm)
-        {
-            sqlite3_finalize(svm->vm);
-            svm->vm = NULL;
-        }
-
-        /* leave key in the stack */
-        lua_pop(L, 1);
-    }
+    closevms(L, db, lua_toboolean(L, 2));
     return 0;
 }
 
@@ -1871,7 +1835,7 @@ static int liter_gc(lua_State *L) {
 }
 
 static int liter_tostring(lua_State *L) {
-    char buff[32];
+    char buff[33];
     liter *litr = lsqlite_getiter(L, 1);
     if (litr->itr == NULL)
         strcpy(buff, "closed");
@@ -2010,7 +1974,7 @@ static int lrebaser_gc(lua_State *L) {
 }
 
 static int lrebaser_tostring(lua_State *L) {
-    char buff[30];
+    char buff[32];
     lrebaser *lreb = lsqlite_getrebaser(L, 1);
     if (lreb->reb == NULL)
         strcpy(buff, "closed");
@@ -2184,12 +2148,8 @@ static int lsession_attach(lua_State *L) {
     // but only one shared for all sessions where this callback is used
     if (lua_type(L, 2) == LUA_TFUNCTION) {
         // TBD: does this *also* need to be done in cleanupvm?
-        if (session_cb_udata != LUA_NOREF) {
-            luaL_unref(L, LUA_REGISTRYINDEX, session_filter_cb);
-            luaL_unref(L, LUA_REGISTRYINDEX, session_cb_udata);
-            session_filter_cb =
-            session_cb_udata = LUA_NOREF;
-        }
+        luaL_unref(L, LUA_REGISTRYINDEX, session_filter_cb);
+        luaL_unref(L, LUA_REGISTRYINDEX, session_cb_udata);
         lua_settop(L, 3);  // add udata even if it's not provided
         session_cb_udata = luaL_ref(L, LUA_REGISTRYINDEX);
         session_filter_cb = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -2270,12 +2230,8 @@ static int lsession_delete(lua_State *L) {
     return 0;
 }
 
-static int lsession_gc(lua_State *L) {
-    return lsession_delete(L);
-}
-
 static int lsession_tostring(lua_State *L) {
-    char buff[30];
+    char buff[32];
     lsession *lses = lsqlite_getsession(L, 1);
     if (lses->ses == NULL)
         strcpy(buff, "closed");
@@ -2433,6 +2389,7 @@ static int lsqlite_version(lua_State *L) {
 }
 
 static int lsqlite_do_open(lua_State *L, const char *filename, int flags) {
+    sqlite3_initialize(); /* initialize the engine if hasn't been done yet */
     sdb *db = newdb(L); /* create and leave in stack */
 
     if (sqlite3_open_v2(filename, &db->db, flags, 0) == SQLITE_OK) {
@@ -2461,6 +2418,68 @@ static int lsqlite_open(lua_State *L) {
 
 static int lsqlite_open_memory(lua_State *L) {
     return lsqlite_do_open(L, ":memory:", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+}
+
+/*
+** Log callback:
+** Params: user, result code, log message
+** Returns: none
+*/
+static void log_callback(void* user, int rc, const char *msg) {
+    if (log_cb != LUA_NOREF) {
+        lua_State *L = (lua_State*)user;
+
+        /* setup lua callback call */
+        int top = lua_gettop(L);
+        lua_rawgeti(L, LUA_REGISTRYINDEX, log_cb);    /* get callback */
+        lua_rawgeti(L, LUA_REGISTRYINDEX, log_udata); /* get callback user data */
+        lua_pushinteger(L, rc);
+        lua_pushstring(L, msg);
+
+        if (lua_pcall(L, 3, 0, 0) != LUA_OK) lua_error(L);
+
+        lua_settop(L, top);
+    }
+}
+
+static int lsqlite_config(lua_State *L) {
+    int rc = SQLITE_MISUSE;
+    int option = luaL_checkint(L, 1);
+
+    switch (option) {
+        case SQLITE_CONFIG_SINGLETHREAD:
+        case SQLITE_CONFIG_MULTITHREAD:
+        case SQLITE_CONFIG_SERIALIZED:
+            if ((rc = sqlite3_config(option)) == SQLITE_OK) {
+                lua_pushinteger(L, rc);
+                return 1;
+            }
+            break;
+        case SQLITE_CONFIG_LOG:
+            /* make sure we have an userdata field (even if nil) */
+            lua_settop(L, 3);
+
+            // prepate to return current (possibly nil) values
+            lua_pushinteger(L, SQLITE_OK);
+            lua_rawgeti(L, LUA_REGISTRYINDEX, log_cb);    /* get callback */
+            lua_rawgeti(L, LUA_REGISTRYINDEX, log_udata); /* get callback user data */
+
+            luaL_unref(L, LUA_REGISTRYINDEX, log_cb);
+            luaL_unref(L, LUA_REGISTRYINDEX, log_udata);
+            if (lua_isnil(L, 2)) {
+                log_cb =
+                log_udata = LUA_NOREF;
+            }
+            else {
+                luaL_checktype(L, 2, LUA_TFUNCTION);
+                lua_pushvalue(L, 2);
+                lua_pushvalue(L, 3);
+                log_udata = luaL_ref(L, LUA_REGISTRYINDEX);
+                log_cb = luaL_ref(L, LUA_REGISTRYINDEX);
+            }
+            return 3;  // return OK and previous callback and userdata
+    }
+    return pusherr(L, rc);
 }
 
 static int lsqlite_newindex(lua_State *L) {
@@ -2549,6 +2568,12 @@ static const struct {
     SC(OPEN_FULLMUTEX)
     SC(OPEN_SHAREDCACHE)
     SC(OPEN_PRIVATECACHE)
+
+    /* config flags */
+    SC(CONFIG_SINGLETHREAD)
+    SC(CONFIG_MULTITHREAD)
+    SC(CONFIG_SERIALIZED)
+    SC(CONFIG_LOG)
 
     /* checkpoint flags */
     SC(CHECKPOINT_PASSIVE)
@@ -2709,7 +2734,6 @@ static const luaL_Reg seslib[] = {
     {"delete",          lsession_delete         },
 
     {"__tostring",      lsession_tostring       },
-    {"__gc",            lsession_gc             },
     {NULL, NULL}
 };
 
@@ -2744,6 +2768,7 @@ static const luaL_Reg sqlitelib[] = {
     {"version",         lsqlite_version         },
     {"open",            lsqlite_open            },
     {"open_memory",     lsqlite_open_memory     },
+    {"config",          lsqlite_config          },
 
     {"__newindex",      lsqlite_newindex        },
     {NULL, NULL}
@@ -2763,7 +2788,8 @@ static void create_meta(lua_State *L, const char *name, const luaL_Reg *lib) {
 }
 
 LUALIB_API int luaopen_lsqlite3(lua_State *L) {
-    sqlite3_initialize();
+    /* call config before calling initialize */
+    sqlite3_config(SQLITE_CONFIG_LOG, log_callback, L);
 
     create_meta(L, sqlite_meta, dblib);
     create_meta(L, sqlite_vm_meta, vmlib);

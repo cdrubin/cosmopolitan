@@ -18,10 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/scale/scale.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
@@ -66,7 +66,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/time/time.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 /**
  * @fileoverview Conway's Game of Life
@@ -481,17 +481,17 @@ static void *NewBoard(size_t *out_size) {
   char *p;
   size_t s, n, k;
   s = (byn * bxn) >> 3;
-  k = GUARDSIZE + ROUNDUP(s, GUARDSIZE);
-  n = ROUNDUP(k + GUARDSIZE, FRAMESIZE);
+  k = APE_GUARDSIZE + ROUNDUP(s, APE_GUARDSIZE);
+  n = ROUNDUP(k + APE_GUARDSIZE, FRAMESIZE);
   p = _mapanon(n);
-  mprotect(p, GUARDSIZE, 0);
+  mprotect(p, APE_GUARDSIZE, 0);
   mprotect(p + k, n - k, 0);
   if (out_size) *out_size = n;
-  return p + GUARDSIZE;
+  return p + APE_GUARDSIZE;
 }
 
 static void FreeBoard(void *p, size_t n) {
-  munmap((char *)p - GUARDSIZE, n);
+  munmap((char *)p - APE_GUARDSIZE, n);
 }
 
 static void AllocateBoardsWithHardwareAcceleratedMemorySafety(void) {
@@ -712,7 +712,7 @@ static void GetTtySize(void) {
   struct winsize wsize;
   wsize.ws_row = tyn + 1;
   wsize.ws_col = txn;
-  _getttysize(out, &wsize);
+  tcgetwinsize(out, &wsize);
   tyn = wsize.ws_row - 1;
   txn = wsize.ws_col;
   right = left + txn;
@@ -729,14 +729,14 @@ static void EnableRaw(void) {
   term.c_cflag &= ~(CSIZE | PARENB);
   term.c_cflag |= CS8;
   term.c_iflag |= IUTF8;
-  ioctl(out, TCSETS, &term);
+  tcsetattr(out, TCSANOW, &term);
 }
 
 static void OnExit(void) {
   LeaveScreen();
   ShowTtyCursor();
   DisableMouse();
-  ioctl(out, TCSETS, &oldterm);
+  tcsetattr(out, TCSANOW, &oldterm);
 }
 
 static void OnSigInt(int sig) {
@@ -1101,7 +1101,7 @@ static bool ShouldDraw(void) {
 static void Tui(void) {
   GetTtySize();
   Dimension();
-  ioctl(out, TCGETS, &oldterm);
+  tcgetattr(out, &oldterm);
   HideTtyCursor();
   EnableRaw();
   EnableMouse();

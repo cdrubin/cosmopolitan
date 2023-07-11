@@ -35,8 +35,8 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
-#include "libc/zip.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/zip.internal.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/bytesobject.h"
 #include "third_party/python/Include/code.h"
@@ -100,14 +100,12 @@ const char *const kIgnoredModules[] = /* sorted */ {
     "_dummy_threading.__all__",
     "_overlapped", /* don't recognize if sys.platform yet */
     "_scproxy", /* don't recognize if sys.platform yet */
-    "_thread",
     "_winapi", /* don't recognize if sys.platform yet */
     "asyncio.test_support", /* todo??? */
     "builtins",
     "concurrent.futures", /* asyncio's fault */
     "concurrent.futures._base",
     "concurrent.futures.process",
-    "concurrent.futures.thread",
     "distutils.command.bdist",
     "distutils.command.bdist_dumb",
     "distutils.command.bdist_rpm",
@@ -128,7 +126,6 @@ const char *const kIgnoredModules[] = /* sorted */ {
     "distutils.command.sdist",
     "distutils.command.upload",
     "distutils.spawn._nt_quote_args",
-    "dummy_threading.Thread",
     "encodings.aliases",
     "importlib._bootstrap",
     "importlib._bootstrap.BuiltinImporter",
@@ -237,7 +234,6 @@ static bool nocompress;
 static bool isunittest;
 static bool insertrunner;
 static bool insertlauncher;
-static uint64_t image_base;
 static int strip_components;
 static struct ElfWriter *elf;
 static const char *path_prefix;
@@ -249,7 +245,6 @@ static void
 GetOpts(int argc, char *argv[])
 {
     int opt;
-    image_base = IMAGE_BASE_VIRTUAL;
     path_prefix = ".python";
     while ((opt = getopt(argc, argv, "hnmtr0Bb:O:o:C:P:Y:")) != -1) {
         switch (opt) {
@@ -281,9 +276,6 @@ GetOpts(int argc, char *argv[])
             break;
         case 'C':
             strip_components = atoi(optarg);
-            break;
-        case 'b':
-            image_base = strtoul(optarg, NULL, 0);
             break;
         case 'Y':
             yoinks.p = realloc(yoinks.p, ++yoinks.n * sizeof(*yoinks.p));
@@ -422,7 +414,7 @@ IsIgnoredModule(const char *s)
     l = 0;
     r = ARRAYLEN(kIgnoredModules) - 1;
     while (l <= r) {
-        m = (l + r) >> 1;
+        m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
         x = strcmp(s, kIgnoredModules[m]);
         if (x < 0) {
             r = m - 1;
@@ -659,22 +651,18 @@ Objectify(void)
     if (ispkg) {
         elfwriter_zip(elf, zipdir, zipdir, strlen(zipdir),
                       pydata, 0, 040755, timestamp, timestamp,
-                      timestamp, nocompress, image_base,
-                      kZipCdirHdrLinkableSize);
+                      timestamp, nocompress);
     }
     if (!binonly) {
         elfwriter_zip(elf, gc(xstrcat("py:", modname)), zipfile,
                       strlen(zipfile), pydata, pysize, st.st_mode, timestamp,
-                      timestamp, timestamp, nocompress, image_base,
-                      kZipCdirHdrLinkableSize);
+                      timestamp, timestamp, nocompress);
     }
     elfwriter_zip(elf, gc(xstrcat("pyc:", modname)), gc(xstrcat(zipfile, 'c')),
                   strlen(zipfile) + 1, pycdata, pycsize, st.st_mode, timestamp,
-                  timestamp, timestamp, nocompress, image_base,
-                  kZipCdirHdrLinkableSize);
+                  timestamp, timestamp, nocompress);
     elfwriter_align(elf, 1, 0);
-    elfwriter_startsection(elf, ".yoink", SHT_PROGBITS,
-                           SHF_ALLOC | SHF_EXECINSTR);
+    elfwriter_startsection(elf, ".yoink", SHT_PROGBITS, 0);
     if (!(rc = AnalyzeModule(modname))) {
         if (*path_prefix && !IsDot()) {
             elfwriter_yoink(elf, gc(xstrcat(path_prefix, "/")), STB_GLOBAL);
@@ -717,6 +705,7 @@ int
 main(int argc, char *argv[])
 {
     int ec;
+    ShowCrashReports();
     timestamp.tv_sec = 1647414000; /* determinism */
     /* clock_gettime(CLOCK_REALTIME, &timestamp); */
     GetOpts(argc, argv);

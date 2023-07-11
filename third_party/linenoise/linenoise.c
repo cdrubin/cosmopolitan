@@ -126,6 +126,7 @@
 │ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.         │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "third_party/linenoise/linenoise.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/sig.internal.h"
@@ -142,7 +143,6 @@
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/nomultics.internal.h"
 #include "libc/intrin/strace.internal.h"
-#include "libc/intrin/tpenc.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
@@ -153,6 +153,7 @@
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
+#include "libc/stdckdint.h"
 #include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -169,7 +170,6 @@
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
 #include "net/http/escape.h"
-#include "third_party/linenoise/linenoise.h"
 #include "tool/build/lib/case.h"
 
 asm(".ident\t\"\\n\\n\
@@ -290,11 +290,11 @@ static const char *const kUnsupported[] = {"dumb", "cons25", "emacs"};
 static int gotint;
 static int gotcont;
 static int gotwinch;
-static char rawmode = -1;
 static char maskmode;
 static char ispaused;
 static char iscapital;
 static int historylen;
+static signed char rawmode = -1;
 static struct linenoiseRing ring;
 static struct sigaction orig_int;
 static struct sigaction orig_quit;
@@ -312,7 +312,7 @@ static unsigned GetMirror(const unsigned short A[][2], size_t n, unsigned c) {
   l = 0;
   r = n - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     if (A[m][0] < c) {
       l = m + 1;
     } else if (A[m][0] > c) {
@@ -590,7 +590,7 @@ static size_t GetMonospaceWidth(const char *p, size_t n, char *out_haswides) {
         }
         break;
       default:
-        unreachable;
+        __builtin_unreachable();
     }
   }
   if (out_haswides) {
@@ -819,7 +819,7 @@ struct winsize linenoiseGetTerminalSize(struct winsize ws, int ifd, int ofd) {
   int x;
   ssize_t n;
   char *p, *s, b[16];
-  ioctl(ofd, TIOCGWINSZ, &ws);
+  tcgetwinsize(ofd, &ws);
   if ((!ws.ws_row && (s = getenv("ROWS")) && (x = ParseUnsigned(s, 0)))) {
     ws.ws_row = x;
   }
@@ -2010,8 +2010,7 @@ ssize_t linenoiseEdit(struct linenoiseState *l, const char *prompt, char **obuf,
               itemlen = linenoiseMaxCompletionWidth(&l->lc) + 4;
               xn = MAX(1, (l->ws.ws_col - 1) / itemlen);
               yn = (l->lc.len + (xn - 1)) / xn;
-              if (!__builtin_mul_overflow(xn, yn, &xy) &&
-                  (p = calloc(xy, sizeof(char *)))) {
+              if (!ckd_mul(&xy, xn, yn) && (p = calloc(xy, sizeof(char *)))) {
                 // arrange in column major order
                 for (i = x = 0; x < xn; ++x) {
                   for (y = 0; y < yn; ++y) {
@@ -2175,11 +2174,11 @@ ssize_t linenoiseEdit(struct linenoiseState *l, const char *prompt, char **obuf,
                     default:
                       break;
                   }
-                } else if (rc == 6 && seq[2] == '1' &&
-                           seq[3] == ';' && seq[4] == '5') {
+                } else if (rc == 6 && seq[2] == '1' && seq[3] == ';' &&
+                           seq[4] == '5') {
                   switch (seq[5]) {
-                    CASE('C', linenoiseEditRightWord(l)); // \e[1;5C ctrl-right
-                    CASE('D', linenoiseEditLeftWord(l));  // \e[1;5D ctrl-left
+                    CASE('C', linenoiseEditRightWord(l));  // \e[1;5C ctrl-right
+                    CASE('D', linenoiseEditLeftWord(l));   // \e[1;5D ctrl-left
                     default:
                       break;
                   }
@@ -2261,7 +2260,7 @@ ssize_t linenoiseEdit(struct linenoiseState *l, const char *prompt, char **obuf,
       }
     }
     default:
-      unreachable;
+      __builtin_unreachable();
   }
 }
 

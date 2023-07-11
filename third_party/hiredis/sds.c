@@ -32,15 +32,14 @@
  */
 
 #include "libc/calls/calls.h"
-#include "libc/calls/dprintf.h"
+#include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/fmt/fmt.h"
-#include "libc/mem/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/stdio/temp.h"
 #include "third_party/musl/tempnam.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/dprintf.h"
+#include "libc/stdio/dprintf.h"
 #include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
 #include "libc/limits.h"
@@ -52,7 +51,6 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
 #include "third_party/gdtoa/gdtoa.h"
-#include "third_party/getopt/getopt.h"
 #include "third_party/musl/crypt.h"
 #include "third_party/musl/rand48.h"
 #include "libc/mem/alg.h"
@@ -1145,10 +1143,9 @@ void sds_free(void *ptr) { s_free(ptr); }
 
 #if defined(SDS_TEST_MAIN)
 #include "libc/calls/calls.h"
-#include "libc/calls/dprintf.h"
+#include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/fmt/fmt.h"
-#include "libc/mem/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/stdio/temp.h"
 #include "third_party/musl/tempnam.h"

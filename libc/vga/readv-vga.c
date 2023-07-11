@@ -29,6 +29,8 @@
 #include "libc/calls/struct/iovec.internal.h"
 #include "libc/vga/vga.internal.h"
 
+#ifdef __x86_64__
+
 ssize_t sys_readv_vga(struct Fd *fd, const struct iovec *iov, int iovlen) {
   /*
    * NOTE: this routine is always non-blocking.
@@ -45,13 +47,12 @@ ssize_t sys_readv_vga(struct Fd *fd, const struct iovec *iov, int iovlen) {
     void *input = iov[i].iov_base;
     size_t len = iov[i].iov_len;
     res = _TtyRead(&_vga_tty, input, len);
-    if (res < 0)
-      break;
+    if (res < 0) break;
     redd += res;
-    if (redd != len)
-      return redd;
+    if (redd != len) return redd;
   }
-  if (!redd)
-    return res;
+  if (!redd) return res;
   return redd;
 }
+
+#endif /* __x86_64__ */

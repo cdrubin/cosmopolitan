@@ -25,7 +25,8 @@
 #include "libc/sysv/consts/pty.h"
 #include "libc/sysv/errfuns.h"
 
-extern const uint32_t TIOCPTYUNLK;
+#define TIOCSPTLCK  0x40045431  // linux
+#define TIOCPTYUNLK 0x20007452  // xnu
 
 /**
  * Unlocks pseudoteletypewriter pair.

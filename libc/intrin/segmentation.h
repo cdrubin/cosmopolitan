@@ -2,12 +2,12 @@
 #define COSMOPOLITAN_LIBC_BITS_SEGMENTATION_H_
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
+#ifdef COSMO
 
 /**
  * Reads scalar from memory, offset by segment.
  *
  * @return *(MEM) relative to segment
- * @see arch_prctl()
  * @see pushpop()
  */
 #define fs(MEM) __peek("fs", MEM)
@@ -20,6 +20,7 @@
     Pk;                                                           \
   })
 
+#endif /* COSMO */
 #endif /* __GNUC__ && !__STRICT_ANSI__ */
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_BITS_SEGMENTATION_H_ */

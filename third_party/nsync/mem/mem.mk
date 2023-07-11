@@ -19,7 +19,6 @@ THIRD_PARTY_NSYNC_MEM_A_DIRECTDEPS =		\
 	LIBC_INTRIN				\
 	LIBC_NEXGEN32E				\
 	LIBC_MEM				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	THIRD_PARTY_NSYNC
 
@@ -40,7 +39,7 @@ $(THIRD_PARTY_NSYNC_MEM_A).pkg:			\
 		$(foreach x,$(THIRD_PARTY_NSYNC_MEM_A_DIRECTDEPS),$($(x)_A).pkg)
 
 $(THIRD_PARTY_NSYNC_MEM_A_OBJS): private	\
-		OVERRIDE_CCFLAGS +=		\
+		CCFLAGS +=			\
 			-ffunction-sections	\
 			-fdata-sections
 
@@ -48,7 +47,7 @@ THIRD_PARTY_NSYNC_MEM_LIBS = $(foreach x,$(THIRD_PARTY_NSYNC_MEM_ARTIFACTS),$($(
 THIRD_PARTY_NSYNC_MEM_SRCS = $(foreach x,$(THIRD_PARTY_NSYNC_MEM_ARTIFACTS),$($(x)_SRCS))
 THIRD_PARTY_NSYNC_MEM_CHECKS = $(foreach x,$(THIRD_PARTY_NSYNC_MEM_ARTIFACTS),$($(x)_CHECKS))
 THIRD_PARTY_NSYNC_MEM_OBJS = $(foreach x,$(THIRD_PARTY_NSYNC_MEM_ARTIFACTS),$($(x)_OBJS))
-$(THIRD_PARTY_NSYNC_MEM_OBJS): third_party/nsync/mem/nsync.mk
+$(THIRD_PARTY_NSYNC_MEM_OBJS): third_party/nsync/mem/mem.mk
 
 .PHONY: o/$(MODE)/third_party/nsync/mem
 o/$(MODE)/third_party/nsync/mem: $(THIRD_PARTY_NSYNC_MEM_CHECKS)

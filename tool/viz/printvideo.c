@@ -26,7 +26,6 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/framebufferfixedscreeninfo.h"
 #include "libc/calls/struct/framebuffervirtualscreeninfo.h"
 #include "libc/calls/struct/iovec.h"
@@ -56,7 +55,6 @@
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nt/console.h"
 #include "libc/nt/runtime.h"
-#include "libc/runtime/buffer.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
@@ -92,7 +90,7 @@
 #include "libc/sysv/errfuns.h"
 #include "libc/time/time.h"
 #include "libc/x/xsigaction.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_image_resize.h"
 #include "tool/viz/lib/graphic.h"
 #include "tool/viz/lib/knobs.h"
@@ -173,7 +171,7 @@ mode.\n\
 #define BALLOC(B, A, N, NAME)               \
   ({                                        \
     INFOF("balloc/%s %,zu bytes", NAME, N); \
-    balloc(B, A, N);                        \
+    *(B) = pvalloc(N);                      \
   })
 
 #define TIMEIT(OUT_NANOS, FORM)                        \
@@ -207,7 +205,7 @@ struct NamedVector {
 struct VtFrame {
   size_t i, n;
   union {
-    struct GuardedBuffer b;
+    void *b;
     char *bytes;
   };
 };
@@ -266,6 +264,7 @@ static bool emboss_, sobel_;
 static volatile int playpid_;
 static struct winsize wsize_;
 static float hue_, sat_, lit_;
+static void *xtcodes_, *audio_;
 static struct FrameBuffer fb0_;
 static unsigned chans_, srate_;
 static volatile bool ignoresigs_;
@@ -277,7 +276,6 @@ static openspeaker_f tryspeakerfns_[4];
 static int primaries_, lighting_, swing_;
 static uint64_t t1, t2, t3, t4, t5, t6, t8;
 static const char *sox_, *ffplay_, *patharg_;
-static struct GuardedBuffer xtcodes_, audio_;
 static struct VtFrame vtframe_[2], *f1_, *f2_;
 static struct Graphic graphic_[2], *g1_, *g2_;
 static bool yes_, stats_, dither_, ttymode_, istango_;
@@ -428,7 +426,9 @@ static void DimensionDisplay(void) {
       wsize_.ws_row = 25;
       wsize_.ws_col = 80;
       wsize_ = (struct winsize){.ws_row = 40, .ws_col = 80};
-      if (_getttysize(outfd_, &wsize_) == -1) _getttysize(0, &wsize_);
+      if (tcgetwinsize(outfd_, &wsize_) == -1) {
+        tcgetwinsize(0, &wsize_);
+      }
       dh_ = wsize_.ws_row * 2;
       dw_ = wsize_.ws_col * 2;
     }
@@ -612,7 +612,7 @@ static char *StartRender(char *vt) {
 
 static void EndRender(char *vt) {
   vt += sprintf(vt, "\e[0m");
-  f2_->n = (intptr_t)vt - (intptr_t)f2_->b.p;
+  f2_->n = (intptr_t)vt - (intptr_t)f2_->b;
   f2_->i = 0;
 }
 
@@ -690,7 +690,7 @@ static void RenderIt(void) {
   struct TtyRgb bg, fg;
   yn = g2_->yn;
   xn = g2_->xn;
-  vt = f2_->b.p;
+  vt = f2_->b;
   p = StartRender(vt);
   if (TTYQUANT()->alg == kTtyQuantTrue) {
     bg = (struct TtyRgb){0, 0, 0, 0};
@@ -706,7 +706,7 @@ static void RenderIt(void) {
     fg = (struct TtyRgb){0xff, 0xff, 0xff, 231};
     p = stpcpy(p, "\e[48;5;16;38;5;231m");
   }
-  p = ttyraster(p, xtcodes_.p, yn, xn, bg, fg);
+  p = ttyraster(p, xtcodes_, yn, xn, bg, fg);
   if (ttymode_ && stats_) {
     bpc = bpf = p - vt;
     bpc /= wsize_.ws_row * wsize_.ws_col;
@@ -757,7 +757,7 @@ static void RasterIt(void) {
     once = true;
   }
   WriteToFrameBuffer(fb0_.vscreen.yres_virtual, fb0_.vscreen.xres_virtual, buf,
-                     g2_->yn, g2_->xn, g2_->b.p, fb0_.vscreen.yres,
+                     g2_->yn, g2_->xn, g2_->b, fb0_.vscreen.yres,
                      fb0_.vscreen.xres);
   memcpy(fb0_.map, buf, fb0_.size);
 }
@@ -774,7 +774,7 @@ static void TranscodeVideo(plm_frame_t *pf) {
     if (pf1_) pary_ = 1.;
     if (pf2_) pary_ = (266 / 64.) * (900 / 1600.);
     pary_ *= plm_get_pixel_aspect_ratio(plm_);
-    YCbCr2RgbScale(g2_->yn, g2_->xn, g2_->b.p, pf->y.height, pf->y.width,
+    YCbCr2RgbScale(g2_->yn, g2_->xn, g2_->b, pf->y.height, pf->y.width,
                    (void *)pf->y.data, pf->cr.height, pf->cr.width,
                    (void *)pf->cb.data, (void *)pf->cr.data, pf->y.height,
                    pf->y.width, pf->cr.height, pf->cr.width, pf->height,
@@ -789,7 +789,7 @@ static void TranscodeVideo(plm_frame_t *pf) {
         boxblur(g2_);
         break;
       case kBlurGaussian:
-        gaussian(g2_->yn, g2_->xn, g2_->b.p);
+        gaussian(g2_->yn, g2_->xn, g2_->b);
         break;
       default:
         break;
@@ -798,16 +798,16 @@ static void TranscodeVideo(plm_frame_t *pf) {
     if (emboss_) emboss(g2_);
     switch (sharp_) {
       case kSharpSharp:
-        sharpen(3, g2_->yn, g2_->xn, g2_->b.p, g2_->yn, g2_->xn);
+        sharpen(3, g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
         break;
       case kSharpUnsharp:
-        unsharp(3, g2_->yn, g2_->xn, g2_->b.p, g2_->yn, g2_->xn);
+        unsharp(3, g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
         break;
       default:
         break;
     }
     if (dither_ && TTYQUANT()->alg != kTtyQuantTrue) {
-      dither(g2_->yn, g2_->xn, g2_->b.p, g2_->yn, g2_->xn);
+      dither(g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
     }
   });
 
@@ -815,7 +815,7 @@ static void TranscodeVideo(plm_frame_t *pf) {
     t3 = 0;
     TIMEIT(t4, RasterIt());
   } else {
-    TIMEIT(t3, getxtermcodes(xtcodes_.p, g2_));
+    TIMEIT(t3, getxtermcodes(xtcodes_, g2_));
     TIMEIT(t4, RenderIt());
   }
 
@@ -1399,17 +1399,16 @@ static void OnExit(void) {
   ttyidentclear(&ti_);
   close(infd_), infd_ = -1;
   close(outfd_), outfd_ = -1;
-  bfree(&graphic_[0].b);
-  bfree(&graphic_[1].b);
-  bfree(&vtframe_[0].b);
-  bfree(&vtframe_[1].b);
-  bfree(&xtcodes_);
-  bfree(&audio_);
+  free(graphic_[0].b);
+  free(graphic_[1].b);
+  free(vtframe_[0].b);
+  free(vtframe_[1].b);
+  free(xtcodes_);
+  free(audio_);
   CloseSpeaker();
 }
 
 static void MakeLatencyLittleLessBad(void) {
-  _peekall();
   LOGIFNEG1(sys_mlockall(MCL_CURRENT));
   LOGIFNEG1(nice(-5));
 }
@@ -1531,6 +1530,7 @@ static void TryToOpenFrameBuffer(void) {
 
 int main(int argc, char *argv[]) {
   sigset_t wut;
+  const char *s;
   gamma_ = 2.4;
   volscale_ -= 2;
   dither_ = true;
@@ -1544,8 +1544,17 @@ int main(int argc, char *argv[]) {
   if (!tuned_) PickDefaults();
   if (optind == argc) PrintUsage(EX_USAGE, stderr);
   patharg_ = argv[optind];
-  sox_ = strdup(commandvenv("SOX", "sox"));
-  ffplay_ = strdup(commandvenv("FFPLAY", "ffplay"));
+  s = commandvenv("SOX", "sox");
+  sox_ = s ? strdup(s) : 0;
+  s = commandvenv("FFPLAY", "ffplay");
+  ffplay_ = s ? strdup(s) : 0;
+  if (!sox_ && !ffplay_) {
+    fprintf(stderr, "please install either the "
+                    "`play` (sox) or "
+                    "`ffplay` (ffmpeg) "
+                    "commands, so printvideo.com can play audio\n");
+    usleep(10000);
+  }
   infd_ = STDIN_FILENO;
   outfd_ = STDOUT_FILENO;
   if (!setjmp(jb_)) {

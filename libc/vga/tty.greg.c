@@ -30,6 +30,8 @@
 #include "libc/sysv/errfuns.h"
 #include "libc/vga/vga.internal.h"
 
+#ifdef __x86_64__
+
 /**
  * @fileoverview ECMA-48 / VT100 video terminal implementation for bare
  * metal VGA.
@@ -164,7 +166,7 @@ void _StartTty(struct Tty *tty, unsigned char type, unsigned short yp,
                void *fb, unsigned init_flags) {
   unsigned short yn, xn, xs = xp * sizeof(TtyCanvasColor);
   struct DirectMap dm;
-  memset(tty, 0, sizeof(struct Tty));
+  bzero(tty, sizeof(struct Tty));
   SetYp(tty, yp);
   SetXp(tty, xp);
   SetXsFb(tty, xsfb);
@@ -1000,7 +1002,7 @@ static void TtySelectGraphicsRendition(struct Tty *tty) {
             tty->pr &= ~kTtyTrue;
             break;
           default:
-            abort();
+            __builtin_trap();
         }
         break;
       default:
@@ -1297,7 +1299,7 @@ ssize_t _TtyWrite(struct Tty *tty, const void *data, size_t n) {
         }
         break;
       default:
-        unreachable;
+        __builtin_unreachable();
     }
   }
   TtyUpdate(tty);
@@ -1356,3 +1358,5 @@ ssize_t _TtyRead(struct Tty *tty, void *buf, size_t size) {
   tty->input.i -= n;
   return n;
 }
+
+#endif /* __x86_64__ */

@@ -19,6 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/sched_param.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/utsname.h"
@@ -161,11 +162,12 @@ textstartup void __printargs(const char *prologue) {
   char **env;
   sigset_t ss;
   bool gotsome;
-  unsigned i, n;
   int e, x, flags;
   uintptr_t *auxp;
+  unsigned i, n, b;
   struct rlimit rlim;
   struct utsname uts;
+  struct sigaction sa;
   struct sched_param sp;
   struct termios termios;
   struct AuxiliaryValue *auxinfo;
@@ -199,6 +201,7 @@ textstartup void __printargs(const char *prologue) {
   PRINT("");
   PRINT("MICROPROCESSOR");
   kprintf(prologue);
+#ifdef __x86_64__
   kprintf("  %.*s%.*s%.*s", 4, &KCPUIDS(0H, EBX), 4, &KCPUIDS(0H, EDX), 4,
           &KCPUIDS(0H, ECX));
   if (getx86processormodel(kX86ProcessorModelKey)) {
@@ -230,7 +233,7 @@ textstartup void __printargs(const char *prologue) {
         "mov\t%%ebx,%1\n\t"
         "pop\t%%rbx"
         : "=a"(eax), "=rm"(ebx), "=c"(ecx), "=d"(edx)
-        : "0"(0x40000000), "2"(0));
+        : "0"(0x40000000), "2"(0L));
     PRINT("  Running inside %.4s%.4s%.4s (eax=%#x)", &ebx, &ecx, &edx, eax);
   }
   CPUID4_ITERATE(i, {
@@ -268,7 +271,9 @@ textstartup void __printargs(const char *prologue) {
   if (X86_HAVE(RDPID)) kprintf(" RDPID");
   if (X86_HAVE(LA57)) kprintf(" LA57");
   if (X86_HAVE(FSGSBASE)) kprintf(" FSGSBASE");
-  kprintf("\n");
+#elif defined(__aarch64__)
+  PRINT("  AARCH64");
+#endif
 
   PRINT("");
   PRINT("FILE DESCRIPTORS");
@@ -288,7 +293,7 @@ textstartup void __printargs(const char *prologue) {
 
   if (!sigprocmask(SIG_BLOCK, 0, &ss)) {
     PRINT("");
-    PRINT("SIGNALS {%#lx, %#lx}", ss.__bits[0], ss.__bits[1]);
+    PRINT("SIGNAL MASK {%#lx, %#lx}", ss.__bits[0], ss.__bits[1]);
     if (ss.__bits[0] || ss.__bits[1]) {
       for (i = 0; i < 32; ++i) {
         if (ss.__bits[0] & (1u << i)) {
@@ -302,6 +307,23 @@ textstartup void __printargs(const char *prologue) {
     PRINT("");
     PRINT("SIGNALS");
     PRINT("  error: sigprocmask() failed %m");
+  }
+
+  PRINT("");
+  PRINT("SIGNALS");
+  for (gotsome = 0, i = 1; i <= 64; ++i) {
+    if (!sigaction(i, 0, &sa)) {
+      if (sa.sa_handler == SIG_IGN) {
+        PRINT(" ☼ %G is SIG_IGN", i);
+        gotsome = 1;
+      } else if (sa.sa_handler != SIG_DFL) {
+        PRINT(" ☼ %G is %p", i, sa.sa_handler);
+        gotsome = 1;
+      }
+    }
+  }
+  if (!gotsome) {
+    PRINT(" ☼ SIG_DFL");
   }
 
   if (PLEDGED(PROC)) {
@@ -343,15 +365,27 @@ textstartup void __printargs(const char *prologue) {
 
   PRINT("");
   PRINT("RESOURCE LIMITS");
-  for (i = 0; i < RLIM_NLIMITS; ++i) {
+  for (gotsome = i = 0; i < RLIM_NLIMITS; ++i) {
     if (!getrlimit(i, &rlim)) {
       char buf[20];
       if (rlim.rlim_cur == RLIM_INFINITY) rlim.rlim_cur = -1;
       if (rlim.rlim_max == RLIM_INFINITY) rlim.rlim_max = -1;
       PRINT(" ☼ %-20s %,16ld %,16ld", (DescribeRlimitName)(buf, i),
             rlim.rlim_cur, rlim.rlim_max);
+      gotsome = true;
     }
   }
+  if (!gotsome) {
+    PRINT(" ☼ %s", "none");
+  }
+
+  PRINT("");
+  PRINT("STACK");
+  size_t foss_stack_size = 4ul * 1024 * 1024;
+  PRINT(" ☼ %p __oldstack top", ROUNDUP(__oldstack + 1, foss_stack_size));
+  PRINT(" ☼ %p __oldstack ptr", __oldstack);
+  PRINT(" ☼ %p __oldstack bot", ROUNDDOWN(__oldstack, foss_stack_size));
+  PRINT(" ☼ %p __builtin_frame_address(0)", __builtin_frame_address(0));
 
   PRINT("");
   PRINT("ARGUMENTS (%p)", __argv);
@@ -403,8 +437,10 @@ textstartup void __printargs(const char *prologue) {
   PRINT(" ☼ %s = %d", "getgid()", getgid());
   PRINT(" ☼ %s = %d", "getegid()", getegid());
   PRINT(" ☼ %s = %#s", "kTmpPath", kTmpPath);
+#ifdef __x86_64__
   PRINT(" ☼ %s = %#s", "kNtSystemDirectory", kNtSystemDirectory);
   PRINT(" ☼ %s = %#s", "kNtWindowsDirectory", kNtWindowsDirectory);
+#endif
   PRINT(" ☼ %s = %#s", "GetProgramExecutableName", GetProgramExecutableName());
   PRINT(" ☼ %s = %#s", "GetInterpreterExecutableName",
         GetInterpreterExecutableName(u.path, sizeof(u.path)));
@@ -419,10 +455,21 @@ textstartup void __printargs(const char *prologue) {
 
   PRINT("");
   PRINT("TERMIOS");
-  for (i = 0; i < 2; ++i) {
+  for (i = 0; i <= 2; ++i) {
     if (!tcgetattr(i, &termios)) {
-      PRINT("  - stdin");
+      struct winsize ws;
+      if (i == 0) {
+        PRINT("  - stdin");
+      } else if (i == 1) {
+        PRINT("  - stdout");
+      } else {
+        PRINT("  - stderr");
+      }
       kprintf(prologue);
+      if (!tcgetwinsize(i, &ws)) {
+        kprintf("    ws_row = %d\n", ws.ws_row);
+        kprintf("    ws_col = %d\n", ws.ws_col);
+      }
       kprintf("    c_iflag =");
       if (termios.c_iflag & IGNBRK) kprintf(" IGNBRK");
       if (termios.c_iflag & BRKINT) kprintf(" BRKINT");
@@ -511,6 +558,67 @@ textstartup void __printargs(const char *prologue) {
       } else if ((termios.c_cflag & CSIZE) == CS8) {
         kprintf(" CS8");
       }
+
+      b = cfgetospeed(&termios);
+      if (b == B0) {
+        kprintf(" B0");
+      } else if (b == B50) {
+        kprintf(" B50");
+      } else if (b == B75) {
+        kprintf(" B75");
+      } else if (b == B110) {
+        kprintf(" B110");
+      } else if (b == B134) {
+        kprintf(" B134");
+      } else if (b == B150) {
+        kprintf(" B150");
+      } else if (b == B200) {
+        kprintf(" B200");
+      } else if (b == B300) {
+        kprintf(" B300");
+      } else if (b == B600) {
+        kprintf(" B600");
+      } else if (b == B1200) {
+        kprintf(" B1200");
+      } else if (b == B1800) {
+        kprintf(" B1800");
+      } else if (b == B2400) {
+        kprintf(" B2400");
+      } else if (b == B4800) {
+        kprintf(" B4800");
+      } else if (b == B9600) {
+        kprintf(" B9600");
+      } else if (b == B19200) {
+        kprintf(" B19200");
+      } else if (b == B38400) {
+        kprintf(" B38400");
+      } else if (b == B57600) {
+        kprintf(" B57600");
+      } else if (b == B115200) {
+        kprintf(" B115200");
+      } else if (b == B230400) {
+        kprintf(" B230400");
+      } else if (b == B500000) {
+        kprintf(" B500000");
+      } else if (b == B576000) {
+        kprintf(" B576000");
+      } else if (b == B1000000) {
+        kprintf(" B1000000");
+      } else if (b == B1152000) {
+        kprintf(" B1152000");
+      } else if (b == B1500000) {
+        kprintf(" B1500000");
+      } else if (b == B2000000) {
+        kprintf(" B2000000");
+      } else if (b == B2500000) {
+        kprintf(" B2500000");
+      } else if (b == B3000000) {
+        kprintf(" B3000000");
+      } else if (b == B3500000) {
+        kprintf(" B3500000");
+      } else if (b == B4000000) {
+        kprintf(" B4000000");
+      }
       kprintf("\n");
       kprintf(prologue);
       kprintf("    c_lflag =");
@@ -530,8 +638,8 @@ textstartup void __printargs(const char *prologue) {
       if (termios.c_lflag & PENDIN) kprintf(" PENDIN");
       if (termios.c_lflag & XCASE) kprintf(" XCASE");
       kprintf("\n");
-      PRINT("    c_ispeed = %u", termios.c_ispeed);
-      PRINT("    c_ospeed = %u", termios.c_ospeed);
+      PRINT("    cfgetispeed()  = %u", cfgetispeed(&termios));
+      PRINT("    cfgetospeed()  = %u", cfgetospeed(&termios));
       PRINT("    c_cc[VMIN]     = %d", termios.c_cc[VMIN]);
       PRINT("    c_cc[VTIME]    = %d", termios.c_cc[VTIME]);
       PRINT("    c_cc[VINTR]    = CTRL-%c", CTRL(termios.c_cc[VINTR]));

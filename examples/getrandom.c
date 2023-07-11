@@ -29,7 +29,7 @@
 #include "libc/sysv/consts/grnd.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/hyperion.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define B 4096
 
@@ -77,8 +77,8 @@ uint64_t unixv7(void) {
 
 uint64_t ape(void) {
   static int i;
-  if ((i += 8) > _end - _base) i = 8;
-  return READ64LE(_base + i);
+  if ((i += 8) > _end - __executable_start) i = 8;
+  return READ64LE(__executable_start + i);
 }
 
 uint64_t moby(void) {

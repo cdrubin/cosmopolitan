@@ -31,7 +31,6 @@ TEST_LIBC_STDIO_DIRECTDEPS =					\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_TINYMATH						\
 	LIBC_TESTLIB						\
@@ -43,6 +42,7 @@ TEST_LIBC_STDIO_DIRECTDEPS =					\
 	THIRD_PARTY_GDTOA					\
 	THIRD_PARTY_MBEDTLS					\
 	THIRD_PARTY_MUSL					\
+	THIRD_PARTY_TR						\
 	THIRD_PARTY_ZLIB					\
 	THIRD_PARTY_ZLIB_GZ
 
@@ -69,6 +69,7 @@ o/$(MODE)/test/libc/stdio/system_test.com.dbg:			\
 		o/$(MODE)/test/libc/stdio/stdio.pkg		\
 		o/$(MODE)/tool/build/echo.com.zip.o		\
 		o/$(MODE)/tool/build/cocmd.com.zip.o		\
+		o/$(MODE)/tool/build/false.com.zip.o		\
 		$(LIBC_TESTMAIN)				\
 		$(CRT)						\
 		$(APE_NO_MODIFY_SELF)

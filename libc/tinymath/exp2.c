@@ -29,7 +29,6 @@
 #include "libc/math.h"
 #include "libc/tinymath/exp_data.internal.h"
 #include "libc/tinymath/internal.h"
-#ifndef TINY
 
 asm(".ident\t\"\\n\\n\
 Double-precision math functions (MIT License)\\n\
@@ -157,4 +156,6 @@ double exp2(double x)
 	return eval_as_double(scale + scale * tmp);
 }
 
-#endif /* !TINY */
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(exp2, exp2l);
+#endif

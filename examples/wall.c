@@ -18,7 +18,7 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/time/struct/tm.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/musl/passwd.h"
 
 /**
@@ -132,12 +132,12 @@ int main(int argc, char *argv[]) {
   appends(&msg, "\r\n\e[K\e[0m\e8");  // restore
 
   // try to send message to all pseudoteletypewriters
-  for (int i = 0;; ++i) {
+  for (int i = 0; i < 100; ++i) {
     int fd;
     char pts[32];
     snprintf(pts, sizeof(pts), "/dev/pts/%d", i);
     if ((fd = open(pts, O_WRONLY | O_NOCTTY)) == -1) {
-      if (errno == ENOENT) break;
+      if (errno == ENOENT) continue;
       if (g_verbose) perror(pts);
     }
     write(fd, msg, appendz(msg).i);

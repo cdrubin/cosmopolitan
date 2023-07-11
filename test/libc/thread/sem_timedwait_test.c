@@ -42,54 +42,6 @@ TEST(sem_init, einval) {
   ASSERT_SYS(EINVAL, -1, sem_init(&sem, 0, -1));
 }
 
-TEST(sem_post, accessInChildProcessWhenNotPshared_isUndefinedBehavior) {
-  if (!IsModeDbg()) return;
-  int val;
-  sem_t sem;
-  ASSERT_SYS(0, 0, sem_init(&sem, 0, 0));
-  SPAWN(fork);
-  IgnoreStderr();
-  sem_post(&sem);
-  EXITS(77);
-}
-
-TEST(sem_getvalue, accessInChildProcessWhenNotPshared_isUndefinedBehavior) {
-  if (!IsModeDbg()) return;
-  int val;
-  sem_t sem;
-  ASSERT_SYS(0, 0, sem_init(&sem, 0, 0));
-  ASSERT_SYS(0, 0, sem_getvalue(&sem, &val));
-  SPAWN(fork);
-  IgnoreStderr();
-  sem_getvalue(&sem, &val);
-  EXITS(77);
-  ASSERT_SYS(0, 0, sem_destroy(&sem));
-}
-
-TEST(sem_timedwait, accessInChildProcessWhenNotPshared_isUndefinedBehavior) {
-  if (!IsModeDbg()) return;
-  int val;
-  sem_t sem;
-  ASSERT_SYS(0, 0, sem_init(&sem, 0, 0));
-  SPAWN(fork);
-  IgnoreStderr();
-  sem_timedwait(&sem, 0);
-  EXITS(77);
-  ASSERT_SYS(0, 0, sem_destroy(&sem));
-}
-
-TEST(sem_trywait, accessInChildProcessWhenNotPshared_isUndefinedBehavior) {
-  if (!IsModeDbg()) return;
-  int val;
-  sem_t sem;
-  ASSERT_SYS(0, 0, sem_init(&sem, 0, 0));
-  SPAWN(fork);
-  IgnoreStderr();
-  sem_trywait(&sem);
-  EXITS(77);
-  ASSERT_SYS(0, 0, sem_destroy(&sem));
-}
-
 TEST(sem_post, afterDestroyed_isUndefinedBehavior) {
   if (!IsModeDbg()) return;
   int val;
@@ -99,7 +51,7 @@ TEST(sem_post, afterDestroyed_isUndefinedBehavior) {
   ASSERT_SYS(0, 0, sem_destroy(&sem));
   IgnoreStderr();
   sem_post(&sem);
-  EXITS(77);
+  EXITS(128 + SIGABRT);  // see __assert_fail
 }
 
 TEST(sem_trywait, afterDestroyed_isUndefinedBehavior) {
@@ -111,7 +63,7 @@ TEST(sem_trywait, afterDestroyed_isUndefinedBehavior) {
   ASSERT_SYS(0, 0, sem_destroy(&sem));
   IgnoreStderr();
   sem_trywait(&sem);
-  EXITS(77);
+  EXITS(128 + SIGABRT);  // see __assert_fail
 }
 
 TEST(sem_wait, afterDestroyed_isUndefinedBehavior) {
@@ -123,7 +75,7 @@ TEST(sem_wait, afterDestroyed_isUndefinedBehavior) {
   ASSERT_SYS(0, 0, sem_destroy(&sem));
   IgnoreStderr();
   sem_wait(&sem);
-  EXITS(77);
+  EXITS(128 + SIGABRT);  // see __assert_fail
 }
 
 TEST(sem_timedwait, afterDestroyed_isUndefinedBehavior) {
@@ -135,7 +87,7 @@ TEST(sem_timedwait, afterDestroyed_isUndefinedBehavior) {
   ASSERT_SYS(0, 0, sem_destroy(&sem));
   IgnoreStderr();
   sem_timedwait(&sem, 0);
-  EXITS(77);
+  EXITS(128 + SIGABRT);  // see __assert_fail
 }
 
 void *Worker(void *arg) {

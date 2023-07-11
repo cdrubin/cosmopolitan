@@ -36,6 +36,8 @@
 #include "libc/x/xsigaction.h"
 #include "libc/x/xspawn.h"
 
+#ifdef __x86_64__
+
 #define MEM (64 * 1024 * 1024)
 
 static char tmpname[PATH_MAX];
@@ -121,12 +123,13 @@ TEST(setrlimit, testMemoryLimit) {
   char *p;
   bool gotsome;
   int i, wstatus;
+  if (IsXnu()) return;
   if (IsAsan()) return; /* b/c we use sys_mmap */
   ASSERT_NE(-1, (wstatus = xspawn(0)));
   if (wstatus == -2) {
     ASSERT_EQ(0, SetKernelEnforcedMemoryLimit(MEM));
-    for (gotsome = i = 0; i < (MEM * 2) / GUARDSIZE; ++i) {
-      p = mmap(0, GUARDSIZE, PROT_READ | PROT_WRITE,
+    for (gotsome = i = 0; i < (MEM * 2) / APE_GUARDSIZE; ++i) {
+      p = mmap(0, APE_GUARDSIZE, PROT_READ | PROT_WRITE,
                MAP_ANONYMOUS | MAP_PRIVATE | MAP_POPULATE, -1, 0);
       if (p != MAP_FAILED) {
         gotsome = true;
@@ -138,7 +141,7 @@ TEST(setrlimit, testMemoryLimit) {
         ASSERT_EQ(ENOMEM, errno);
         _Exit(0);
       }
-      rngset(p, GUARDSIZE, _rand64, -1);
+      rngset(p, APE_GUARDSIZE, _rand64, -1);
     }
     _Exit(1);
   }
@@ -158,15 +161,15 @@ TEST(setrlimit, testVirtualMemoryLimit) {
   ASSERT_NE(-1, (wstatus = xspawn(0)));
   if (wstatus == -2) {
     ASSERT_EQ(0, setrlimit(RLIMIT_AS, &(struct rlimit){MEM, MEM}));
-    for (i = 0; i < (MEM * 2) / GUARDSIZE; ++i) {
-      p = sys_mmap(0, GUARDSIZE, PROT_READ | PROT_WRITE,
+    for (i = 0; i < (MEM * 2) / APE_GUARDSIZE; ++i) {
+      p = sys_mmap(0, APE_GUARDSIZE, PROT_READ | PROT_WRITE,
                    MAP_ANONYMOUS | MAP_PRIVATE | MAP_POPULATE, -1, 0)
               .addr;
       if (p == MAP_FAILED) {
         ASSERT_EQ(ENOMEM, errno);
         _Exit(0);
       }
-      rngset(p, GUARDSIZE, _rand64, -1);
+      rngset(p, APE_GUARDSIZE, _rand64, -1);
     }
     _Exit(1);
   }
@@ -188,15 +191,15 @@ TEST(setrlimit, testDataMemoryLimit) {
   ASSERT_NE(-1, (wstatus = xspawn(0)));
   if (wstatus == -2) {
     ASSERT_EQ(0, setrlimit(RLIMIT_DATA, &(struct rlimit){MEM, MEM}));
-    for (i = 0; i < (MEM * 2) / GUARDSIZE; ++i) {
-      p = sys_mmap(0, GUARDSIZE, PROT_READ | PROT_WRITE,
+    for (i = 0; i < (MEM * 2) / APE_GUARDSIZE; ++i) {
+      p = sys_mmap(0, APE_GUARDSIZE, PROT_READ | PROT_WRITE,
                    MAP_ANONYMOUS | MAP_PRIVATE | MAP_POPULATE, -1, 0)
               .addr;
       if (p == MAP_FAILED) {
         ASSERT_EQ(ENOMEM, errno);
         _Exit(0);
       }
-      rngset(p, GUARDSIZE, _rand64, -1);
+      rngset(p, APE_GUARDSIZE, _rand64, -1);
     }
     _Exit(1);
   }
@@ -237,3 +240,5 @@ TEST(setrlimit, isVforkSafe) {
   EXPECT_EQ(rlim[0].rlim_cur, rlim[1].rlim_cur);
   EXPECT_EQ(rlim[0].rlim_max, rlim[1].rlim_max);
 }
+
+#endif /* __x86_64__ */

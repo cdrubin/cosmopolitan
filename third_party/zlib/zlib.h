@@ -171,7 +171,7 @@ typedef z_stream *z_streamp;
  */
 typedef struct gz_header_s {
   int text;       /* true if compressed data believed to be text */
-  uLong time;     /* modification time */
+  uLong time_;    /* modification time */
   int xflags;     /* extra flags (not used when writing a gzip file) */
   int os;         /* operating system */
   Bytef *extra;   /* pointer to extra field or Z_NULL if none */
@@ -1695,6 +1695,11 @@ uLong adler32_combine(uLong adler1, uLong adler2, int64_t len2);
  *     if (crc != original_crc) error();
  */
 uLong crc32(uLong crc, const Bytef *buf, uInt len);
+
+/**
+ * Same as crc32(), but with a size_t length.
+ */
+uint32_t crc32_z(uint32_t crc, const void *buf, size_t len);
 
 /**
  * Combine two CRC-32 check values into one. For two sequences of bytes,

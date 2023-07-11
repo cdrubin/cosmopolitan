@@ -27,13 +27,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
 #include "libc/tinymath/complex.internal.h"
-#ifndef TINY
 
 asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /* origin: FreeBSD /usr/src/lib/msun/src/e_acosf.c */
 /*
@@ -107,5 +106,3 @@ float acosf(float x)
 	w = R(z)*s+c;
 	return 2*(df+w);
 }
-
-#endif /* TINY */

@@ -31,7 +31,6 @@
 #include "libc/intrin/directmap.internal.h"
 #include "libc/intrin/extend.internal.h"
 #include "libc/intrin/weaken.h"
-#include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/sysv/consts/f.h"
@@ -42,13 +41,13 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/thread.h"
-#include "libc/zip.h"
+#include "libc/zip.internal.h"
 #include "libc/zipos/zipos.internal.h"
 
 static char *mapend;
 static size_t maptotal;
 
-static void *__zipos_mmap(size_t mapsize) {
+static void *__zipos_mmap_space(size_t mapsize) {
   char *start;
   size_t offset;
   _unassert(mapsize);
@@ -78,7 +77,7 @@ StartOver:
     ph = &h->next;
   }
   if (!h) {
-    h = __zipos_mmap(mapsize);
+    h = __zipos_mmap_space(mapsize);
   }
   __zipos_unlock();
   if (IsAsan()) {
@@ -90,6 +89,7 @@ StartOver:
   if (h) {
     h->size = size;
     h->mapsize = mapsize;
+    pthread_mutex_init(&h->lock, 0);
   }
   return h;
 }
@@ -158,11 +158,6 @@ static int __zipos_load(struct Zipos *zipos, size_t cf, unsigned flags,
   h->pos = 0;
   h->cfile = cf;
   h->size = size;
-  if (!IsTiny() && h->mem &&
-      crc32_z(0, h->mem, h->size) != ZIP_LFILE_CRC32(zipos->map + lf)) {
-    h->mem = 0;
-    eio();
-  }
   if (h->mem) {
     minfd = 3;
     __fds_lock();
@@ -209,14 +204,18 @@ int __zipos_open(const struct ZiposUri *name, unsigned flags, int mode) {
     if ((zipos = __zipos_get())) {
       if ((cf = __zipos_find(zipos, name)) != -1) {
         rc = __zipos_load(zipos, cf, flags, mode);
+        assert(rc != 0);
       } else {
         rc = enoent();
+        assert(rc != 0);
       }
     } else {
       rc = enoexec();
+      assert(rc != 0);
     }
   } else {
     rc = einval();
+    assert(rc != 0);
   }
   ALLOW_SIGNALS;
   return rc;

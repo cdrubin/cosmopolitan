@@ -10,6 +10,8 @@
 #   This makefile compiles and runs each test twice. The first with
 #   GCC-built chibicc, and a second time with chibicc-built chibicc
 
+ifeq ($(ARCH), x86_64)
+
 CHIBICC = o/$(MODE)/third_party/chibicc/chibicc.com
 CHIBICC_FLAGS =								\
 	-fno-common							\
@@ -47,13 +49,11 @@ THIRD_PARTY_CHIBICC_A_DIRECTDEPS =					\
 	LIBC_FMT							\
 	LIBC_INTRIN							\
 	LIBC_LOG							\
-	LIBC_LOG							\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_TIME							\
 	LIBC_X								\
@@ -101,7 +101,7 @@ o/$(MODE)/third_party/chibicc/as.com.dbg:				\
 	@$(APELINK)
 
 o/$(MODE)/third_party/chibicc/chibicc.o: private			\
-		OVERRIDE_CPPFLAGS += $(THIRD_PARTY_CHIBICC_DEFINES)
+		CPPFLAGS += $(THIRD_PARTY_CHIBICC_DEFINES	)
 
 THIRD_PARTY_CHIBICC_LIBS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)))
 THIRD_PARTY_CHIBICC_SRCS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)_SRCS))
@@ -110,6 +110,8 @@ THIRD_PARTY_CHIBICC_INCS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)_I
 THIRD_PARTY_CHIBICC_CHECKS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)_CHECKS))
 THIRD_PARTY_CHIBICC_OBJS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)_OBJS))
 $(THIRD_PARTY_CHIBICC_OBJS): $(BUILD_FILES) third_party/chibicc/chibicc.mk
+
+endif
 
 .PHONY: o/$(MODE)/third_party/chibicc
 o/$(MODE)/third_party/chibicc:						\

@@ -23,6 +23,7 @@
 #include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/dce.h"
+#ifdef __x86_64__
 .text.startup
 
 //	Cosmopolitan runtime.
@@ -44,6 +45,7 @@ cosmo:	push	%rbp
 	mov	%eax,%r12d
 #endif /* SYSDEBUG */
 
+#ifndef NOX87
 //	Windows always initializes FPU to douuble precision.
 //	WSL breaks Linux ABI by initializing FPU to double precision.
 //	This code makes long double long again.
@@ -53,7 +55,7 @@ cosmo:	push	%rbp
 //	     Section 3.4.1: Initial Stack and Register State
 	fldcw	1f(%rip)
 	.rodata
-	.align	2
+	.balign	2
 //	8087 FPU Control Word
 //	 IM: Invalid Operation ───────────────┐
 //	 DM: Denormal Operand ───────────────┐│
@@ -69,6 +71,7 @@ cosmo:	push	%rbp
 //	                          d││││rr││││││
 1:	.short	0b00000000000000000001101111111
 	.previous
+#endif
 
 #ifdef __FAST_MATH__
 	push	%rax
@@ -82,19 +85,19 @@ cosmo:	push	%rbp
 	call	_init
 
 //	call constructors
-	ezlea	__init_array_start,ax		# static ctors in forward order
-	.weak	__init_array_start		# could be called multiple times
-	ezlea	__init_array_end,cx		# idempotency recommended
-	.weak	__init_array_end		# @see ape/ape.lds
+	ezlea	__init_array_end,ax		// static ctors in forward order
+	.weak	__init_array_end		// could be called multiple times
+	ezlea	__init_array_start,cx		// idempotency recommended
+	.weak	__init_array_start		// @see ape/ape.lds
 1:	cmp	%rax,%rcx
 	je	2f
+	sub	$8,%rax
 	push	%rax
 	push	%rcx
 	call	.Largs
 	call	*(%rax)
 	pop	%rcx
 	pop	%rax
-	add	$8,%rax
 	jmp	1b
 
 //	call main()
@@ -162,8 +165,8 @@ cosmo:	push	%rbp
 //	we subtract 8 because the openbsd kernel always checks rsp
 //	is on a MAP_STACK interval non-inclusively of stack + size
 	leave
-	pop	%rcx			# return address
-	sub	$8,%r8d			# openbsd:stackbound
+	pop	%rcx			// return address
+	sub	$8,%r8d			// openbsd:stackbound
 	lea	(%rax,%r8),%rsp
 	mov	$ape_stack_align,%eax
 	neg	%rax
@@ -190,7 +193,7 @@ cosmo:	push	%rbp
 	.init.end 305,_init_symbols
 #endif
 
-#ifdef __PG__
+#ifdef FTRACE
 	.init.start 306,_init_ftrace
 	push	%rdi
 	push	%rsi
@@ -215,3 +218,5 @@ cosmo:	push	%rbp
 1:	.init.end 307,_init_printargs
 #endif
 #endif
+
+#endif /* __x86_64__ */

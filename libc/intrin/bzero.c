@@ -26,7 +26,7 @@
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
 typedef long long xmm_a __attribute__((__vector_size__(16), __aligned__(16)));
 
-static dontinline antiquity void bzero_sse(char *p, size_t n) {
+static void bzero128(char *p, size_t n) {
   xmm_t v = {0};
   if (IsAsan()) __asan_verify(p, n);
   if (n <= 32) {
@@ -43,7 +43,8 @@ static dontinline antiquity void bzero_sse(char *p, size_t n) {
   }
 }
 
-microarchitecture("avx") static void bzero_avx(char *p, size_t n) {
+#ifdef __x86_64__
+_Microarchitecture("avx") static void bzero_avx(char *p, size_t n) {
   xmm_t v = {0};
   if (IsAsan()) __asan_verify(p, n);
   if (n <= 32) {
@@ -73,6 +74,7 @@ microarchitecture("avx") static void bzero_avx(char *p, size_t n) {
     *(xmm_t *)p = v;
   }
 }
+#endif
 
 /**
  * Sets memory to zero.
@@ -134,7 +136,11 @@ void bzero(void *p, size_t n) {
   char *b;
   uint64_t x;
   b = p;
+#ifdef __x86_64__
   asm("xorl\t%k0,%k0" : "=r"(x));
+#else
+  x = 0;
+#endif
   if (n <= 16) {
     if (n >= 8) {
       __builtin_memcpy(b, &x, 8);
@@ -148,12 +154,16 @@ void bzero(void *p, size_t n) {
         b[--n] = x;
       } while (n);
     }
+#ifdef __x86_64__
   } else if (IsTiny()) {
     asm("rep stosb" : "+D"(b), "+c"(n), "=m"(*(char(*)[n])b) : "a"(0));
     return;
   } else if (X86_HAVE(AVX)) {
     bzero_avx(b, n);
+#endif
   } else {
-    bzero_sse(b, n);
+    bzero128(b, n);
   }
 }
+
+__weak_reference(bzero, explicit_bzero);

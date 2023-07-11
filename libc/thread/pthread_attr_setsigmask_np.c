@@ -22,6 +22,18 @@
 /**
  * Sets signal mask on thread attributes object.
  *
+ * For example, to spawn a thread that won't interfere with signals:
+ *
+ *     pthread_t id;
+ *     sigset_t mask;
+ *     pthread_attr_t attr;
+ *     sigfillset(&mask);
+ *     pthread_attr_init(&attr);
+ *     pthread_attr_setsigmask_np(&attr, &mask);
+ *     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+ *     pthread_create(&id, &attr, Worker, 0);
+ *     pthread_attr_destroy(&attr);
+ *
  * @param attr is the thread attributes object
  * @param sigmask will be copied into attributes, or if it's null, then
  *     the existing signal mask presence on the object will be cleared

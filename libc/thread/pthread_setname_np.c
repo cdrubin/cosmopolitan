@@ -23,9 +23,9 @@
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/asmflag.h"
 #include "libc/intrin/atomic.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/pr.h"
 #include "libc/thread/posixthread.internal.h"
@@ -50,7 +50,7 @@ static errno_t pthread_setname_impl(pthread_t thread, const char *name) {
       p = stpcpy(p, "/proc/self/task/");
       p = FormatUint32(p, tid);
       p = stpcpy(p, "/comm");
-      if ((fd = sys_open(path, O_WRONLY | O_CLOEXEC, 0)) == -1) {
+      if ((fd = sys_openat(AT_FDCWD, path, O_WRONLY | O_CLOEXEC, 0)) == -1) {
         rc = errno;
         errno = e;
         return rc;
@@ -71,23 +71,20 @@ static errno_t pthread_setname_impl(pthread_t thread, const char *name) {
     }
     return 0;
 
-  } else if (IsFreebsd()) {
-    char cf;
-    int ax, dx;
-    asm volatile(CFLAG_ASM("syscall")
-                 : CFLAG_CONSTRAINT(cf), "=a"(ax), "=d"(dx)
-                 : "1"(323 /* thr_set_name */), "D"(tid), "S"(name)
-                 : "rcx", "r8", "r9", "r10", "r11", "memory");
-    return !cf ? 0 : ax;
-
-  } else if (IsNetbsd()) {
-    char cf;
-    int ax, dx;
-    asm volatile(CFLAG_ASM("syscall")
-                 : CFLAG_CONSTRAINT(cf), "=a"(ax), "=d"(dx)
-                 : "1"(323 /* _lwp_setname */), "D"(tid), "S"(name)
-                 : "rcx", "r8", "r9", "r10", "r11", "memory");
-    return !cf ? 0 : ax;
+  } else if (IsFreebsd() || IsNetbsd() || IsOpenbsd()) {
+    int ax;
+    if (IsFreebsd()) {
+      ax = 464;  // thr_set_name
+    } else if (IsNetbsd()) {
+      ax = 323;  // _lwp_setname
+    } else {
+      ax = 143;  // sys_setthrname
+    }
+    asm volatile("syscall"
+                 : "+a"(ax), "+D"(tid), "+S"(name)
+                 : /* no inputs */
+                 : "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
+    return ax;
 
   } else {
     return ENOSYS;
@@ -114,7 +111,7 @@ static errno_t pthread_setname_impl(pthread_t thread, const char *name) {
  * @return 0 on success, or errno on error
  * @raise ERANGE if length of `name` exceeded system limit, in which
  *    case the name may have still been set with os using truncation
- * @raise ENOSYS on MacOS, Windows, and OpenBSD
+ * @raise ENOSYS on MacOS, and Windows
  * @see pthread_getname_np()
  */
 errno_t pthread_setname_np(pthread_t thread, const char *name) {

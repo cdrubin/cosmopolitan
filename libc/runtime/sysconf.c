@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/runtime/sysconf.h"
 #include "libc/runtime/clktck.h"
 #include "libc/runtime/runtime.h"
-#include "libc/runtime/sysconf.h"
 #include "libc/sysv/consts/limits.h"
 #include "libc/sysv/consts/rlimit.h"
 
@@ -41,11 +41,11 @@ long sysconf(int name) {
     case _SC_ARG_MAX:
       return _ARG_MAX;
     case _SC_CHILD_MAX:
-      return GetResourceLimit(RLIMIT_NPROC);
+      return _GetResourceLimit(RLIMIT_NPROC);
     case _SC_CLK_TCK:
       return CLK_TCK;
     case _SC_OPEN_MAX:
-      return GetMaxFd();
+      return _GetMaxFd();
     case _SC_PAGESIZE:
       return FRAMESIZE;
     case _SC_NPROCESSORS_ONLN:

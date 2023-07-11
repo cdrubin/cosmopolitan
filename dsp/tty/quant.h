@@ -3,7 +3,6 @@
 #include "dsp/tty/ttyrgb.h"
 #include "libc/assert.h"
 #include "libc/intrin/bits.h"
-#include "libc/intrin/xmmintrin.internal.h"
 #include "libc/limits.h"
 #include "libc/str/str.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
@@ -14,12 +13,14 @@ COSMOPOLITAN_C_START_
 #define BL 2
 #define BR 3
 
-typedef __m128 (*tty2rgbf_f)(struct TtyRgb);
+typedef float ttyrgb_m128 __attribute__((__vector_size__(16), __may_alias__));
+
+typedef ttyrgb_m128 (*tty2rgbf_f)(struct TtyRgb);
 typedef char *(*setbg_f)(char *, struct TtyRgb);
 typedef char *(*setbgfg_f)(char *, struct TtyRgb, struct TtyRgb);
 typedef char *(*setfg_f)(char *, struct TtyRgb);
 typedef struct TtyRgb (*rgb2tty_f)(int, int, int);
-typedef struct TtyRgb (*rgb2ttyf_f)(__m128);
+typedef struct TtyRgb (*rgb2ttyf_f)(ttyrgb_m128);
 typedef struct TtyRgb (*tty2rgb_f)(struct TtyRgb);
 typedef struct TtyRgb ttypalette_t[2][8];
 

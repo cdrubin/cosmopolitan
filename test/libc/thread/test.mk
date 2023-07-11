@@ -31,11 +31,12 @@ TEST_LIBC_THREAD_DIRECTDEPS =				\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
+	LIBC_SYSV_CALLS					\
 	LIBC_TESTLIB					\
 	LIBC_THREAD					\
 	LIBC_TIME					\
+	LIBC_X						\
 	THIRD_PARTY_NSYNC				\
 	THIRD_PARTY_NSYNC_MEM
 
@@ -56,7 +57,7 @@ o/$(MODE)/test/libc/thread/%.com.dbg:			\
 	@$(APELINK)
 
 o/$(MODE)/test/libc/thread/pthread_create_test.o:	\
-		private OVERRIDE_CPPFLAGS +=		\
+		private CPPFLAGS +=			\
 			-DSTACK_FRAME_UNLIMITED
 
 .PHONY: o/$(MODE)/test/libc/thread

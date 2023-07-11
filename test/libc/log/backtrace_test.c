@@ -26,7 +26,6 @@
 #include "libc/limits.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
-#include "libc/mem/copyfd.internal.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
@@ -40,6 +39,7 @@
 #include "libc/testlib/testlib.h"
 #include "libc/x/xasprintf.h"
 #include "net/http/escape.h"
+#ifdef __x86_64__
 
 STATIC_YOINK("backtrace.com");
 STATIC_YOINK("backtrace.com.dbg");
@@ -303,7 +303,7 @@ TEST(ShowCrashReports, testDivideByZero) {
   ASSERT_NE(-1, wait(&ws));
   EXPECT_TRUE(WIFEXITED(ws));
   assert(128 + SIGFPE == WEXITSTATUS(ws) || 77 == WEXITSTATUS(ws));
-  /* NULL is stopgap until we can copy symbol tablces into binary */
+  /* NULL is stopgap until we can copy symbol tables into binary */
 #ifdef __FNO_OMIT_FRAME_POINTER__
   if (!OutputHasSymbol(output, "FpuCrash")) {
     fprintf(stderr, "ERROR: crash report didn't have backtrace\n%s\n",
@@ -706,3 +706,5 @@ TEST(ShowCrashReports, testNpeCrashAfterFinalize) {
 #endif
   free(output);
 }
+
+#endif /* __x86_64__ */

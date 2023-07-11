@@ -17,8 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/sigset.h"
 #include "libc/calls/ucontext.h"
 #include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
@@ -49,6 +51,26 @@ TEST(getcontext, test) {
   ASSERT_TRUE(ok2);
 }
 
+TEST(getcontext, canReadAndWriteSignalMask) {
+  sigset_t ss, old;
+  volatile int n = 0;
+  EXPECT_TRUE(__interruptible);
+  sigemptyset(&ss);
+  sigaddset(&ss, SIGUSR1);
+  sigprocmask(SIG_SETMASK, &ss, &old);
+  ASSERT_EQ(0, getcontext(&context));
+  if (!n) {
+    n = 1;
+    ASSERT_TRUE(sigismember(&context.uc_sigmask, SIGUSR1));
+    sigaddset(&context.uc_sigmask, SIGUSR2);
+    setcontext(&context);
+    abort();
+  }
+  sigprocmask(SIG_SETMASK, 0, &ss);
+  ASSERT_TRUE(sigismember(&ss, SIGUSR2));
+  sigprocmask(SIG_SETMASK, &old, 0);
+}
+
 void SetGetContext(void) {
   static int a;
   a = 0;
@@ -60,5 +82,28 @@ void SetGetContext(void) {
 }
 
 BENCH(getcontext, bench) {
-  EZBENCH2("get/setcontext", donothing, SetGetContext());
+  __interruptible = false;
+  EZBENCH2("getsetcontext nosig", donothing, SetGetContext());
+  __interruptible = true;
+  EZBENCH2("getsetcontext", donothing, SetGetContext());
+}
+
+BENCH(swapcontext, bench) {
+  ucontext_t main, loop;
+  volatile bool ready = false;
+  getcontext(&main);
+  if (ready) {
+    for (;;) {
+      swapcontext(&main, &loop);
+      // kprintf("boom\n");
+    }
+  } else {
+    ready = true;
+    __interruptible = false;
+    EZBENCH2("swapcontextx2 nosig", donothing, swapcontext(&loop, &main));
+    // kprintf("dollar\n");
+    __interruptible = true;
+    EZBENCH2("swapcontextx2", donothing, swapcontext(&loop, &main));
+    // kprintf("dollar\n");
+  }
 }

@@ -32,6 +32,8 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 
+#ifdef __x86_64__
+
 privileged void __sigenter_openbsd(int sig, struct siginfo_openbsd *openbsdinfo,
                                    struct ucontext_openbsd *ctx) {
   int rva, flags;
@@ -43,7 +45,7 @@ privileged void __sigenter_openbsd(int sig, struct siginfo_openbsd *openbsdinfo,
   if (rva >= kSigactionMinRva) {
     flags = __sighandflags[sig & (NSIG - 1)];
     if (~flags & SA_SIGINFO) {
-      ((sigaction_f)(_base + rva))(sig, 0, 0);
+      ((sigaction_f)(__executable_start + rva))(sig, 0, 0);
     } else {
       __repstosb(&g.uc, 0, sizeof(g.uc));
       __siginfo2cosmo(&g.si, (void *)openbsdinfo);
@@ -72,9 +74,10 @@ privileged void __sigenter_openbsd(int sig, struct siginfo_openbsd *openbsdinfo,
       g.uc.uc_mcontext.rip = ctx->sc_rip;
       g.uc.uc_mcontext.rsp = ctx->sc_rsp;
       if (ctx->sc_fpstate) {
-        *g.uc.uc_mcontext.fpregs = *ctx->sc_fpstate;
+        __repmovsb(g.uc.uc_mcontext.fpregs, ctx->sc_fpstate,
+                   sizeof(*ctx->sc_fpstate));
       }
-      ((sigaction_f)(_base + rva))(sig, &g.si, &g.uc);
+      ((sigaction_f)(__executable_start + rva))(sig, &g.si, &g.uc);
       ctx->sc_mask = g.uc.uc_sigmask.__bits[0];
       ctx->sc_rdi = g.uc.uc_mcontext.rdi;
       ctx->sc_rsi = g.uc.uc_mcontext.rsi;
@@ -98,7 +101,8 @@ privileged void __sigenter_openbsd(int sig, struct siginfo_openbsd *openbsdinfo,
       ctx->sc_rip = g.uc.uc_mcontext.rip;
       ctx->sc_rsp = g.uc.uc_mcontext.rsp;
       if (ctx->sc_fpstate) {
-        *ctx->sc_fpstate = *g.uc.uc_mcontext.fpregs;
+        __repmovsb(ctx->sc_fpstate, g.uc.uc_mcontext.fpregs,
+                   sizeof(*ctx->sc_fpstate));
       }
     }
   }
@@ -108,3 +112,5 @@ privileged void __sigenter_openbsd(int sig, struct siginfo_openbsd *openbsdinfo,
    * function, and 2) calls sys_sigreturn() once this returns.
    */
 }
+
+#endif /* __x86_64__ */

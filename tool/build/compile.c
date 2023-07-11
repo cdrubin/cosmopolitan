@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/copyfile.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/itimerval.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/rusage.h"
@@ -27,10 +26,13 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
+#include "libc/fmt/libgen.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/safemacros.internal.h"
@@ -41,11 +43,11 @@
 #include "libc/macros.internal.h"
 #include "libc/math.h"
 #include "libc/mem/alg.h"
-#include "libc/mem/copyfd.internal.h"
 #include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/kcpuids.h"
 #include "libc/nexgen32e/x86feature.h"
+#include "libc/nexgen32e/x86info.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
@@ -62,7 +64,7 @@
 #include "libc/sysv/consts/termios.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define MANUAL \
   "\
@@ -224,6 +226,8 @@ const char *const kGccOnlyFlags[] = {
     "-fcx-limited-range",
     "-fdelete-dead-exceptions",
     "-femit-struct-debug-baseonly",
+    "-ffp-int-builtin-inexact",
+    "-finline-functions-called-once",
     "-fipa-pta",
     "-fivopts",
     "-flimit-function-alignment",
@@ -233,9 +237,11 @@ const char *const kGccOnlyFlags[] = {
     "-fno-align-jumps",
     "-fno-align-labels",
     "-fno-align-loops",
+    "-fno-cx-limited-range",
     "-fno-fp-int-builtin-inexact",
     "-fno-gnu-unique",
     "-fno-gnu-unique",
+    "-fno-inline-functions-called-once",
     "-fno-instrument-functions",
     "-fno-schedule-insns2",
     "-fno-whole-program",
@@ -333,7 +339,7 @@ int GetTerminalWidth(void) {
     return atoi(s);
   } else {
     ws.ws_col = 0;
-    ioctl(2, TIOCGWINSZ, &ws);
+    tcgetwinsize(2, &ws);
     return ws.ws_col;
   }
 }
@@ -347,7 +353,7 @@ int GetLineWidth(bool *isineditor) {
   }
   if (s) {
     return atoi(s);
-  } else if (ioctl(2, TIOCGWINSZ, &ws) != -1) {
+  } else if (tcgetwinsize(2, &ws) != -1) {
     if (ws.ws_col && ws.ws_row) {
       return ws.ws_col * ws.ws_row / 3;
     } else {
@@ -366,7 +372,7 @@ bool IsSafeEnv(const char *s) {
   l = 0;
   r = ARRAYLEN(kSafeEnv) - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     x = strncmp(s, kSafeEnv[m], n);
     if (x < 0) {
       r = m - 1;
@@ -384,7 +390,7 @@ bool IsGccOnlyFlag(const char *s) {
   l = 0;
   r = ARRAYLEN(kGccOnlyFlags) - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     x = strcmp(s, kGccOnlyFlags[m]);
     if (x < 0) {
       r = m - 1;
@@ -479,7 +485,7 @@ void AddArg(char *s) {
   AddStr(&args, s);
 }
 
-int GetBaseCpuFreqMhz(void) {
+static int GetBaseCpuFreqMhz(void) {
   return KCPUIDS(16H, EAX) & 0x7fff;
 }
 
@@ -488,6 +494,7 @@ void SetCpuLimit(int secs) {
   struct rlimit rlim;
   if (secs <= 0) return;
   if (IsWindows()) return;
+#ifdef __x86_64__
   if (!(mhz = GetBaseCpuFreqMhz())) return;
   lim = ceil(3100. / mhz * secs);
   rlim.rlim_cur = lim;
@@ -499,6 +506,7 @@ void SetCpuLimit(int secs) {
       setrlimit(RLIMIT_CPU, &rlim);
     }
   }
+#endif
 }
 
 void SetFszLimit(long n) {
@@ -765,7 +773,7 @@ bool MovePreservingDestinationInode(const char *from, const char *to) {
         res = false;
         break;
       }
-      res = _copyfd(fdin, fdout, -1) != -1;
+      res = copyfd(fdin, fdout, -1) != -1;
       break;
     } else {
       res = false;
@@ -830,7 +838,7 @@ int main(int argc, char *argv[]) {
    */
   verbose = 4;
   timeout = 90;                 /* secs */
-  cpuquota = 16;                /* secs */
+  cpuquota = 32;                /* secs */
   proquota = 2048;              /* procs */
   fszquota = 256 * 1000 * 1000; /* bytes */
   memquota = 512 * 1024 * 1024; /* bytes */
@@ -907,10 +915,10 @@ int main(int argc, char *argv[]) {
   }
 
   s = basename(strdup(cmd));
-  if (strstr(s, "gcc")) {
+  if (strstr(s, "gcc") || strstr(s, "g++")) {
     iscc = true;
     isgcc = true;
-  } else if (strstr(s, "clang")) {
+  } else if (strstr(s, "clang") || strstr(s, "clang++")) {
     iscc = true;
     isclang = true;
   } else if (strstr(s, "ld.bfd")) {
@@ -1023,6 +1031,112 @@ int main(int argc, char *argv[]) {
       if (isgcc) {
         AddArg(argv[i]);
       }
+
+#ifdef __x86_64__
+    } else if (!strcmp(argv[i], "-march=native")) {
+      struct X86ProcessorModel *model;
+      if (X86_HAVE(XOP)) AddArg("-mxop");
+      if (X86_HAVE(SSE4A)) AddArg("-msse4a");
+      if (X86_HAVE(SSE3)) AddArg("-msse3");
+      if (X86_HAVE(SSSE3)) AddArg("-mssse3");
+      if (X86_HAVE(SSE4_1)) AddArg("-msse4.1");
+      if (X86_HAVE(SSE4_2)) AddArg("-msse4.2");
+      if (X86_HAVE(AVX)) AddArg("-mavx");
+      if (X86_HAVE(AVX2)) {
+        AddArg("-mavx2");
+        if (isgcc) {
+          AddArg("-msse2avx");
+          AddArg("-Wa,-msse2avx");
+        }
+      }
+      if (X86_HAVE(AVX512F)) AddArg("-mavx512f");
+      if (X86_HAVE(AVX512PF)) AddArg("-mavx512pf");
+      if (X86_HAVE(AVX512ER)) AddArg("-mavx512er");
+      if (X86_HAVE(AVX512CD)) AddArg("-mavx512cd");
+      if (X86_HAVE(AVX512VL)) AddArg("-mavx512vl");
+      if (X86_HAVE(AVX512BW)) AddArg("-mavx512bw");
+      if (X86_HAVE(AVX512DQ)) AddArg("-mavx512dq");
+      if (X86_HAVE(AVX512IFMA)) AddArg("-mavx512ifma");
+      if (X86_HAVE(AVX512VBMI)) AddArg("-mavx512vbmi");
+      if (X86_HAVE(SHA)) AddArg("-msha");
+      if (X86_HAVE(AES)) AddArg("-maes");
+      if (X86_HAVE(VAES)) AddArg("-mvaes");
+      if (X86_HAVE(PCLMUL)) AddArg("-mpclmul");
+      if (X86_HAVE(FSGSBASE)) AddArg("-mfsgsbase");
+      if (X86_HAVE(F16C)) AddArg("-mf16c");
+      if (X86_HAVE(FMA)) AddArg("-mfma");
+      if (X86_HAVE(POPCNT)) AddArg("-mpopcnt");
+      if (X86_HAVE(BMI)) AddArg("-mbmi");
+      if (X86_HAVE(BMI2)) AddArg("-mbmi2");
+      if (X86_HAVE(ADX)) AddArg("-madx");
+      if (X86_HAVE(FXSR)) AddArg("-mfxsr");
+      if ((model = getx86processormodel(kX86ProcessorModelKey))) {
+        switch (model->march) {
+          case X86_MARCH_CORE2:
+            AddArg("-march=core2");
+            break;
+          case X86_MARCH_NEHALEM:
+            AddArg("-march=nehalem");
+            break;
+          case X86_MARCH_WESTMERE:
+            AddArg("-march=westmere");
+            break;
+          case X86_MARCH_SANDYBRIDGE:
+            AddArg("-march=sandybridge");
+            break;
+          case X86_MARCH_IVYBRIDGE:
+            AddArg("-march=ivybridge");
+            break;
+          case X86_MARCH_HASWELL:
+            AddArg("-march=haswell");
+            break;
+          case X86_MARCH_BROADWELL:
+            AddArg("-march=broadwell");
+            break;
+          case X86_MARCH_SKYLAKE:
+          case X86_MARCH_KABYLAKE:
+            AddArg("-march=skylake");
+            break;
+          case X86_MARCH_CANNONLAKE:
+            AddArg("-march=cannonlake");
+            break;
+          case X86_MARCH_ICELAKE:
+            if (model->grade >= X86_GRADE_SERVER) {
+              AddArg("-march=icelake-server");
+            } else {
+              AddArg("-march=icelake-client");
+            }
+            break;
+          case X86_MARCH_TIGERLAKE:
+            AddArg("-march=tigerlake");
+            break;
+          case X86_MARCH_BONNELL:
+          case X86_MARCH_SALTWELL:
+            AddArg("-march=bonnell");
+            break;
+          case X86_MARCH_SILVERMONT:
+          case X86_MARCH_AIRMONT:
+            AddArg("-march=silvermont");
+            break;
+          case X86_MARCH_GOLDMONT:
+            AddArg("-march=goldmont");
+            break;
+          case X86_MARCH_GOLDMONTPLUS:
+            AddArg("-march=goldmont-plus");
+            break;
+          case X86_MARCH_TREMONT:
+            AddArg("-march=tremont");
+            break;
+          case X86_MARCH_KNIGHTSLANDING:
+            AddArg("-march=knl");
+            break;
+          case X86_MARCH_KNIGHTSMILL:
+            AddArg("-march=knm");
+            break;
+        }
+      }
+#endif /* __x86_64__ */
+
     } else if (!strcmp(argv[i], "-fsanitize=address")) {
       if (isgcc && ccversion >= 6) wantasan = true;
     } else if (!strcmp(argv[i], "-fsanitize=undefined")) {
@@ -1043,11 +1157,13 @@ int main(int argc, char *argv[]) {
     } else if (_startswith(argv[i], "-fsanitize=implicit") &&
                strstr(argv[i], "integer")) {
       if (isgcc) AddArg(argv[i]);
+    } else if (strstr(argv[i], "stack-protector")) {
+      if (isclang || (isgcc && ccversion >= 6)) {
+        AddArg(argv[i]);
+      }
     } else if (_startswith(argv[i], "-fvect-cost") ||
                _startswith(argv[i], "-mstringop") ||
-               _startswith(argv[i], "-gz") ||
-               strstr(argv[i], "stack-protector") ||
-               strstr(argv[i], "sanitize") ||
+               _startswith(argv[i], "-gz") || strstr(argv[i], "sanitize") ||
                _startswith(argv[i], "-fvect-cost") ||
                _startswith(argv[i], "-fvect-cost")) {
       if (isgcc && ccversion >= 6) {

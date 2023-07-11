@@ -23,7 +23,6 @@
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/bits.h"
-#include "libc/intrin/initializer.internal.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/macros.internal.h"
@@ -33,6 +32,8 @@
 #include "libc/sysv/consts/clock.h"
 #include "libc/thread/tls.h"
 #include "libc/time/time.h"
+
+// TODO(jart): DELETE
 
 static clock_gettime_f *__gettime;
 
@@ -113,3 +114,5 @@ long double nowl_setup(void) {
   }
   return nowl();
 }
+
+long double (*nowl)(void) = nowl_setup;

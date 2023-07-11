@@ -2270,6 +2270,8 @@ void test_ssl_mock_sanity( )
     unsigned char received[MSGLEN];
     mbedtls_mock_socket socket;
 
+    memset(message, 0, sizeof(message));
+
     mbedtls_mock_socket_init( &socket );
     TEST_ASSERT( mbedtls_mock_tcp_send_b( &socket, message, MSGLEN ) < 0 );
     mbedtls_mock_socket_close( &socket );

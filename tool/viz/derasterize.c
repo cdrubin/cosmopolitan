@@ -19,12 +19,10 @@
 #include "dsp/tty/itoa8.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
-#include "libc/intrin/tpenc.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -44,9 +42,10 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_image.h"
 #include "third_party/stb/stb_image_resize.h"
+#ifdef __x86_64__
 
 #define HELPTEXT \
   "\n\
@@ -104,7 +103,7 @@ int y_; /* -y HEIGHT [in flexidecimal] */
 #define Mode BEST
 
 #if Mode == BEST
-#define MC 9u /* log2(#) of color combos to consider */
+#define MC 9u  /* log2(#) of color combos to consider */
 #define GN 35u /* # of glyphs to consider */
 #elif Mode == FAST
 #define MC 6u
@@ -114,10 +113,10 @@ int y_; /* -y HEIGHT [in flexidecimal] */
 #define GN 25u
 #endif
 
-#define CN 3u /* # channels (rgb) */
-#define YS 8u /* row stride -or- block height */
-#define XS 4u /* column stride -or- block width */
-#define GT 44u /* total glyphs */
+#define CN 3u        /* # channels (rgb) */
+#define YS 8u        /* row stride -or- block height */
+#define XS 4u        /* column stride -or- block width */
+#define GT 44u       /* total glyphs */
 #define BN (YS * XS) /* # scalars in block/glyph plane */
 
 #define PHIPRIME 0x9E3779B1u
@@ -311,8 +310,8 @@ static unsigned combinecolors(unsigned char bf[1u << MC][2],
     return r;                                                     \
   }
 
-ADJUDICATE(adjudicate_avx2, microarchitecture("avx2,fma"))
-ADJUDICATE(adjudicate_avx, microarchitecture("avx"))
+ADJUDICATE(adjudicate_avx2, _Microarchitecture("avx2,fma"))
+ADJUDICATE(adjudicate_avx, _Microarchitecture("avx"))
 ADJUDICATE(adjudicate_default, )
 
 static float (*adjudicate_hook)(unsigned, unsigned, unsigned,
@@ -452,8 +451,8 @@ static void GetTermSize(unsigned out_rows[1], unsigned out_cols[1]) {
   struct winsize ws;
   ws.ws_row = 24;
   ws.ws_col = 80;
-  if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == -1) {
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+  if (tcgetwinsize(STDIN_FILENO, &ws) == -1) {
+    tcgetwinsize(STDOUT_FILENO, &ws);
   }
   out_rows[0] = ws.ws_row;
   out_cols[0] = ws.ws_col;
@@ -616,3 +615,5 @@ int main(int argc, char *argv[]) {
   munmap(rgb, ROUNDUP(size, FRAMESIZE));
   return 0;
 }
+
+#endif /* __x86_64__ */

@@ -32,6 +32,8 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 
+#ifdef __x86_64__
+
 privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
                                   struct ucontext_netbsd *ctx) {
   int rva, flags;
@@ -41,7 +43,7 @@ privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
   if (rva >= kSigactionMinRva) {
     flags = __sighandflags[sig & (NSIG - 1)];
     if (~flags & SA_SIGINFO) {
-      ((sigaction_f)(_base + rva))(sig, 0, 0);
+      ((sigaction_f)(__executable_start + rva))(sig, 0, 0);
     } else {
       __repstosb(&uc, 0, sizeof(uc));
       __siginfo2cosmo(&si2, (void *)si);
@@ -72,8 +74,9 @@ privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
       uc.uc_mcontext.err = ctx->uc_mcontext.err;
       uc.uc_mcontext.rip = ctx->uc_mcontext.rip;
       uc.uc_mcontext.rsp = ctx->uc_mcontext.rsp;
-      *uc.uc_mcontext.fpregs = ctx->uc_mcontext.__fpregs;
-      ((sigaction_f)(_base + rva))(sig, &si2, &uc);
+      __repmovsb(uc.uc_mcontext.fpregs, &ctx->uc_mcontext.__fpregs,
+                 sizeof(ctx->uc_mcontext.__fpregs));
+      ((sigaction_f)(__executable_start + rva))(sig, &si2, &uc);
       ctx->uc_stack.ss_sp = uc.uc_stack.ss_sp;
       ctx->uc_stack.ss_size = uc.uc_stack.ss_size;
       ctx->uc_stack.ss_flags = uc.uc_stack.ss_flags;
@@ -100,7 +103,8 @@ privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
       ctx->uc_mcontext.err = uc.uc_mcontext.err;
       ctx->uc_mcontext.rip = uc.uc_mcontext.rip;
       ctx->uc_mcontext.rsp = uc.uc_mcontext.rsp;
-      ctx->uc_mcontext.__fpregs = *uc.uc_mcontext.fpregs;
+      __repmovsb(&ctx->uc_mcontext.__fpregs, uc.uc_mcontext.fpregs,
+                 sizeof(ctx->uc_mcontext.__fpregs));
     }
   }
   /*
@@ -109,3 +113,5 @@ privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
    * function, and 2) calls sys_sigreturn() once this returns.
    */
 }
+
+#endif /* __x86_64__ */

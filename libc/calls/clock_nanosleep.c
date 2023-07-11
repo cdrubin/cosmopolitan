@@ -55,8 +55,10 @@ static errno_t sys_clock_nanosleep(int clock, int flags,
     rc = sys_clock_nanosleep_xnu(clock, flags, req, rem);
   } else if (IsOpenbsd()) {
     rc = sys_clock_nanosleep_openbsd(clock, flags, req, rem);
-  } else {
+  } else if (IsWindows()) {
     rc = sys_clock_nanosleep_nt(clock, flags, req, rem);
+  } else {
+    rc = enosys();
   }
   if (rc == -1) {
     rc = errno;
@@ -212,7 +214,7 @@ static bool ShouldUseSpinNanosleep(int clock, int flags,
  *     while (clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &abs, 0));
  *
  * will accurately spin on `EINTR` errors. That way you're not impeding
- * signal delivery and you're not losing precision on your wait timeout.
+ * signal delivery and you're not loosing precision on the wait timeout.
  * This function has first-class support on Linux, FreeBSD, and NetBSD;
  * on OpenBSD it's good; on XNU it's bad; and on Windows it's ugly.
  *

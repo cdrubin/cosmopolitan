@@ -20,7 +20,7 @@ MADEDIRS=
 
 mkdir -p libc/nt/kernel32 &&
   touch libc/nt/kernel32/boop.s &&
-  rm -f libc/nt/*/*.s ||
+  rm -f libc/nt/*/*.s libc/nt/*/*.S ||
     exit
 
 imp() {
@@ -36,10 +36,10 @@ imp() {
   {
     # Generate Portable Executable import data structures
     if [ "$DLL" = "ntdll" ]; then
-      echo ".include \"o/libc/nt/ntdllimport.inc\""
-      echo ".ntimp	$ACTUAL"
+      echo "#include \"libc/nt/ntdllimport.h\""
+      echo ".ntimp	$ACTUAL,$NAME"
     else
-      echo ".include \"o/libc/nt/codegen.inc\""
+      echo "#include \"libc/nt/codegen.h\""
       echo ".imp	$DLL,__imp_$ACTUAL,$ACTUAL,$HINT"
     fi
 
@@ -56,18 +56,24 @@ imp() {
         13|14) thunk "$NAME" "$ACTUAL" __sysv2nt14 "$NAME" ;;
       esac
     fi
-  } >libc/nt/$DLL/$ACTUAL.s
+  } >libc/nt/$DLL/$ACTUAL.S
 }
 
 thunk() {
   printf '
 	.text.windows
+        .ftrace1
 %s:
+        .ftrace2
+#ifdef __x86_64__
 	push	%%rbp
 	mov	%%rsp,%%rbp
-	.profilable
 	mov	__imp_%s(%%rip),%%rax
 	jmp	%s
+#elif defined(__aarch64__)
+	mov	x0,#0
+	ret
+#endif
 	.endfn	%s,globl
 	.previous
 ' "$@"
@@ -76,13 +82,18 @@ thunk() {
 thunk0() {
   printf '
 	.text.windows
+        .ftrace1
 %s:
+        .ftrace2
+#ifdef __x86_64__
 	push	%%rbp
 	mov	%%rsp,%%rbp
-	.profilable
 	sub	$32,%%rsp
 	call	*__imp_%s(%%rip)
 	leave
+#elif defined(__aarch64__)
+	mov	x0,#0
+#endif
 	ret
 	.endfn	%s,globl
 	.previous
@@ -92,14 +103,19 @@ thunk0() {
 thunk1() {
   printf '
 	.text.windows
+        .ftrace1
 %s:
+        .ftrace2
+#ifdef __x86_64__
 	push	%%rbp
 	mov	%%rsp,%%rbp
-	.profilable
 	mov	%%rdi,%%rcx
 	sub	$32,%%rsp
 	call	*__imp_%s(%%rip)
 	leave
+#elif defined(__aarch64__)
+	mov	x0,#0
+#endif
 	ret
 	.endfn	%s,globl
 	.previous

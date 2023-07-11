@@ -75,6 +75,7 @@ THIRD_PARTY_LIBCXX_A_HDRS =					\
 	third_party/libcxx/execution				\
 	third_party/libcxx/experimental/__config		\
 	third_party/libcxx/filesystem				\
+	third_party/libcxx/filesystem_common.hh			\
 	third_party/libcxx/forward_list				\
 	third_party/libcxx/fstream				\
 	third_party/libcxx/functional				\
@@ -110,6 +111,7 @@ THIRD_PARTY_LIBCXX_A_HDRS =					\
 	third_party/libcxx/regex				\
 	third_party/libcxx/scoped_allocator			\
 	third_party/libcxx/set					\
+	third_party/libcxx/span					\
 	third_party/libcxx/sstream				\
 	third_party/libcxx/stack				\
 	third_party/libcxx/stdexcept				\
@@ -143,6 +145,7 @@ THIRD_PARTY_LIBCXX_A_SRCS_CC =					\
 	third_party/libcxx/chrono.cc				\
 	third_party/libcxx/condition_variable.cc		\
 	third_party/libcxx/condition_variable_destructor.cc	\
+	third_party/libcxx/directory_iterator.cc		\
 	third_party/libcxx/exception.cc				\
 	third_party/libcxx/functional.cc			\
 	third_party/libcxx/future.cc				\
@@ -156,6 +159,7 @@ THIRD_PARTY_LIBCXX_A_SRCS_CC =					\
 	third_party/libcxx/memory.cc				\
 	third_party/libcxx/mutex.cc				\
 	third_party/libcxx/new.cc				\
+	third_party/libcxx/operations.cc			\
 	third_party/libcxx/optional.cc				\
 	third_party/libcxx/random.cc				\
 	third_party/libcxx/regex.cc				\
@@ -173,7 +177,6 @@ THIRD_PARTY_LIBCXX_A_SRCS =					\
 
 THIRD_PARTY_LIBCXX_A_OBJS =					\
 	$(THIRD_PARTY_LIBCXX_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
-	$(THIRD_PARTY_LIBCXX_A_SRCS_C:%.c=o/$(MODE)/%.o)	\
 	$(THIRD_PARTY_LIBCXX_A_SRCS_CC:%.cc=o/$(MODE)/%.o)
 
 THIRD_PARTY_LIBCXX_A_CHECKS =					\
@@ -188,12 +191,13 @@ THIRD_PARTY_LIBCXX_A_DIRECTDEPS =				\
 	LIBC_NEXGEN32E						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
+	LIBC_SOCK						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_TIME						\
 	LIBC_THREAD						\
 	LIBC_TINYMATH						\
+	THIRD_PARTY_COMPILER_RT					\
 	THIRD_PARTY_GDTOA
 
 THIRD_PARTY_LIBCXX_A_DEPS :=					\
@@ -209,7 +213,7 @@ $(THIRD_PARTY_LIBCXX_A).pkg:					\
 		$(foreach x,$(THIRD_PARTY_LIBCXX_A_DIRECTDEPS),$($(x)_A).pkg)
 
 $(THIRD_PARTY_LIBCXX_A_OBJS): private				\
-		OVERRIDE_CXXFLAGS +=				\
+		CXXFLAGS +=					\
 			-ffunction-sections			\
 			-fdata-sections
 
@@ -224,4 +228,3 @@ THIRD_PARTY_LIBCXX_OBJS = $(foreach x,$(THIRD_PARTY_LIBCXX_ARTIFACTS),$($(x)_OBJ
 o/$(MODE)/third_party/libcxx: \
 	$(THIRD_PARTY_LIBCXX_CHECKS)	\
 	$(THIRD_PARTY_LIBCXX_A)
-

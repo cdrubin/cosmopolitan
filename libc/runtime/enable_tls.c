@@ -16,44 +16,60 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
 #include "libc/assert.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/asancodes.h"
 #include "libc/intrin/atomic.h"
+#include "libc/intrin/dll.h"
 #include "libc/intrin/weaken.h"
-#include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 
-#define _TLSZ ((intptr_t)_tls_size)
-#define _TLDZ ((intptr_t)_tdata_size)
-#define _TIBZ sizeof(struct CosmoTib)
+#define I(x) ((uintptr_t)x)
 
 extern unsigned char __tls_mov_nt_rax[];
 extern unsigned char __tls_add_nt_rax[];
 
-nsync_dll_list_ _pthread_list;
+struct Dll *_pthread_list;
 pthread_spinlock_t _pthread_lock;
 static struct PosixThread _pthread_main;
-_Alignas(TLS_ALIGNMENT) static char __static_tls[5008];
+_Alignas(TLS_ALIGNMENT) static char __static_tls[6016];
 
 /**
  * Enables thread local storage for main process.
  *
- *                              %fs Linux/BSDs
+ * Here's the TLS memory layout on x86_64:
+ *
+ *                           __get_tls()
  *                               │
- *            _Thread_local      │ __get_tls()
+ *                              %fs Linux/BSDs
+ *            _Thread_local      │
  *     ┌───┬──────────┬──────────┼───┐
  *     │pad│  .tdata  │  .tbss   │tib│
  *     └───┴──────────┴──────────┼───┘
  *                               │
  *                  Windows/Mac %gs
+ *
+ * Here's the TLS memory layout on aarch64:
+ *
+ *            x28
+ *         %tpidr_el0
+ *             │
+ *             │    _Thread_local
+ *         ┌───┼───┬──────────┬──────────┐
+ *         │tib│dtv│  .tdata  │  .tbss   │
+ *         ├───┴───┴──────────┴──────────┘
+ *         │
+ *     __get_tls()
  *
  * This function is always called by the core runtime to guarantee TLS
  * is always available to your program. You must build your code using
@@ -70,7 +86,7 @@ _Alignas(TLS_ALIGNMENT) static char __static_tls[5008];
  * can disable it as follows:
  *
  *     int main() {
- *       __tls_enabled = false;
+ *       __tls_enabled_set(false);
  *       // do stuff
  *     }
  *
@@ -78,13 +94,34 @@ _Alignas(TLS_ALIGNMENT) static char __static_tls[5008];
  * arch_prctl() function. However, such programs might not be portable
  * and your `errno` variable also won't be thread safe anymore.
  */
-void __enable_tls(void) {
+textstartup void __enable_tls(void) {
   int tid;
-  size_t siz;
-  struct CosmoTib *tib;
+  size_t hiz, siz;
   char *mem, *tls;
+  struct CosmoTib *tib;
 
-  siz = ROUNDUP(_TLSZ + _TIBZ, _Alignof(__static_tls));
+  // Here's the layout we're currently using:
+  //
+  //         .balign PAGESIZE
+  //     _tdata_start:
+  //         .tdata
+  //         _tdata_size = . - _tdata_start
+  //         .balign PAGESIZE
+  //     _tbss_start:
+  //     _tdata_start + _tbss_offset:
+  //         .tbss
+  //         .balign TLS_ALIGNMENT
+  //         _tbss_size = . - _tbss_start
+  //     _tbss_end:
+  //     _tbss_start + _tbss_size:
+  //     _tdata_start + _tls_size:
+  //
+  _unassert(_tbss_start == _tdata_start + I(_tbss_offset));
+  _unassert(_tbss_start + I(_tbss_size) == _tdata_start + I(_tls_size));
+
+#ifdef __x86_64__
+
+  siz = ROUNDUP(I(_tls_size) + sizeof(*tib), TLS_ALIGNMENT);
   if (siz <= sizeof(__static_tls)) {
     // if tls requirement is small then use the static tls block
     // which helps avoid a system call for appes with little tls
@@ -103,21 +140,59 @@ void __enable_tls(void) {
 
   if (IsAsan()) {
     // poison the space between .tdata and .tbss
-    __asan_poison(mem + (intptr_t)_tdata_size,
-                  (intptr_t)_tbss_offset - (intptr_t)_tdata_size,
+    __asan_poison(mem + I(_tdata_size), I(_tbss_offset) - I(_tdata_size),
                   kAsanProtected);
   }
 
+  tib = (struct CosmoTib *)(mem + siz - sizeof(*tib));
+  tls = mem + siz - sizeof(*tib) - I(_tls_size);
+
+#elif defined(__aarch64__)
+
+  hiz = ROUNDUP(sizeof(*tib) + 2 * sizeof(void *), I(_tls_align));
+  siz = hiz + I(_tls_size);
+  if (siz <= sizeof(__static_tls)) {
+    mem = __static_tls;
+  } else {
+    _npassert(_weaken(_mapanon));
+    siz = ROUNDUP(siz, FRAMESIZE);
+    mem = _weaken(_mapanon)(siz);
+    _npassert(mem);
+  }
+
+  if (IsAsan()) {
+    // there's a roundup(pagesize) gap between .tdata and .tbss
+    // poison that empty space
+    __asan_poison(mem + hiz + I(_tdata_size), I(_tbss_offset) - I(_tdata_size),
+                  kAsanProtected);
+  }
+
+  tib = (struct CosmoTib *)mem;
+  tls = mem + hiz;
+
+  // Set the DTV.
+  //
+  // We don't support dynamic shared objects at the moment. The APE
+  // linker script will only produce a single PT_TLS program header
+  // therefore our job is relatively simple.
+  //
+  // @see musl/src/env/__init_tls.c
+  // @see https://chao-tic.github.io/blog/2018/12/25/tls
+  ((uintptr_t *)tls)[-2] = 1;
+  ((void **)tls)[-1] = tls;
+
+#else
+#error "unsupported architecture"
+#endif /* __x86_64__ */
+
   // initialize main thread tls memory
-  tib = (struct CosmoTib *)(mem + siz - _TIBZ);
-  tls = mem + siz - _TIBZ - _TLSZ;
   tib->tib_self = tib;
   tib->tib_self2 = tib;
   tib->tib_errno = __errno;
   tib->tib_strace = __strace;
   tib->tib_ftrace = __ftrace;
   tib->tib_pthread = (pthread_t)&_pthread_main;
-  if (IsLinux()) {
+  if (IsLinux() || IsXnuSilicon()) {
     // gnu/systemd guarantees pid==tid for the main thread so we can
     // avoid issuing a superfluous system call at startup in program
     tid = __pid;
@@ -131,18 +206,27 @@ void __enable_tls(void) {
   _pthread_main.flags = PT_STATIC;
   _pthread_main.list.prev = _pthread_main.list.next =  //
       _pthread_list = VEIL("r", &_pthread_main.list);
-  _pthread_main.list.container = &_pthread_main;
   atomic_store_explicit(&_pthread_main.ptid, tid, memory_order_relaxed);
 
   // copy in initialized data section
-  __repmovsb(tls, _tdata_start, _TLDZ);
+  if (I(_tdata_size)) {
+    if (IsAsan()) {
+      __asan_memcpy(tls, _tdata_start, I(_tdata_size));
+    } else {
+      memcpy(tls, _tdata_start, I(_tdata_size));
+    }
+  }
 
   // ask the operating system to change the x86 segment register
   __set_tls(tib);
 
+#ifdef __x86_64__
   // rewrite the executable tls opcodes in memory
-  __morph_tls();
+  if (IsWindows() || IsXnu()) {
+    __morph_tls();
+  }
+#endif
 
   // we are now allowed to use tls
-  __tls_enabled = true;
+  __tls_enabled_set(true);
 }

@@ -25,7 +25,6 @@
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/spawn.h"
 #include "libc/thread/thread.h"
-#include "third_party/nsync/dll.h"
 
 /**
  * Asks POSIX thread to free itself automatically upon termination.
@@ -51,7 +50,7 @@ errno_t pthread_detach(pthread_t thread) {
     } else if (status == kPosixThreadTerminated) {
       transition = kPosixThreadZombie;
     } else {
-      unreachable;
+      __builtin_unreachable();
     }
     if (atomic_compare_exchange_weak_explicit(&pt->status, &status, transition,
                                               memory_order_release,

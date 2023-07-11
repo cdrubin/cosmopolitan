@@ -7,7 +7,7 @@ NET_HTTPS_ARTIFACTS += NET_HTTPS_A
 NET_HTTPS = $(NET_HTTPS_A_DEPS) $(NET_HTTPS_A)
 NET_HTTPS_A = o/$(MODE)/net/https/https.a
 NET_HTTPS_A_FILES := $(wildcard net/https/*)
-NET_HTTPS_A_CERTS := $(wildcard usr/share/ssl/root/*)
+NET_HTTPS_A_CERTS := $(wildcard usr/share/ssl/root/*.pem)
 NET_HTTPS_A_HDRS = $(filter %.h,$(NET_HTTPS_A_FILES))
 NET_HTTPS_A_SRCS = $(filter %.c,$(NET_HTTPS_A_FILES))
 
@@ -30,11 +30,11 @@ NET_HTTPS_A_DIRECTDEPS =			\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_TIME				\
 	LIBC_X					\
 	LIBC_ZIPOS				\
+	THIRD_PARTY_COMPILER_RT			\
 	THIRD_PARTY_MBEDTLS
 
 NET_HTTPS_A_DEPS :=				\

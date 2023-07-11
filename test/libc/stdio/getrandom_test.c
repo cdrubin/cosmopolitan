@@ -41,6 +41,8 @@
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
+#ifndef __aarch64__
+// TODO(jart): Make this test less CPU intensive.
 
 atomic_int done;
 atomic_int ready;
@@ -241,8 +243,8 @@ uint64_t MobyDick(void) {
 
 uint64_t ExecutableImage(void) {
   static int i;
-  if ((i += 8) > _end - _base) i = 8;
-  return READ64LE(_base + i);
+  if ((i += 8) > _end - __executable_start) i = 8;
+  return READ64LE(__executable_start + i);
 }
 
 uint32_t SeventhEditionRand(void) {
@@ -340,3 +342,5 @@ TEST(getrandom, sanityTest) {
 TEST(getrandom, badflags_einval) {
   ASSERT_SYS(EINVAL, -1, getrandom(0, 0, -1));
 }
+
+#endif /* __aarch64__ */

@@ -16,14 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sock/select.h"
 #include "libc/calls/cp.internal.h"
+#include "libc/calls/struct/itimerval.internal.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timeval.h"
+#include "libc/calls/struct/timeval.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/sock/internal.h"
-#include "libc/sock/select.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -43,8 +46,20 @@
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
            struct timeval *timeout) {
   int rc;
+  struct timeval tv, *tvp;
   POLLTRACE("select(%d, %p, %p, %p, %s) → ...", nfds, readfds, writefds,
             exceptfds, DescribeTimeval(0, timeout));
+
+  // the linux kernel modifies timeout
+  if (timeout) {
+    if (IsAsan() && !__asan_is_valid(timeout, sizeof(*timeout))) {
+      return efault();
+    }
+    tv = *timeout;
+    tvp = &tv;
+  } else {
+    tvp = 0;
+  }
 
   BEGIN_CANCELLATION_POINT;
   if (nfds < 0) {
@@ -52,17 +67,28 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
   } else if (IsAsan() &&
              ((readfds && !__asan_is_valid(readfds, FD_SIZE(nfds))) ||
               (writefds && !__asan_is_valid(writefds, FD_SIZE(nfds))) ||
-              (exceptfds && !__asan_is_valid(exceptfds, FD_SIZE(nfds))) ||
-              (timeout && !__asan_is_valid(timeout, sizeof(*timeout))))) {
+              (exceptfds && !__asan_is_valid(exceptfds, FD_SIZE(nfds))))) {
     rc = efault();
   } else if (!IsWindows()) {
-    rc = sys_select(nfds, readfds, writefds, exceptfds, timeout);
+#ifdef __aarch64__
+    struct timespec ts, *tsp;
+    if (timeout) {
+      ts.tv_sec = timeout->tv_sec;
+      ts.tv_nsec = timeout->tv_usec * 1000;
+      tsp = &ts;
+    } else {
+      tsp = 0;
+    }
+    rc = sys_pselect(nfds, readfds, writefds, exceptfds, tsp, 0);
+#else
+    rc = sys_select(nfds, readfds, writefds, exceptfds, tvp);
+#endif
   } else {
-    rc = sys_select_nt(nfds, readfds, writefds, exceptfds, timeout, 0);
+    rc = sys_select_nt(nfds, readfds, writefds, exceptfds, tvp, 0);
   }
   END_CANCELLATION_POINT;
 
   POLLTRACE("select(%d, %p, %p, %p, [%s]) → %d% m", nfds, readfds, writefds,
-            exceptfds, DescribeTimeval(rc, timeout), rc);
+            exceptfds, DescribeTimeval(rc, tvp), rc);
   return rc;
 }

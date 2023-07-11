@@ -36,7 +36,6 @@
 #include "libc/nt/struct/filetime.h"
 #include "libc/nt/struct/processmemorycounters.h"
 #include "libc/nt/synchronization.h"
-#include "libc/runtime/ezmap.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/lcg.internal.h"
 #include "libc/str/str.h"
@@ -44,6 +43,8 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
+
+#ifdef __x86_64__
 
 static textwindows int sys_wait4_nt_impl(int pid, int *opt_out_wstatus,
                                          int options,
@@ -156,3 +157,5 @@ textwindows int sys_wait4_nt(int pid, int *opt_out_wstatus, int options,
   __sig_mask(SIG_SETMASK, &oldmask, 0);
   return rc;
 }
+
+#endif /* __x86_64__ */

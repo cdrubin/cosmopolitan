@@ -16,11 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "tool/net/ljson.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/likely.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/runtime/stack.h"
+#include "libc/stdckdint.h"
 #include "libc/str/str.h"
 #include "libc/str/tab.internal.h"
 #include "libc/str/utf16.h"
@@ -29,7 +31,6 @@
 #include "third_party/lua/lauxlib.h"
 #include "third_party/lua/ltests.h"
 #include "third_party/lua/lua.h"
-#include "tool/net/ljson.h"
 
 #define KEY    1
 #define COMMA  2
@@ -98,7 +99,7 @@ static struct DecodeJson Parse(struct lua_State *L, const char *p,
   if (UNLIKELY(!depth)) {
     return (struct DecodeJson){-1, "maximum depth exceeded"};
   }
-  if (UNLIKELY(!HaveStackMemory(GUARDSIZE))) {
+  if (UNLIKELY(!HaveStackMemory(APE_GUARDSIZE))) {
     return (struct DecodeJson){-1, "out of stack"};
   }
   for (a = p, d = +1; p < e;) {
@@ -199,8 +200,7 @@ static struct DecodeJson Parse(struct lua_State *L, const char *p,
         for (x = (c - '0') * d; p < e; ++p) {
           c = *p & 255;
           if (isdigit(c)) {
-            if (__builtin_mul_overflow(x, 10, &x) ||
-                __builtin_add_overflow(x, (c - '0') * d, &x)) {
+            if (ckd_mul(&x, x, 10) || ckd_add(&x, x, (c - '0') * d)) {
               goto UseDubble;
             }
           } else if (c == '.') {
@@ -543,10 +543,10 @@ static struct DecodeJson Parse(struct lua_State *L, const char *p,
               goto StringFailureWithReason;
 
             default:
-              unreachable;
+              __builtin_unreachable();
           }
         }
-        unreachable;
+        __builtin_unreachable();
       StringFailureWithReason:
         luaL_pushresultsize(&b, 0);
         lua_pop(L, 1);

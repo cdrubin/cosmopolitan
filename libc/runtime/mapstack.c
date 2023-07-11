@@ -39,7 +39,7 @@
  *
  * @return stack bottom address on success, or null w/ errno
  */
-void *_mapstack(void) {
+void *NewCosmoStack(void) {
   char *p;
   if ((p = mmap(0, GetStackSize(), PROT_READ | PROT_WRITE,
                 MAP_STACK | MAP_ANONYMOUS, -1, 0)) != MAP_FAILED) {
@@ -56,8 +56,8 @@ void *_mapstack(void) {
 /**
  * Frees stack.
  *
- * @param stk was allocated by _mapstack()
+ * @param stk was allocated by NewCosmoStack()
  */
-int _freestack(void *stk) {
+int FreeCosmoStack(void *stk) {
   return munmap(stk, GetStackSize());
 }

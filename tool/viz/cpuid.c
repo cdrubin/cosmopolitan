@@ -19,18 +19,19 @@
 #include "libc/intrin/bits.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/log/color.internal.h"
-#include "libc/log/log.h"
+#include "libc/mem/gc.h"
 #include "libc/nexgen32e/cpuid4.internal.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/rdtscp.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nexgen32e/x86info.h"
-#include "libc/mem/gc.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/time/time.h"
 #include "libc/x/xasprintf.h"
 #include "tool/decode/lib/idname.h"
 #include "tool/decode/lib/x86idnames.h"
+#ifdef __x86_64__
 
 #define CANIUSE(FEATURE) caniuse(#FEATURE, X86_HAVE(FEATURE))
 #define SHOW(CONSTANT)   show(#CONSTANT, CONSTANT)
@@ -333,3 +334,5 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
+
+#endif /* __x86_64__ */

@@ -5,6 +5,7 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define PY_SSIZE_T_CLEAN
+#include "third_party/python/Modules/posixmodule.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
@@ -56,6 +57,7 @@
 #include "libc/sysv/consts/sf.h"
 #include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/consts/st.h"
+#include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/consts/waitid.h"
 #include "libc/sysv/errfuns.h"
@@ -87,7 +89,6 @@
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Include/yoink.h"
 #include "third_party/python/Modules/_multiprocessing/multiprocessing.h"
-#include "third_party/python/Modules/posixmodule.h"
 #include "third_party/python/pyconfig.h"
 /* clang-format off */
 
@@ -10477,7 +10478,7 @@ get_terminal_size(PyObject *self, PyObject *args)
      */
     if (!PyArg_ParseTuple(args, "|i", &fd))
         return NULL;
-    if (ioctl(fd, TIOCGWINSZ, &w))
+    if (tcgetwinsize(fd, &w))
         return PyErr_SetFromErrno(PyExc_OSError);
     columns = w.ws_col;
     lines = w.ws_row;

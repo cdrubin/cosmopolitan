@@ -17,14 +17,15 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/directmap.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/metalfile.internal.h"
+#include "libc/intrin/directmap.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/pc.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
+#ifdef __x86_64__
 
 #define MAP_ANONYMOUS_linux 0x00000020
 #define MAP_FIXED_linux     0x00000010
@@ -45,7 +46,7 @@ noasan struct DirectMap sys_mmap_metal(void *vaddr, size_t size, int prot,
   struct mman *mm;
   struct DirectMap res;
   uint64_t addr, faddr = 0, page, e, *pte, *fdpte, *pml4t;
-  mm = (struct mman *)(BANE + 0x0500);
+  mm = __get_mm();
   pml4t = __get_pml4t();
   size = ROUNDUP(size, 4096);
   addr = (uint64_t)vaddr;
@@ -109,3 +110,5 @@ noasan struct DirectMap sys_mmap_metal(void *vaddr, size_t size, int prot,
   res.maphandle = -1;
   return res;
 }
+
+#endif /* __x86_64__ */

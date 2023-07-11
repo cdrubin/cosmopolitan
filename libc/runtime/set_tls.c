@@ -18,15 +18,20 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/nexgen32e/msr.h"
+#include "libc/nexgen32e/msr.internal.h"
 #include "libc/nt/thread.h"
+#include "libc/sysv/consts/arch.h"
 #include "libc/thread/tls.h"
+#include "libc/thread/tls2.h"
 
 int sys_set_tls();
 
-void __set_tls(struct CosmoTib *tib) {
+textstartup void __set_tls(struct CosmoTib *tib) {
+  tib = __adj_tls(tib);
+#ifdef __x86_64__
   // ask the operating system to change the x86 segment register
   int ax, dx;
   if (IsWindows()) {
@@ -56,4 +61,10 @@ void __set_tls(struct CosmoTib *tib) {
                  : "c"(MSR_IA32_FS_BASE), "a"((uint32_t)val),
                    "d"((uint32_t)(val >> 32)));
   }
+#elif defined(__aarch64__)
+  register long x28 asm("x28") = (long)tib;
+  asm volatile("" : "+r"(x28));
+#else
+#error "unsupported architecture"
+#endif
 }

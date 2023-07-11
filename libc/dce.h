@@ -5,11 +5,15 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 
 #ifndef SUPPORT_VECTOR
+#ifdef __x86_64__
 /**
  * Supported Platforms Tuning Knob (Runtime & Compile-Time)
  * Tuning this bitmask will remove platform polyfills at compile-time.
  */
 #define SUPPORT_VECTOR 255
+#else
+#define SUPPORT_VECTOR (_HOSTLINUX | _HOSTXNU)
+#endif
 #endif
 
 #define _HOSTLINUX   1
@@ -30,12 +34,6 @@
 #define IsModeDbg() 1
 #else
 #define IsModeDbg() 0
-#endif
-
-#ifdef __MFENTRY__
-#define HaveFentry() 1
-#else
-#define HaveFentry() 0
 #endif
 
 #ifdef TRUSTWORTHY
@@ -62,10 +60,10 @@
 #define IsAsan() 0
 #endif
 
-#if defined(__PIE__) || defined(__PIC__)
-#define IsPositionIndependent() 1
+#ifdef __aarch64__
+#define IsXnuSilicon() IsXnu()
 #else
-#define IsPositionIndependent() 0
+#define IsXnuSilicon() 0
 #endif
 
 #define SupportsLinux()   ((SUPPORT_VECTOR & _HOSTLINUX) == _HOSTLINUX)
@@ -108,7 +106,11 @@ COSMOPOLITAN_C_START_
 
 extern const int __hostos;
 
+#ifdef __x86_64__
 bool IsWsl1(void);
+#else
+#define IsWsl1() false
+#endif
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

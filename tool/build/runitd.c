@@ -23,6 +23,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/fmt/libgen.h"
 #include "libc/intrin/bits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -55,7 +56,7 @@
 #include "libc/x/x.h"
 #include "libc/x/xasprintf.h"
 #include "net/https/https.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/mbedtls/ssl.h"
 #include "third_party/zlib/zlib.h"
 #include "tool/build/lib/eztls.h"
@@ -184,10 +185,10 @@ void GetOpts(int argc, char *argv[]) {
         break;
       case 'h':
         ShowUsage(stdout, EXIT_SUCCESS);
-        unreachable;
+        __builtin_unreachable();
       default:
         ShowUsage(stderr, EX_USAGE);
-        unreachable;
+        __builtin_unreachable();
     }
   }
 }
@@ -432,11 +433,20 @@ void HandleClient(void) {
     sigaction(SIGQUIT, &(struct sigaction){0}, 0);
     sigprocmask(SIG_SETMASK, &savemask, 0);
     int i = 0;
-    char *args[4] = {0};
+    const char *exe;
+    char *args[8] = {0};
+    if (!IsXnuSilicon()) {
+      exe = g_exepath;
+    } else {
+      exe = "ape-m1.com";
+      args[i++] = exe;
+      args[i++] = "-";
+      args[i++] = g_exepath;
+    }
     args[i++] = g_exepath;
     if (use_strace) args[i++] = "--strace";
     if (use_ftrace) args[i++] = "--ftrace";
-    execv(g_exepath, args);
+    execvp(exe, args);
     _Exit(127);
   }
   close(pipefds[1]);

@@ -22,11 +22,12 @@
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
+#ifndef __aarch64__
 
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
 typedef long long xmm_a __attribute__((__vector_size__(16), __aligned__(16)));
 
-static dontinline antiquity void *memset_sse(char *p, char c, size_t n) {
+static void *memset_sse(char *p, char c, size_t n) {
   xmm_t v = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
   if (IsAsan()) __asan_verify(p, n);
   if (n <= 32) {
@@ -44,7 +45,8 @@ static dontinline antiquity void *memset_sse(char *p, char c, size_t n) {
   return p;
 }
 
-microarchitecture("avx") static void *memset_avx(char *p, char c, size_t n) {
+#ifdef __x86_64__
+_Microarchitecture("avx") static void *memset_avx(char *p, char c, size_t n) {
   char *t;
   xmm_t v = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
   if (IsAsan()) __asan_verify(p, n);
@@ -76,6 +78,7 @@ microarchitecture("avx") static void *memset_avx(char *p, char c, size_t n) {
   }
   return p;
 }
+#endif /* __x86_64__ */
 
 /**
  * Sets memory.
@@ -155,12 +158,16 @@ void *memset(void *p, int c, size_t n) {
       } while (n);
     }
     return b;
+#ifdef __x86__
   } else if (IsTiny()) {
-    asm("rep stosb" : "+D"(b), "+c"(n), "=m"(*(char(*)[n])b) : "0"(p), "a"(c));
+    asm("rep stosb" : "+D"(b), "+c"(n), "=m"(*(char(*)[n])b) : "a"(c));
     return p;
   } else if (X86_HAVE(AVX)) {
     return memset_avx(b, c, n);
+#endif
   } else {
     return memset_sse(b, c, n);
   }
 }
+
+#endif /* __aarch64__ */

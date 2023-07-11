@@ -24,6 +24,8 @@
 #include "libc/runtime/symbols.internal.h"
 #include "libc/sysv/errfuns.h"
 
+#ifdef __x86_64__
+
 static bool __watch_busy;
 static void *__watch_addr;
 static size_t __watch_size;
@@ -31,14 +33,14 @@ static char __watch_last[4096];
 
 void __watch_hook(void);
 
-static noinstrument inline void Copy(char *p, char *q, size_t n) {
+static dontinstrument inline void Copy(char *p, char *q, size_t n) {
   size_t i;
   for (i = 0; i < n; ++i) {
     p[i] = q[i];
   }
 }
 
-static noinstrument inline int Cmp(char *p, char *q, size_t n) {
+static dontinstrument inline int Cmp(char *p, char *q, size_t n) {
   int c;
   if (n == 8) return READ64LE(p) != READ64LE(q);
   if (n == 4) return READ32LE(p) != READ32LE(q);
@@ -50,7 +52,7 @@ static noinstrument inline int Cmp(char *p, char *q, size_t n) {
   return 0;
 }
 
-noinstrument void __watcher(void) {
+dontinstrument void __watcher(void) {
   if (__watch_busy) return;
   __watch_busy = true;
   if (Cmp(__watch_last, __watch_addr, __watch_size)) {
@@ -85,3 +87,5 @@ int __watch(void *addr, size_t size) {
   Copy(__watch_last, __watch_addr, __watch_size);
   return 0;
 }
+
+#endif /* __x86_64__ */

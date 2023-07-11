@@ -29,13 +29,12 @@
 #include "libc/math.h"
 #include "libc/tinymath/internal.h"
 #include "libc/tinymath/log_data.internal.h"
-#ifndef TINY
 
 asm(".ident\t\"\\n\\n\
 Double-precision math functions (MIT License)\\n\
 Copyright 2018 ARM Limited\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /* origin: FreeBSD /usr/src/lib/msun/src/s_log1p.c */
 /*
@@ -161,4 +160,6 @@ double log1p(double x)
 	return s*(hfsq+R) + (dk*ln2_lo+c) - hfsq + f + dk*ln2_hi;
 }
 
-#endif /* TINY */
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(log1p, log1pl);
+#endif

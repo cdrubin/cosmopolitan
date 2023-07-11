@@ -18,6 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/ucontext.h"
+#include "libc/dce.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/runtime/runtime.h"
@@ -48,7 +50,7 @@ void OnSigTrap(int sig, struct siginfo *si, void *ctx) {
 
 void TrapBench(int n) {
   for (int i = 0; i < n; ++i) {
-    asm("int3");
+    __builtin_trap();
   }
 }
 
@@ -72,6 +74,8 @@ BENCH(signal, trapBenchSiginfo) {
   sigaction(SIGTRAP, &old, 0);
 }
 
+#ifdef __x86_64__
+
 void OnSigHlt(int sig, struct siginfo *si, void *vctx) {
   struct ucontext *ctx = vctx;
   ctx->uc_mcontext.rip += 1;
@@ -94,3 +98,5 @@ BENCH(signal, hltBenchSiginfo) {
   sigaction(SIGSEGV, old + 0, 0);
   sigaction(SIGBUS, old + 1, 0);
 }
+
+#endif /* __x86_64__ */

@@ -21,6 +21,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "third_party/make/job.h"
 #include "third_party/make/variable.h"
 /**/
+#include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/sig.h"
 #include "third_party/make/commands.h"
 /* clang-format off */
 

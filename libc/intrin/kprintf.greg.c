@@ -17,6 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define ShouldUseMsabiAttribute() 1
+#include "libc/intrin/kprintf.h"
+#include "ape/sections.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/state.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -24,18 +26,19 @@
 #include "libc/errno.h"
 #include "libc/fmt/divmod10.internal.h"
 #include "libc/fmt/fmt.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/asancodes.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/cmpxchg.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/likely.h"
 #include "libc/intrin/nomultics.internal.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/limits.h"
 #include "libc/log/internal.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/rdtsc.h"
 #include "libc/nexgen32e/uart.internal.h"
@@ -43,11 +46,12 @@
 #include "libc/nt/runtime.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
-#include "libc/runtime/brk.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
 #include "libc/runtime/symbols.internal.h"
+#include "libc/stdckdint.h"
 #include "libc/str/str.h"
 #include "libc/str/tab.internal.h"
 #include "libc/str/utf16.h"
@@ -57,11 +61,55 @@
 #include "libc/thread/tls2.h"
 #include "libc/vga/vga.internal.h"
 
+#define KGETINT(x, va, t, s)                 \
+  switch (t) {                               \
+    case -3:                                 \
+      x = !!va_arg(va, int);                 \
+      break;                                 \
+    case -2:                                 \
+      if (s) {                               \
+        x = (signed char)va_arg(va, int);    \
+      } else {                               \
+        x = (unsigned char)va_arg(va, int);  \
+      }                                      \
+      break;                                 \
+    case -1:                                 \
+      if (s) {                               \
+        x = (signed short)va_arg(va, int);   \
+      } else {                               \
+        x = (unsigned short)va_arg(va, int); \
+      }                                      \
+      break;                                 \
+    case 0:                                  \
+    default:                                 \
+      if (s) {                               \
+        x = va_arg(va, int);                 \
+      } else {                               \
+        x = va_arg(va, unsigned int);        \
+      }                                      \
+      break;                                 \
+    case 1:                                  \
+      if (s) {                               \
+        x = va_arg(va, long);                \
+      } else {                               \
+        x = va_arg(va, unsigned long);       \
+      }                                      \
+      break;                                 \
+    case 2:                                  \
+      if (s) {                               \
+        x = va_arg(va, long long);           \
+      } else {                               \
+        x = va_arg(va, unsigned long long);  \
+      }                                      \
+      break;                                 \
+  }
+
+_Hide long __klog_handle;
 extern _Hide struct SymbolTable *__symtab;
 
 privileged static inline char *kadvance(char *p, char *e, long n) {
   intptr_t t = (intptr_t)p;
-  if (__builtin_add_overflow(t, n, &t)) t = (intptr_t)e;
+  if (ckd_add(&t, t, n)) t = (intptr_t)e;
   return (char *)t;
 }
 
@@ -80,42 +128,18 @@ privileged static char *kemitquote(char *p, char *e, signed char t,
   return p;
 }
 
-privileged static unsigned long long kgetint(va_list va, signed char t,
-                                             bool s) {
-  int bits;
-  unsigned long long x;
-  x = va_arg(va, unsigned long);
-  if (t <= 0) {
-    bits = 64 - (32 >> MIN(5, -t));
-    x <<= bits;
-    if (s) {
-      x = (signed long)x >> bits;
-    } else {
-      x >>= bits;
-    }
-  }
-  return x;
-}
-
 privileged static inline bool kiskernelpointer(const void *p) {
   return 0x7f0000000000 <= (intptr_t)p && (intptr_t)p < 0x800000000000;
 }
 
 privileged static inline bool kistextpointer(const void *p) {
-  return _base <= (const unsigned char *)p && (const unsigned char *)p < _etext;
-}
-
-privileged static inline unsigned char *kend(void) {
-  unsigned char *p;
-  if (_weaken(__brk) && (p = _weaken(__brk)->p)) {
-    return p;
-  } else {
-    return _end;
-  }
+  return __executable_start <= (const unsigned char *)p &&
+         (const unsigned char *)p < _etext;
 }
 
 privileged static inline bool kisimagepointer(const void *p) {
-  return _base <= (const unsigned char *)p && (const unsigned char *)p < kend();
+  return __executable_start <= (const unsigned char *)p &&
+         (const unsigned char *)p < _end;
 }
 
 privileged static inline bool kischarmisaligned(const char *p, signed char t) {
@@ -137,7 +161,7 @@ privileged static bool kismapped(int x) {
   if (kismemtrackhosed()) return false;
   r = _weaken(_mmi)->i;
   while (l < r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     if (_weaken(_mmi)->p[m].y < x) {
       l = m + 1;
     } else {
@@ -155,29 +179,48 @@ privileged bool kisdangerous(const void *p) {
   int frame;
   if (kisimagepointer(p)) return false;
   if (kiskernelpointer(p)) return false;
+  if (IsOldStack(p)) return false;
   if (IsLegalPointer(p)) {
-    frame = (intptr_t)p >> 16;
+    frame = (uintptr_t)p >> 16;
     if (IsStackFrame(frame)) return false;
-    if (IsOldStackFrame(frame)) return false;
     if (kismapped(frame)) return false;
+  }
+  if (GetStackAddr() + APE_GUARDSIZE <= (uintptr_t)p &&
+      (uintptr_t)p < GetStackAddr() + GetStackSize()) {
+    return false;
   }
   return true;
 }
 
-privileged static void klog(const char *b, size_t n) {
+privileged static long kloghandle(void) {
+  if (__klog_handle) {
+    return __klog_handle;
+  } else if (!IsWindows()) {
+    return 2;
+  } else {
+    return __imp_GetStdHandle(kNtStdErrorHandle);
+  }
+}
+
+privileged void _klog(const char *b, size_t n) {
+#ifdef __x86_64__
   int e;
+  long h;
   bool cf;
   size_t i;
   uint16_t dx;
   uint32_t wrote;
   unsigned char al;
   long rax, rdi, rsi, rdx;
+  h = kloghandle();
   if (IsWindows()) {
     e = __imp_GetLastError();
-    __imp_WriteFile(__imp_GetStdHandle(kNtStdErrorHandle), b, n, &wrote, 0);
+    __imp_WriteFile(h, b, n, &wrote, 0);
     __imp_SetLastError(e);
   } else if (IsMetal()) {
-    if (_weaken(_klog_vga)) _weaken(_klog_vga)(b, n);
+    if (_weaken(_klog_vga)) {
+      _weaken(_klog_vga)(b, n);
+    }
     for (i = 0; i < n; ++i) {
       for (;;) {
         dx = 0x3F8 + UART_LSR;
@@ -193,9 +236,23 @@ privileged static void klog(const char *b, size_t n) {
   } else {
     asm volatile("syscall"
                  : "=a"(rax), "=D"(rdi), "=S"(rsi), "=d"(rdx)
-                 : "0"(__NR_write), "1"(2), "2"(b), "3"(n)
+                 : "0"(__NR_write), "1"(h), "2"(b), "3"(n)
                  : "rcx", "r8", "r9", "r10", "r11", "memory", "cc");
   }
+#elif defined(__aarch64__)
+  register long r0 asm("x0") = (long)kloghandle();
+  register long r1 asm("x1") = (long)b;
+  register long r2 asm("x2") = (long)n;
+  register long r8 asm("x8") = (long)__NR_write;
+  register long r16 asm("x16") = (long)__NR_write;
+  register long res_x0 asm("x0");
+  asm volatile("svc\t0"
+               : "=r"(res_x0)
+               : "r"(r0), "r"(r1), "r"(r2), "r"(r8), "r"(r16)
+               : "memory");
+#else
+#error "unsupported architecture"
+#endif
 }
 
 privileged static size_t kformat(char *b, size_t n, const char *fmt,
@@ -214,6 +271,7 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
   p = b;
   f = fmt;
   e = p + n;  // assume if n was negative e < p will be the case
+  tib = __tls_enabled ? __get_tls_privileged() : 0;
   for (;;) {
     for (;;) {
       if (!(c = *f++) || c == '%') break;
@@ -233,6 +291,7 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
     cols = 0;
     zero = 0;
     uppr = 0;
+    ansi = 0;
     abet = "0123456789abcdef";
     for (;;) {
       switch ((c = *f++)) {
@@ -323,12 +382,11 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           goto FormatUnsigned;
 
         case 'P':
-          tib = __tls_enabled ? __get_tls_privileged() : 0;
           if (!(tib && (tib->tib_flags & TIB_FLAG_VFORKED))) {
             if (tib) {
               x = atomic_load_explicit(&tib->tib_tid, memory_order_relaxed);
             } else {
-              x = sys_gettid();
+              x = __pid;
             }
             if (!__nocolor && p + 7 <= e) {
               *p++ = '\e';
@@ -338,8 +396,15 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
               *p++ = '3';
               *p++ = '0' + x % 8;
               *p++ = 'm';
-              ansi = true;
+              ansi = 1;
             }
+#ifdef __x86_64__
+          } else if (IsLinux()) {
+            asm volatile("syscall"
+                         : "=a"(x)
+                         : "0"(__NR_getpid)
+                         : "rcx", "rdx", "r11", "memory");
+#endif
           } else {
             x = 666;
           }
@@ -351,7 +416,7 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
             s = va_arg(va, int) ? "true" : "false";
             goto FormatString;
           }
-          x = kgetint(va, type, c == 'd');
+          KGETINT(x, va, type, c == 'd');
         FormatDecimal:
           if ((long long)x < 0 && c != 'u') {
             x = -x;
@@ -414,7 +479,7 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           base = 1;
           if (hash) hash = '0' | 'b' << 8;
         BinaryNumber:
-          x = kgetint(va, type, false);
+          KGETINT(x, va, type, false);
         FormatNumber:
           i = 0;
           m = (1 << base) - 1;
@@ -468,37 +533,13 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           goto EmitChar;
 
         case 'm': {
-          int unixerr;
-          uint32_t winerr;
-          unixerr = errno;
-          winerr = 0;
-          if (IsWindows()) {
-            if (type == 1 && _weaken(WSAGetLastError)) {
-              winerr = _weaken(WSAGetLastError)();
-            } else if (_weaken(GetLastError)) {
-              winerr = _weaken(GetLastError)();
-            }
-          }
-          if (!unixerr && sign == ' ') {
+          int e;
+          if (!(e = tib ? tib->tib_errno : __errno) && sign == ' ') {
             break;
-          } else if (_weaken(strerror_wr) &&
-                     !_weaken(strerror_wr)(unixerr, winerr, z, sizeof(z))) {
-            s = z;
-            type = 0;
-            goto FormatString;
           } else {
-            if (p + 7 <= e) {
-              *p++ = ' ';
-              *p++ = 'e';
-              *p++ = 'r';
-              *p++ = 'r';
-              *p++ = 'n';
-              *p++ = 'o';
-              *p++ = '=';
-            }
             type = 0;
-            x = unixerr;
-            goto FormatDecimal;
+            s = _strerrno(e);
+            goto FormatString;
           }
         }
 
@@ -723,7 +764,7 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           *p++ = '0';
           *p++ = 'm';
         }
-        ansi = false;
+        ansi = 0;
       }
       break;
     }
@@ -798,9 +839,8 @@ privileged size_t kvsnprintf(char *b, size_t n, const char *fmt, va_list v) {
 privileged void kvprintf(const char *fmt, va_list v) {
   size_t n;
   char b[4000];
-  if (!v) return;
   n = kformat(b, sizeof(b), fmt, v);
-  klog(b, MIN(n, sizeof(b) - 1));
+  _klog(b, MIN(n, sizeof(b) - 1));
 }
 
 /**

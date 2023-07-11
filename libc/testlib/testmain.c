@@ -16,6 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/sigaction.h"
@@ -49,11 +51,12 @@
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/poll.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/rlimit.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
 #include "third_party/dlmalloc/dlmalloc.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
   " [FLAGS]\n\
@@ -132,11 +135,6 @@ static void FixIrregularFds(void) {
   for (i = 0; i < maxfds; ++i) {
     pfds[i].fd = i + 3;
     pfds[i].events = POLLIN;
-  }
-  if (IsGenuineCosmo()) {
-    // TODO(jart): Fix Blinkenlights poll() / close()
-    free(pfds);
-    return;
   }
   if (poll(pfds, maxfds, 0) != -1) {
     for (i = 0; i < maxfds; ++i) {

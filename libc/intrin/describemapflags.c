@@ -22,11 +22,7 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"
 
-#ifdef DescribeMapFlags
-#undef DescribeMapFlags
-#endif
-
-const char *DescribeMapFlags(char buf[64], int x) {
+const char *(DescribeMapFlags)(char buf[64], int x) {
   const struct DescribeFlags kMapFlags[] = {
       {MAP_STACK, "STACK"},                      // order matters
       {MAP_PRIVATE, "PRIVATE"},                  //
@@ -35,7 +31,6 @@ const char *DescribeMapFlags(char buf[64], int x) {
       {MAP_FIXED, "FIXED"},                      //
       {MAP_FIXED_NOREPLACE, "FIXED_NOREPLACE"},  //
       {MAP_CONCEAL, "CONCEAL"},                  //
-      {MAP_HUGETLB, "HUGETLB"},                  //
       {MAP_LOCKED, "LOCKED"},                    //
       {MAP_NORESERVE, "NORESERVE"},              //
       {MAP_NONBLOCK, "NONBLOCK"},                //

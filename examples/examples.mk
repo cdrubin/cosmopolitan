@@ -59,7 +59,6 @@ EXAMPLES_DIRECTDEPS =								\
 	LIBC_SOCK								\
 	LIBC_STDIO								\
 	LIBC_STR								\
-	LIBC_STUBS								\
 	LIBC_SYSV								\
 	LIBC_SYSV_CALLS								\
 	LIBC_TESTLIB								\
@@ -77,10 +76,10 @@ EXAMPLES_DIRECTDEPS =								\
 	THIRD_PARTY_DOUBLECONVERSION						\
 	THIRD_PARTY_GDTOA							\
 	THIRD_PARTY_GETOPT							\
+	THIRD_PARTY_HIREDIS							\
 	THIRD_PARTY_LIBCXX							\
 	THIRD_PARTY_LINENOISE							\
 	THIRD_PARTY_LUA								\
-	THIRD_PARTY_HIREDIS							\
 	THIRD_PARTY_MBEDTLS							\
 	THIRD_PARTY_MUSL							\
 	THIRD_PARTY_NSYNC							\
@@ -89,6 +88,7 @@ EXAMPLES_DIRECTDEPS =								\
 	THIRD_PARTY_SED								\
 	THIRD_PARTY_STB								\
 	THIRD_PARTY_TR								\
+	THIRD_PARTY_VQSORT							\
 	THIRD_PARTY_XED								\
 	THIRD_PARTY_ZLIB							\
 	TOOL_BUILD_LIB								\
@@ -102,7 +102,7 @@ o/$(MODE)/examples/examples.pkg:						\
 		$(foreach x,$(EXAMPLES_DIRECTDEPS),$($(x)_A).pkg)
 
 o/$(MODE)/examples/unbourne.o: private						\
-		OVERRIDE_CPPFLAGS +=						\
+		CPPFLAGS +=							\
 			-DSTACK_FRAME_UNLIMITED					\
 			-fpie
 
@@ -161,13 +161,14 @@ o/$(MODE)/examples/nesemu1.com.dbg:						\
 o/$(MODE)/examples/symtab.com:							\
 		o/$(MODE)/examples/symtab.com.dbg				\
 		o/$(MODE)/third_party/zip/zip.com				\
-		o/$(MODE)/tool/build/symtab.com
+		o/$(MODE)/tool/build/symtab.com					\
+		$(VM)
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)
 
 o/$(MODE)/examples/picol.o: private				\
-		OVERRIDE_CPPFLAGS +=				\
+		CPPFLAGS +=					\
 			-DSTACK_FRAME_UNLIMITED
 
 o/$(MODE)/examples/picol.com.dbg:				\
@@ -183,11 +184,10 @@ o/$(MODE)/usr/share/dict/words.zip.o: private ZIPOBJ_FLAGS += -C2
 
 $(EXAMPLES_OBJS): examples/examples.mk
 
-o/$(MODE)/usr/share/dict/words:							\
-		usr/share/dict/words.gz						\
-		o/$(MODE)/tool/build/gzip.com
+o/$(MODE)/usr/share/dict/words:					\
+		usr/share/dict/words.gz
 	@$(MKDIR) $(@D)
-	@o/$(MODE)/tool/build/gzip.com $(ZFLAGS) -cd <$< >$@
+	@$(GZIP) $(ZFLAGS) -cd <$< >$@
 
 ################################################################################
 

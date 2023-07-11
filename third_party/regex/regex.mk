@@ -15,13 +15,12 @@ THIRD_PARTY_REGEX_A_OBJS =				\
 	$(THIRD_PARTY_REGEX_A_SRCS:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_REGEX_A_DIRECTDEPS =			\
-	LIBC_FMT					\
+	LIBC_STDIO					\
 	LIBC_INTRIN					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
 	LIBC_RUNTIME					\
-	LIBC_STR					\
-	LIBC_STUBS
+	LIBC_STR
 
 THIRD_PARTY_REGEX_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_REGEX_A_DIRECTDEPS),$($(x))))
@@ -51,7 +50,7 @@ $(THIRD_PARTY_REGEX_OBJS): third_party/regex/regex.mk
 o/$(MODE)/third_party/regex/regcomp.o			\
 o/$(MODE)/third_party/regex/regexec.o			\
 o/$(MODE)/third_party/regex/tre-mem.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			$(OLD_CODE)
 
 .PHONY: o/$(MODE)/third_party/regex

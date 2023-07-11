@@ -46,8 +46,6 @@ FLAGS
   -b        log message bodies
   -a        log resource usage
   -g        log handler latency
-  -e        eval Lua code in arg
-  -F        eval Lua code in file
   -E        show crash reports to public ips
   -j        enable ssl client verify
   -k        disable ssl fetch verify
@@ -62,6 +60,8 @@ FLAGS
   -v        increase verbosity                [repeatable]
   -V        increase ssl verbosity            [repeatable]
   -S        increase pledge sandboxing        [repeatable]
+  -e CODE   eval Lua code in arg              [repeatable]
+  -F PATH   eval Lua code in file             [repeatable]
   -H K:V    sets http header globally         [repeatable]
   -D DIR    overlay assets in local directory [repeatable]
   -r /X=/Y  redirect X to Y                   [repeatable]
@@ -721,13 +721,20 @@ FUNCTIONS
           A granular. It can tell you if traffic originated from private
           networks, ARIN, APNIC, DOD, etc.
 
+  DecodeLatin1(iso-8859-1:str) → utf-8:str
+          Turns ISO-8859-1 string into UTF-8.
+
+  EncodeHex(binary:str) → ascii:str
+          Turns binary into ASCII base-16 hexadecimal lowercase string.
+
+  DecodeHex(ascii:str) → binary:str
+          Turns ASCII base-16 hexadecimal byte string into binary string,
+          case-insensitively. Non-hex characters may not appear in string.
+
   DecodeBase64(ascii:str) → binary:str
           Turns ASCII into binary, in a permissive way that ignores
           characters outside the base64 alphabet, such as whitespace. See
           decodebase64.c.
-
-  DecodeLatin1(iso-8859-1:str) → utf-8:str
-          Turns ISO-8859-1 string into UTF-8.
 
   EncodeBase64(binary:str) → ascii:str
           Turns binary into ASCII. This can be used to create HTML data:
@@ -978,10 +985,10 @@ FUNCTIONS
           Please note that '& can still break HTML and that '() can still
           break CSS URLs. This function is charset agnostic and will not
           canonicalize overlong encodings. It is assumed that a UTF-8 string
-          will be supplied. See kescapefragment.c.
+          will be supplied. See kescapefragment.S.
 
   EscapeHost(str) → str
-          Escapes URL host. See kescapeauthority.c
+          Escapes URL host. See kescapeauthority.S
 
   EscapeLiteral(str) → str
           Escapes JavaScript or JSON string literal content. The caller is
@@ -1001,10 +1008,10 @@ FUNCTIONS
           -.*_0-9A-Za-z and everything else gets %XX encoded. This function
           is charset agnostic and will not canonicalize overlong encodings.
           It is assumed that a UTF-8 string will be supplied. See
-          kescapeparam.c.
+          kescapeparam.S.
 
   EscapePass(str) → str
-          Escapes URL password. See kescapeauthority.c.
+          Escapes URL password. See kescapeauthority.S.
 
   EscapePath(str) → str
           Escapes URL path. This is the same as EscapeSegment except slash
@@ -1013,7 +1020,7 @@ FUNCTIONS
           still break HTML, so the output may need EscapeHtml too. Also note
           that '() can still break CSS URLs. This function is charset
           agnostic and will not canonicalize overlong encodings. It is
-          assumed that a UTF-8 string will be supplied. See kescapepath.c.
+          assumed that a UTF-8 string will be supplied. See kescapepath.S.
 
   EscapeSegment(str) → str
           Escapes URL path segment. This is the same as EscapePath except
@@ -1023,10 +1030,10 @@ FUNCTIONS
           EscapeHtml too. Also note that '() can still break CSS URLs. This
           function is charset agnostic and will not canonicalize overlong
           encodings. It is assumed that a UTF-8 string will be supplied. See
-          kescapesegment.c.
+          kescapesegment.S.
 
   EscapeUser(str) → str
-          Escapes URL username. See kescapeauthority.c.
+          Escapes URL username. See kescapeauthority.S.
 
   EvadeDragnetSurveillance(bool)
           If this option is programmed then redbean will not transmit a
@@ -1054,6 +1061,16 @@ FUNCTIONS
             - maxredirects (default = 5): sets the number of allowed redirects
               to minimize looping due to misconfigured servers. When the number
               is exceeded, the last response is returned.
+            - keepalive (default = false): configures each request to keep the
+              connection open (unless closed by the server) and reuse for the
+              next request to the same host. This option is disabled when SSL
+              connection is used.
+              The mapping of hosts and their sockets is stored in a table
+              assigned to the `keepalive` field itself, so it can be passed to
+              the next call.
+              If the table includes the `close` field set to a true value,
+              then the connection is closed after the request is made and the
+              host is removed from the mapping table.
           When the redirect is being followed, the same method and body values
           are being sent in all cases except when 303 status is returned. In
           that case the method is set to GET and the body is removed before the
@@ -1191,6 +1208,15 @@ FUNCTIONS
           - `"NETBSD"`
           - `"FREEBSD"`
           - `"OPENBSD"`
+
+  GetHostIsa() → str
+          Returns string describing host instruction set architecture.
+
+          This can return:
+
+          - `"X86_64"` for Intel and AMD systems
+          - `"AARCH64"` for ARM64, M1, and Raspberry Pi systems
+          - `"POWERPC64"` for OpenPOWER Raptor Computing Systems
 
   GetMonospaceWidth(str|char) → int
           Returns monospace display width of string. This is useful for
@@ -1374,13 +1400,12 @@ FUNCTIONS
           it's the most non-deterministically defined field of them all.
 
           Please note this is a URL parser, not a URI parser. Which
-          means we support everything everything the URI spec says we
-          should do except for the things we won't do, like tokenizing
-          path segments into an array and then nesting another array
-          beneath each of those for storing semicolon parameters. So
-          this parser won't make SIP easy. What it can do is parse HTTP
-          URLs and most URIs like data:opaque, better in fact than most
-          things which claim to be URI parsers.
+          means we support everything the URI spec says we should do except
+          for the things we won't do, like tokenizing path segments into
+          an array and then nesting another array beneath each of those for
+          storing semicolon parameters. So this parser won't make SIP easy.
+          What it can do is parse HTTP URLs and most URIs like data:opaque,
+          better in fact than most things which claim to be URI parsers.
 
   IsAcceptablePath(str) → bool
           Returns true if path doesn't contain ".", ".." or "//" segments
@@ -1420,15 +1445,18 @@ FUNCTIONS
           listing page. The brand string needs to be a UTF-8 value that's
           encodable as ISO-8859-1. If the brand is changed to something
           other than redbean, then the promotional links will be removed
-          from the listing page too. This function should only be called
-          from /.init.lua.
+          from the listing page too.
+          This function should only be called from /.init.lua.
 
-  ProgramCache(seconds:int)
+  ProgramCache(seconds:int[, directive:string])
           Configures Cache-Control and Expires header generation for static
           asset serving. A negative value will disable the headers. Zero
           means don't cache. Greater than zero asks public proxies and
-          browsers to cache for a given number of seconds. This should only
-          be called from /.init.lua.
+          browsers to cache for a given number of seconds. The directive
+          value is added to the Cache-Control header when specified (with
+          "must-revalidate" provided by default) and can be set to an empty
+          string to remove the default value.
+          This function should only be called from /.init.lua.
 
   ProgramCertificate(pem:str)
           Same as the -C flag if called from .init.lua, e.g.
@@ -1459,7 +1487,7 @@ FUNCTIONS
   ProgramTimeout(milliseconds:int|seconds:int)
           Default timeout is 60000ms. Minimal value of timeout is 10(ms).
           Negative values (<0) sets the keepalive in seconds.
-          This should only be called from /.init.lua.
+          This function should only be called from /.init.lua.
 
   ProgramPort(uint16)
           Hard-codes the port number on which to listen, which can be any
@@ -1497,8 +1525,8 @@ FUNCTIONS
           Configures fallback routing for paths which would otherwise return
           404 Not Found. If code is 0 then the path is rewritten internally
           as an accelerated redirect. If code is 301, 302, 307, or 308 then
-          a redirect response will be sent to the client. This should only
-          be called from /.init.lua.
+          a redirect response will be sent to the client.
+          This function should only be called from /.init.lua.
 
   ProgramSslTicketLifetime(seconds:int)
           Defaults to 86400 (24 hours). This may be set to ≤0 to disable
@@ -1925,7 +1953,8 @@ FUNCTIONS
     Although you might want consider trusting redbean's open source
     freedom embracing solution to DDOS protection instead!
 
-  ProgramTokenBucket([replenish:num, cidr:int, reject:int, ignore:int, ban:int])
+  ProgramTokenBucket(
+      [replenish:num[, cidr:int[, reject:int[, ignore:int[, ban:int]]]]])
 
     Enables DDOS protection.
 
@@ -1945,7 +1974,7 @@ FUNCTIONS
 
     This model of network rate limiting generously lets people "burst" a
     tiny bit. For example someone might get a strong craving for content
-    and smash the reload button in Chrome 64 times in a fow seconds. But
+    and smash the reload button in Chrome 64 times in a few seconds. But
     since the client only get 1 new token per second, they'd better cool
     their heels for a few minutes after doing that. This amount of burst
     can be altered by choosing the `reject` / `ignore` / `ban` threshold
@@ -1984,7 +2013,7 @@ FUNCTIONS
     `reject` is the token count or treshold at which redbean should send
     429 Too Many Request warnings to the client. Permitted values can be
     anywhere between -1 and 126 inclusively. The default value is 30 and
-    -1 means disable to disable (assuming AcquireToken() will be used).
+    -1 means to disable (assuming AcquireToken() will be used).
 
     `ignore` is the token count or treshold, at which redbean should try
     simply ignoring clients and close the connection without logging any
@@ -2825,7 +2854,7 @@ UNIX MODULE
 
     `env` is a string list table. Values are coerced to strings. No
     ordering requirement is imposed. By convention, each string has its
-    key and value divided by an equals sign without spaces. If this
+    key and value separated by an equals sign without spaces. If this
     parameter is not specified, it'll default to the C/C++ `environ`
     variable which is inherited from the shell that launched redbean.
     It's the responsibility of the user to supply a sanitized environ
@@ -3674,6 +3703,8 @@ UNIX MODULE
       ├─→ fd:int
       └─→ nil, unix.Errno
 
+    Creates socket endpoint for process communication.
+
     `family` defaults to `AF_INET` and can be:
 
     - `AF_INET`: Creates Internet Protocol Version 4 (IPv4) socket.
@@ -3972,6 +4003,8 @@ UNIX MODULE
       ├─→ data:str
       └─→ nil, unix.Errno
 
+    Receives message from a socket.
+
     `flags` may have any combination (using bitwise OR) of:
 
     - `MSG_WAITALL`
@@ -3983,6 +4016,8 @@ UNIX MODULE
       ├─→ data:str, ip:uint32, port:uint16
       ├─→ data:str, unixpath:str
       └─→ nil, unix.Errno
+
+    Receives message from a socket.
 
     `flags` may have any combination (using bitwise OR) of:
 
@@ -4059,6 +4094,8 @@ UNIX MODULE
   unix.sigaction(sig:int[, handler:func|int[, flags:int[, mask:unix.Sigset]]])
       ├─→ oldhandler:func|int, flags:int, mask:unix.Sigset
       └─→ nil, unix.Errno
+
+    Changes action taken upon receipt of a specific signal.
 
     `sig` can be one of:
 
@@ -4275,6 +4312,16 @@ UNIX MODULE
     OpenBSD should ignore the chown functions without crashing. Linux
     will just EPERM.
 
+    Root access isn't required. Support is limited to OpenBSD and Linux
+    2.6.23+ (i.e. RHEL6 c. 2012) so long as Redbean is running directly
+    on the host system, i.e. not running in a userspace emulator like
+    Blink or Qemu. If your environment isn't supported, then pledge()
+    will return 0 and do nothing, rather than raising ENOSYS, so the
+    apps you share with others will err on the side of not breaking. If
+    a functionality check is needed, please use `unix.pledge(nil, nil)`
+    which is a no-op that will fail appropriately when the necessary
+    system support isn't available to impose security restrictions.
+
     `promises` is a string that may include any of the following groups
     delimited by spaces. This list has been curated to focus on the
     system calls for which this module provides wrappers. See the
@@ -4319,11 +4366,16 @@ UNIX MODULE
 
     tty
 
-      Allows isatty, tiocgwinsz, tcgets, tcsets, tcsetsw, tcsetsf.
+      Allows isatty, tcgetwinsize, tcgets, tcsets, tcsetsw, tcsetsf.
 
     inet
 
       Allows socket (AF_INET), listen, bind, connect, accept,
+      getpeername, getsockname, setsockopt, getsockopt.
+
+    anet
+
+      Allows socket (AF_INET), listen, bind, accept,
       getpeername, getsockname, setsockopt, getsockopt.
 
     unix
@@ -4476,6 +4528,18 @@ UNIX MODULE
     This system call is supported natively on OpenBSD and polyfilled on
     Linux using the Landlock LSM[1].
 
+    This function requires OpenBSD or Linux 5.13+ (2022+). If the kernel
+    support isn't available (or we're in an emulator like Qemu or Blink)
+    then zero is returned and nothing happens (instead of raising
+    ENOSYS) because the files are still unveiled. Use `unix.unveil("",
+    nil)` to feature check the host system, which is defined as a no-op
+    that'll fail if the host system doesn't have the necessary features
+    that allow unix.unveil() impose bona-fide security restrictions.
+    Otherwise, if everything is good, a return value `>=0` is returned,
+    where `0` means OpenBSD, and `>=1` means Linux with Landlock LSM, in
+    which case the return code shall be the maximum supported Landlock
+    ABI version.
+
     `path` is the file or directory to unveil
 
     `permissions` is a string consisting of zero or more of the
@@ -4626,7 +4690,7 @@ UNIX MODULE
 
     No other error numbers are possible.
 
-  unix.tiocgwinsz(fd:int)
+  unix.tcgetwinsize(fd:int)
       ├─→ rows:int, cols:int
       └─→ nil, unix.Errno
 

@@ -19,18 +19,20 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/intrin/strace.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/log/log.h"
 #include "libc/nt/console.h"
 #include "libc/nt/enum/consolemodeflags.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
+
+#define FIODGNAME 0x80106678  // freebsd
 
 static textwindows dontinline int sys_ttyname_nt(int fd, char *buf,
                                                  size_t size) {
@@ -49,7 +51,6 @@ static textwindows dontinline int sys_ttyname_nt(int fd, char *buf,
 }
 
 static int ttyname_freebsd(int fd, char *buf, size_t size) {
-  const unsigned FIODGNAME = 2148558456;
   struct fiodgname_arg {
     int len;
     void *buf;

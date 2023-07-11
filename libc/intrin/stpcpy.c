@@ -16,24 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/str/str.h"
+#ifndef __aarch64__
 
 typedef char xmm_u __attribute__((__vector_size__(16), __aligned__(1)));
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
-
-static inline noasan size_t stpcpy_sse2(char *d, const char *s, size_t i) {
-  xmm_t v, z = {0};
-  for (;;) {
-    v = *(xmm_t *)(s + i);
-    if (!__builtin_ia32_pmovmskb128(v == z)) {
-      *(xmm_u *)(d + i) = v;
-      i += 16;
-    } else {
-      break;
-    }
-  }
-  return i;
-}
 
 /**
  * Copies bytes from 𝑠 to 𝑑 until a NUL is encountered.
@@ -44,14 +33,28 @@ static inline noasan size_t stpcpy_sse2(char *d, const char *s, size_t i) {
  * @return pointer to nul byte
  * @asyncsignalsafe
  */
-char *stpcpy(char *d, const char *s) {
-  size_t i;
-  for (i = 0; (uintptr_t)(s + i) & 15; ++i) {
+noasan char *stpcpy(char *d, const char *s) {
+  size_t i = 0;
+  if (IsAsan()) {
+    __asan_verify(d, strlen(s) + 1);
+  }
+#ifdef __x86_64__
+  for (; (uintptr_t)(s + i) & 15; ++i) {
     if (!(d[i] = s[i])) {
       return d + i;
     }
   }
-  i = stpcpy_sse2(d, s, i);
+  for (;;) {
+    xmm_t z = {0};
+    xmm_t v = *(xmm_t *)(s + i);
+    if (!__builtin_ia32_pmovmskb128(v == z)) {
+      *(xmm_u *)(d + i) = v;
+      i += 16;
+    } else {
+      break;
+    }
+  }
+#endif
   for (;;) {
     if (!(d[i] = s[i])) {
       return d + i;
@@ -59,3 +62,5 @@ char *stpcpy(char *d, const char *s) {
     ++i;
   }
 }
+
+#endif /* __aarch64__ */

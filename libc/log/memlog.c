@@ -17,12 +17,13 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/atomic.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/hook/hook.internal.h"
+#include "libc/mem/hook.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/sysv/consts/o.h"
@@ -67,7 +68,7 @@ static struct Memlog {
       long size;
     } * p;
   } allocs;
-  long usage;
+  atomic_long usage;
 } __memlog;
 
 static pthread_mutex_t __memlog_lock_obj;
@@ -149,7 +150,7 @@ static void __memlog_update(void *p2, void *p) {
       return;
     }
   }
-  unreachable;
+  __builtin_unreachable();
 }
 
 static void __memlog_log(struct StackFrame *frame, const char *op, void *res,

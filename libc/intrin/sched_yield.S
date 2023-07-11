@@ -19,13 +19,15 @@
 #include "libc/dce.h"
 #include "libc/sysv/consts/nr.h"
 #include "libc/macros.internal.h"
-.privileged
 
 //	Relinquishes scheduled quantum.
 //
 //	@return	0 on success, or -1 w/ errno
 //	@norestart
+	.ftrace1
 sched_yield:
+	.ftrace2
+#ifdef __x86_64__
 	push	%rbp
 	mov	%rsp,%rbp
 	xor	%eax,%eax
@@ -69,15 +71,15 @@ sched_yield:
 //	 a signal." ──Quoth IEEE 1003.1-2017 §functions/select
 //
 //	On other platforms, sched_yield() takes no arguments.
-	push	$0				# timeout.tv_usec
-	push	$0				# timeout.tv_sec
-	xor	%edi,%edi			# nfds
-	xor	%esi,%esi			# readfds
-	xor	%edx,%edx			# writefds
-	xor	%r10d,%r10d			# exceptfds
-	mov	%rsp,%r8			# timeout
-	mov	__NR_sched_yield,%eax		# ordinal
-	clc					# linux
+	push	$0				// timeout.tv_usec
+	push	$0				// timeout.tv_sec
+	xor	%edi,%edi			// nfds
+	xor	%esi,%esi			// readfds
+	xor	%edx,%edx			// writefds
+	xor	%r10d,%r10d			// exceptfds
+	mov	%rsp,%r8			// timeout
+	mov	__NR_sched_yield,%eax		// ordinal
+	clc					// linux
 	syscall
 //	It should not be possible for this to fail so we don't
 //	bother going through the errno ritual. If this somehow
@@ -86,5 +88,25 @@ sched_yield:
 
 9:	leave
 	ret
+
+#elif defined(__aarch64__)
+
+	stp	x29,x30,[sp,-32]!
+	mov	x29,sp
+	mov	x3,0
+	mov	x2,0
+	add	x4,sp,16
+	mov	x1,0
+	mov	w0,0
+	stp	xzr,xzr,[sp,16]
+	mov	x8,#0x7c			// sched_yield() for gnu/systemd
+	mov	x16,#0x5d			// select(0,0,0,0,&blah) for xnu
+	svc	0
+	ldp	x29,x30,[sp],32
+	ret
+
+#else
+#error "arch unsupported"
+#endif
 	.endfn	sched_yield,globl
 	.previous

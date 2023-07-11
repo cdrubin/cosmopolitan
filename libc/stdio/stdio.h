@@ -1,6 +1,5 @@
-#ifndef _STDIO_H
-#define _STDIO_H
-#include "libc/fmt/pflink.h"
+#ifndef COSMOPOLITAN_LIBC_STDIO_H_
+#define COSMOPOLITAN_LIBC_STDIO_H_
 
 #define L_ctermid    20
 #define FILENAME_MAX PATH_MAX
@@ -15,21 +14,21 @@ COSMOPOLITAN_C_START_
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
 typedef struct FILE {
-  uint8_t bufmode;             /* 0x00 _IOFBF, etc. (ignored if fd=-1) */
-  bool noclose;                /* 0x01 for fake dup() todo delete! */
-  uint32_t iomode;             /* 0x04 O_RDONLY, etc. (ignored if fd=-1) */
-  int32_t state;               /* 0x08 0=OK, -1=EOF, >0=errno */
-  int fd;                      /* 0x0c ≥0=fd, -1=closed|buffer */
-  uint32_t beg;                /* 0x10 */
-  uint32_t end;                /* 0x14 */
-  char *buf;                   /* 0x18 */
-  uint32_t size;               /* 0x20 */
-  uint32_t nofree;             /* 0x24 */
-  int pid;                     /* 0x28 */
-  char *getln;                 /* 0x30 */
-  char lock[16];               /* 0x38 */
-  _Atomic(struct FILE *) next; /* 0x48 */
-  char mem[BUFSIZ];            /* 0x50 */
+  uint8_t bufmode;   /* 0x00 _IOFBF, etc. (ignored if fd=-1) */
+  bool noclose;      /* 0x01 for fake dup() todo delete! */
+  uint32_t iomode;   /* 0x04 O_RDONLY, etc. (ignored if fd=-1) */
+  int32_t state;     /* 0x08 0=OK, -1=EOF, >0=errno */
+  int fd;            /* 0x0c ≥0=fd, -1=closed|buffer */
+  uint32_t beg;      /* 0x10 */
+  uint32_t end;      /* 0x14 */
+  char *buf;         /* 0x18 */
+  uint32_t size;     /* 0x20 */
+  uint32_t nofree;   /* 0x24 */
+  int pid;           /* 0x28 */
+  char *getln;       /* 0x30 */
+  char lock[16];     /* 0x38 */
+  struct FILE *next; /* 0x48 */
+  char mem[BUFSIZ];  /* 0x50 */
 } FILE;
 
 extern FILE *stdin;
@@ -67,14 +66,13 @@ int putchar(int);
 int puts(const char *);
 ssize_t getline(char **, size_t *, FILE *) paramsnonnull();
 ssize_t getdelim(char **, size_t *, int, FILE *) paramsnonnull();
-FILE *fopen(const char *, const char *) paramsnonnull() dontdiscard;
+FILE *fopen(const char *, const char *) paramsnonnull((2)) dontdiscard;
 FILE *fdopen(int, const char *) paramsnonnull() dontdiscard;
 FILE *fmemopen(void *, size_t, const char *) paramsnonnull((3)) dontdiscard;
 FILE *freopen(const char *, const char *, FILE *) paramsnonnull((2, 3));
 size_t fread(void *, size_t, size_t, FILE *) paramsnonnull((4));
 size_t fwrite(const void *, size_t, size_t, FILE *) paramsnonnull((4));
 int fclose(FILE *);
-int fclose_s(FILE **) paramsnonnull();
 int fseek(FILE *, long, int) paramsnonnull();
 long ftell(FILE *) paramsnonnull();
 int fseeko(FILE *, int64_t, int) paramsnonnull();
@@ -128,6 +126,14 @@ int wscanf(const wchar_t *, ...);
 int fwide(FILE *, int);
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
+│ cosmopolitan § standard i/o » allocating                                 ─╬─│┼
+╚────────────────────────────────────────────────────────────────────────────│*/
+
+int asprintf(char **, const char *, ...) printfesque(2)
+    paramsnonnull((1, 2)) libcesque;
+int vasprintf(char **, const char *, va_list) paramsnonnull() libcesque;
+
+/*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § standard i/o » without mutexes                            ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
@@ -164,34 +170,11 @@ int vfprintf_unlocked(FILE *, const char *, va_list)
     paramsnonnull() dontthrow nocallback;
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § standard i/o » optimizations                              ─╬─│┼
+│ cosmopolitan § cxxabi                                                    ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
-#define getc(f)     fgetc(f)
-#define getwc(f)    fgetwc(f)
-#define putc(c, f)  fputc(c, f)
-#define putwc(c, f) fputwc(c, f)
-
-#define getc_unlocked(f)     fgetc_unlocked(f)
-#define getwc_unlocked(f)    fgetwc_unlocked(f)
-#define putc_unlocked(c, f)  fputc_unlocked(c, f)
-#define putwc_unlocked(c, f) fputwc_unlocked(c, f)
-
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-/* clang-format off */
-#define printf(FMT, ...)     (printf)(PFLINK(FMT), ##__VA_ARGS__)
-#define vprintf(FMT, VA)     (vprintf)(PFLINK(FMT), VA)
-#define fprintf(F, FMT, ...) (fprintf)(F, PFLINK(FMT), ##__VA_ARGS__)
-#define vfprintf(F, FMT, VA) (vfprintf)(F, PFLINK(FMT),  VA)
-#define fprintf_unlocked(F, FMT, ...) (fprintf_unlocked)(F, PFLINK(FMT), ##__VA_ARGS__)
-#define vfprintf_unlocked(F, FMT, VA) (vfprintf_unlocked)(F, PFLINK(FMT), VA)
-#define vscanf(FMT, VA)      (vscanf)(SFLINK(FMT), VA)
-#define scanf(FMT, ...)      (scanf)(SFLINK(FMT), ##__VA_ARGS__)
-#define fscanf(F, FMT, ...)  (fscanf)(F, SFLINK(FMT), ##__VA_ARGS__)
-#define vfscanf(F, FMT, VA)  (vfscanf)(F, SFLINK(FMT), VA)
-/* clang-format on */
-#endif
+char *__cxa_demangle(const char *, char *, size_t *, int *);
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
-#endif /* _STDIO_H */
+#endif /* COSMOPOLITAN_LIBC_STDIO_H_ */

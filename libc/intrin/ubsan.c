@@ -19,7 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/fmt/fmt.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/pushpop.h"
+#include "libc/intrin/pushpop.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/color.internal.h"
@@ -166,10 +166,16 @@ static char *__ubsan_itpcpy(char *p, struct UbsanTypeDescriptor *t,
   }
 }
 
+static size_t __ubsan_strlen(const char *s) {
+  size_t i = 0;
+  while (s[i]) ++i;
+  return i;
+}
+
 static const char *__ubsan_dubnul(const char *s, unsigned i) {
   size_t n;
   while (i--) {
-    if ((n = __strlen(s))) {
+    if ((n = __ubsan_strlen(s))) {
       s += n + 1;
     } else {
       return NULL;
@@ -193,7 +199,7 @@ static uintptr_t __ubsan_extend(struct UbsanTypeDescriptor *t, uintptr_t x) {
 }
 
 static wontreturn void __ubsan_unreachable(void) {
-  for (;;) __builtin_trap();
+  for (;;) abort();
 }
 
 static void __ubsan_exit(void) {

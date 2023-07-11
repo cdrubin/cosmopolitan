@@ -19,12 +19,9 @@
 #include "libc/calls/calls.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/sysv/consts/arch.h"
 
-#ifdef DescribeArchPrctlCode
-#undef DescribeArchPrctlCode
-#endif
-
-const char *DescribeArchPrctlCode(char buf[12], int x) {
+const char *(DescribeArchPrctlCode)(char buf[12], int x) {
   if (x == ARCH_SET_FS) return "ARCH_SET_FS";
   if (x == ARCH_GET_FS) return "ARCH_GET_FS";
   if (x == ARCH_SET_GS) return "ARCH_SET_GS";

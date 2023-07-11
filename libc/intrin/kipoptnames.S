@@ -28,13 +28,13 @@
 	.endm
 
 	.section .rodata
-	.align	4
+	.balign	4
 	.underrun
 kIpOptnames:
-	.e	IP_TOS,"TOS"			# int
-	.e	IP_MTU,"MTU"			# int
-	.e	IP_TTL,"TTL"			# int
-	.e	IP_HDRINCL,"HDRINCL"		# bool32
+	.e	IP_TOS,"TOS"			// int
+	.e	IP_MTU,"MTU"			// int
+	.e	IP_TTL,"TTL"			// int
+	.e	IP_HDRINCL,"HDRINCL"		// bool32
 	.long	MAGNUM_TERMINATOR
 	.endobj	kIpOptnames,globl,hidden
 	.overrun

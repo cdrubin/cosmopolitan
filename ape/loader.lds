@@ -19,25 +19,23 @@
 ENTRY(_start)
 
 SECTIONS {
-  . = 0x200000;
-  .text : {
-    *(.text)
+  . = 0x7fff0000;
+  __executable_start = .;
+  .rodata : {
+    KEEP(*(.head))
     *(.rodata .rodata.*)
-    . = ALIGN(64);
-  }
-  filesz = . - ehdr;
-  textsz = . - _start;
-  .bss ALIGN(4096) : {
-    bss = .;
-    *(.bss)
     . = ALIGN(4096);
   }
+  .text : {
+    text = .;
+    *(.text)
+  }
   _end = .;
-  memsz = _end - ehdr;
   /DISCARD/ : {
     *(.*)
   }
 }
 
-bsssize = SIZEOF(.bss);
-textoff = _start - ehdr;
+textsz = SIZEOF(.text);
+rosize = SIZEOF(.rodata);
+filesz = SIZEOF(.rodata) + SIZEOF(.text);

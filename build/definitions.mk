@@ -33,14 +33,25 @@
 #
 # VARIABLES
 #
-#     CCFLAGS      gcc frontend flags (.i, .c, .cc, .f, .S, .lds, etc.)
+#   Our configuration variables, ordered by increasing preference:
+#
+#     CCFLAGS      frontend flags (.i, .c, .cc, .f, .S, .lds, etc.)
+#     OFLAGS       objectify flags (precludes -S and -E)
 #     CPPFLAGS     preprocessor flags (.h, .c, .cc, .S, .inc, .lds, etc.)
+#     TARGET_ARCH  microarchitecture flags (e.g. -march=native)
+#     COPTS        c/c++ flags (.c, .cc)
 #     CFLAGS       c flags (.c only)
 #     CXXFLAGS     c++ flags (.cc only)
-#     COPTS        c/c++ flags (.c, .cc)
 #     LDFLAGS      linker flags (don't use -Wl, frontend prefix)
 #     ASFLAGS      assembler flags (don't use -Wa, frontend prefix)
-#     TARGET_ARCH  microarchitecture flags (e.g. -march=native)
+#
+#   For each FOO above, there exists (by increasing preference)
+#
+#     DEFAULT_FOO  see build/definitions.mk
+#     CONFIG_FOO   see build/config.mk
+#     FOO          set ~/.cosmo.mk and target-specific
+#     OVERRIDE_FOO set ~/.cosmo.mk and target-specific (use rarely)
+#
 
 LC_ALL = C
 SOURCE_DATE_EPOCH = 0
@@ -56,27 +67,45 @@ TMPDIR = o/tmp
 AR = build/bootstrap/ar.com
 CP = build/bootstrap/cp.com
 RM = build/bootstrap/rm.com -f
+GZIP = build/bootstrap/gzip.com
 ECHO = build/bootstrap/echo.com
+CHMOD = build/bootstrap/chmod.com
 TOUCH = build/bootstrap/touch.com
 PKG = build/bootstrap/package.com
 MKDEPS = build/bootstrap/mkdeps.com
 ZIPOBJ = build/bootstrap/zipobj.com
+ZIPCOPY = build/bootstrap/zipcopy.com
 FIXUPOBJ = build/bootstrap/fixupobj.com
 MKDIR = build/bootstrap/mkdir.com -p
 COMPILE = build/bootstrap/compile.com -V9 -P4096 $(QUOTA)
 
 COMMA := ,
 PWD := $(shell build/bootstrap/pwd.com)
-IMAGE_BASE_VIRTUAL ?= 0x400000
 
 IGNORE := $(shell $(ECHO) -2 ♥cosmo)
 IGNORE := $(shell $(MKDIR) o/tmp)
 
+ifneq ($(findstring aarch64,$(MODE)),)
+ARCH = aarch64
+VM = o/third_party/qemu/qemu-aarch64
+HOSTS ?= pi silicon
+else
+ARCH = x86_64
+HOSTS ?= freebsd openbsd openbsd73 netbsd rhel7 rhel5 xnu win10
+endif
+
+ifeq ($(PREFIX),)
+ifeq ($(USE_SYSTEM_TOOLCHAIN),)
 ifneq ("$(wildcard o/third_party/gcc/bin/x86_64-pc-linux-gnu-*)","")
 PREFIX = o/third_party/gcc/bin/x86_64-pc-linux-gnu-
 else
 IGNORE := $(shell build/bootstrap/unbundle.com)
 PREFIX = o/third_party/gcc/bin/x86_64-linux-musl-
+endif
+ifeq ($(ARCH), aarch64)
+PREFIX = o/third_party/gcc/bin/aarch64-linux-musl-
+endif
+endif
 endif
 
 AS = $(PREFIX)as
@@ -89,7 +118,11 @@ GCC = $(PREFIX)gcc
 STRIP = $(PREFIX)strip
 OBJCOPY = $(PREFIX)objcopy
 OBJDUMP = $(PREFIX)objdump
+ifneq ($(wildcard $(PWD)/$(PREFIX)addr2line), )
 ADDR2LINE = $(PWD)/$(PREFIX)addr2line
+else
+ADDR2LINE = $(PREFIX)addr2line
+endif
 
 export ADDR2LINE
 export LC_ALL
@@ -99,25 +132,29 @@ export SOURCE_DATE_EPOCH
 export TMPDIR
 
 ifeq ($(LANDLOCKMAKE_VERSION),)
-TMPSAFE = $(TMPDIR)/$(subst /,_,$@).tmp
+TMPSAFE = $(join $(TMPDIR),$(subst /,_,$@)).tmp
 else
 TMPSAFE = $(TMPDIR)/
 endif
 
-FTRACE =								\
-	-pg
+ifeq ($(ARCH), aarch64)
+IMAGE_BASE_VIRTUAL ?= 0x010000000000
+else
+IMAGE_BASE_VIRTUAL ?= 0x400000
+endif
 
 BACKTRACES =								\
-	-fno-schedule-insns2						\
-	-fno-omit-frame-pointer						\
 	-fno-optimize-sibling-calls					\
 	-mno-omit-leaf-frame-pointer
+
+ifneq ($(ARCH), aarch64)
+BACKTRACES += -fno-schedule-insns2
+endif
 
 SANITIZER =								\
 	-fsanitize=address
 
 NO_MAGIC =								\
-	-mno-fentry							\
 	-fno-stack-protector						\
 	-fwrapv								\
 	-fno-sanitize=all
@@ -131,35 +168,49 @@ TRADITIONAL =								\
 	-Wno-return-type						\
 	-Wno-pointer-sign
 
-DEFAULT_CCFLAGS =							\
+DEFAULT_CCFLAGS +=							\
 	-Wall								\
 	-Werror								\
-	-fdebug-prefix-map='$(PWD)'=					\
+	-fno-omit-frame-pointer						\
 	-frecord-gcc-switches
 
-DEFAULT_OFLAGS =							\
-	-g								\
-	-gdwarf-4							\
-	-gdescribe-dies
-
-DEFAULT_COPTS =								\
-	-mno-red-zone							\
+DEFAULT_COPTS ?=							\
 	-fno-math-errno							\
-	-fno-trapping-math						\
-	-fno-fp-int-builtin-inexact					\
 	-fno-ident							\
 	-fno-common							\
 	-fno-gnu-unique							\
 	-fstrict-aliasing						\
 	-fstrict-overflow						\
 	-fno-semantic-interposition					\
+	-fno-dwarf2-cfi-asm						\
+	-fno-unwind-tables						\
+	-fno-asynchronous-unwind-tables
+
+ifeq ($(ARCH), x86_64)
+DEFAULT_COPTS +=							\
+	-mno-red-zone							\
 	-mno-tls-direct-seg-refs
+endif
+
+ifeq ($(ARCH), aarch64)
+#
+# - Apple says in "Writing ARM64 code for Apple platforms" that we're
+#   not allowed to use the x18 register.
+#
+# - Cosmopolitan Libc uses x28 for thread-local storage because Apple
+#   forbids us from using tpidr_el0 too.
+#
+DEFAULT_COPTS +=							\
+	-ffixed-x18							\
+	-ffixed-x28							\
+	-mno-outline-atomics
+endif
 
 MATHEMATICAL =								\
 	-O3								\
 	-fwrapv
 
-DEFAULT_CPPFLAGS =							\
+DEFAULT_CPPFLAGS +=							\
 	-DCOSMO								\
 	-DMODE='"$(MODE)"'						\
 	-DIMAGE_BASE_VIRTUAL=$(IMAGE_BASE_VIRTUAL)			\
@@ -181,28 +232,32 @@ DEFAULT_CXXFLAGS =							\
 DEFAULT_ASFLAGS =							\
 	-W								\
 	-I.								\
-	--noexecstack							\
-	--nocompress-debug-sections
+	--noexecstack
 
 DEFAULT_LDFLAGS =							\
 	-static								\
 	-nostdlib							\
-	-melf_x86_64							\
 	--gc-sections							\
 	--build-id=none							\
-	--no-dynamic-linker						\
-	-zmax-page-size=0x1000 #--cref -Map=$@.map
+	--no-dynamic-linker
 
-ZIPOBJ_FLAGS =								\
-	 -b$(IMAGE_BASE_VIRTUAL)
+# # generate linker report files
+# DEFAULT_LDFLAGS += --cref -Map=$@.map
 
-PYFLAGS =								\
-	 -b$(IMAGE_BASE_VIRTUAL)
+ifeq ($(ARCH), aarch64)
+DEFAULT_LDFLAGS +=							\
+	-zmax-page-size=0x4000						\
+	-zcommon-page-size=0x4000					\
+	-znorelro
+else
+DEFAULT_LDFLAGS +=							\
+	-zmax-page-size=0x1000						\
+	-zcommon-page-size=0x1000
+endif
 
 ASONLYFLAGS =								\
 	-c								\
-	-g								\
-	--debug-prefix-map='$(PWD)'=
+	-g
 
 DEFAULT_LDLIBS =
 
@@ -276,19 +331,19 @@ LD.libs =								\
 	$(CONFIG_LIBS)							\
 	$(LIBS)
 
-COMPILE.c.flags = $(cc.flags) $(cpp.flags) $(copt.flags) $(c.flags)
-COMPILE.cxx.flags = $(cc.flags) $(cpp.flags) $(copt.flags) $(cxx.flags)
+COMPILE.c.flags = $(cc.flags) $(copt.flags) $(cpp.flags) $(c.flags)
+COMPILE.cxx.flags = $(cc.flags) $(copt.flags) $(cpp.flags) $(cxx.flags)
 COMPILE.f.flags = $(cc.flags) $(copt.flags) $(f.flags)
-COMPILE.F.flags = $(cc.flags) $(cpp.flags) $(copt.flags) $(f.flags)
+COMPILE.F.flags = $(cc.flags) $(copt.flags) $(cpp.flags) $(f.flags)
 COMPILE.i.flags = $(cc.flags) $(copt.flags) $(c.flags)
 COMPILE.ii.flags = $(cc.flags) $(copt.flags) $(cxx.flags)
 LINK.flags = $(DEFAULT_LDFLAGS) $(CONFIG_LDFLAGS) $(LDFLAGS)
-OBJECTIFY.c.flags = $(OBJECTIFY.S.flags) $(copt.flags) $(c.flags)
-OBJECTIFY.cxx.flags = $(OBJECTIFY.S.flags) $(copt.flags) $(cxx.flags)
+OBJECTIFY.c.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags) $(copt.flags) $(c.flags)
+OBJECTIFY.cxx.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags) $(copt.flags) $(cxx.flags)
 OBJECTIFY.s.flags = $(ASONLYFLAGS) $(s.flags)
-OBJECTIFY.S.flags = $(copt.flags) $(cc.flags) $(o.flags) $(cpp.flags) $(S.flags)
-OBJECTIFY.f.flags = $(copt.flags) $(cc.flags) $(o.flags) $(copt.flags) $(S.flags) $(f.flags)
-OBJECTIFY.F.flags = $(OBJECTIFY.f.flags) $(cpp.flags)
+OBJECTIFY.S.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags)
+OBJECTIFY.f.flags = $(cc.flags) $(o.flags) $(S.flags) $(f.flags)
+OBJECTIFY.F.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags) $(copt.flags) $(f.flags)
 PREPROCESS.flags = -E $(copt.flags) $(cc.flags) $(cpp.flags)
 PREPROCESS.lds.flags = -D__LINKER__ $(filter-out -g%,$(PREPROCESS.flags)) -P -xc
 
@@ -307,7 +362,7 @@ PREPROCESS = $(CC) $(PREPROCESS.flags)
 PREPROCESS.lds = $(CC) $(PREPROCESS.lds.flags)
 LINK = $(LD) $(LINK.flags)
 ELF = o/libc/elf/elf.lds
-ELFLINK = $(COMPILE) -ALINK.elf $(LINK) $(LINKARGS) $(OUTPUT_OPTION)
+ELFLINK = $(COMPILE) -ALINK.elf $(LINK) $(LINKARGS) $(OUTPUT_OPTION) && $(COMPILE) -AFIXUP.ape -T$@ $(FIXUPOBJ) $@
 LINKARGS = $(patsubst %.lds,-T %.lds,$(call uniqr,$(LD.libs) $(filter-out %.pkg,$^)))
 LOLSAN = build/lolsan -b $(IMAGE_BASE_VIRTUAL)
 
@@ -324,7 +379,6 @@ OBJECTIFY.greg.c =							\
 	-fno-optimize-sibling-calls					\
 	-fno-sanitize=all						\
 	-ffreestanding							\
-	-mno-fentry							\
 	-fwrapv								\
 	-c
 
@@ -364,7 +418,6 @@ OBJECTIFY.ncabi.c =							\
 	$(OBJECTIFY.c.flags)						\
 	-mno-sse							\
 	-mfpmath=387							\
-	-mno-fentry							\
 	-fno-stack-protector						\
 	-fno-instrument-functions					\
 	-fno-optimize-sibling-calls					\
@@ -383,7 +436,6 @@ OBJECTIFY.ncabi.c =							\
 OBJECTIFY.initabi.c =							\
 	$(GCC)								\
 	$(OBJECTIFY.c.flags)						\
-	-mno-fentry							\
 	-fno-stack-protector						\
 	-fno-instrument-functions					\
 	-fno-optimize-sibling-calls					\

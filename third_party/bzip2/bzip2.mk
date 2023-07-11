@@ -31,7 +31,6 @@ THIRD_PARTY_BZIP2_A_DIRECTDEPS =				\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV
 
 THIRD_PARTY_BZIP2_A_DEPS :=					\
@@ -63,7 +62,7 @@ o/$(MODE)/third_party/bzip2/bzip2recover.com.dbg:		\
 	@$(APELINK)
 
 $(THIRD_PARTY_BZIP2_A_OBJS): private				\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-ffunction-sections			\
 			-fdata-sections
 

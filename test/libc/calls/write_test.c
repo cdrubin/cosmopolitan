@@ -16,7 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
@@ -95,23 +97,14 @@ TEST(write, rlimitFsizeExceeded_raisesEfbig) {
   EXITS(0);
 }
 
-static long Write(long fd, const void *data, unsigned long size) {
-  long ax, di, si, dx;
-  asm volatile("syscall"
-               : "=a"(ax), "=D"(di), "=S"(si), "=d"(dx)
-               : "0"(__NR_write), "1"(fd), "2"(data), "3"(size)
-               : "rcx", "r8", "r9", "r10", "r11", "memory", "cc");
-  return ax;
-}
-
 BENCH(write, bench) {
   ASSERT_SYS(0, 3, open("/dev/null", O_WRONLY));
   EZBENCH2("write", donothing, write(3, "hello", 5));
   EZBENCH2("writev", donothing, writev(3, &(struct iovec){"hello", 5}, 1));
+  BEGIN_CANCELLATION_POINT;
   EZBENCH2("sys_write", donothing, sys_write(3, "hello", 5));
   EZBENCH2("sys_writev", donothing,
            sys_writev(3, &(struct iovec){"hello", 5}, 1));
-  EZBENCH2("Write", donothing, Write(3, "hello", 5));
-  EZBENCH2("Write", donothing, Write(3, "hello", 5));
+  END_CANCELLATION_POINT;
   ASSERT_SYS(0, 0, close(3));
 }

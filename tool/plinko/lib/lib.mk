@@ -1,6 +1,8 @@
 #-*-mode:makefile-gmake;indent-tabs-mode:t;tab-width:8;coding:utf-8-*-┐
 #───vi: set et ft=make ts=8 tw=8 fenc=utf-8 :vi───────────────────────┘
 
+ifeq ($(ARCH), x86_64)
+
 PKGS += TOOL_PLINKO_LIB
 
 TOOL_PLINKO_LIB_ARTIFACTS += TOOL_PLINKO_LIB_A
@@ -34,8 +36,8 @@ TOOL_PLINKO_LIB_A_DIRECTDEPS =				\
 	LIBC_SOCK					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
+	LIBC_SYSV_CALLS					\
 	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_GETOPT
 
@@ -51,14 +53,14 @@ $(TOOL_PLINKO_LIB_A).pkg:				\
 		$(foreach x,$(TOOL_PLINKO_LIB_A_DIRECTDEPS),$($(x)_A).pkg)
 
 ifeq ($(MODE),)
-$(TOOL_PLINKO_LIB_A_OBJS): private OVERRIDE_CFLAGS += -fno-inline
+$(TOOL_PLINKO_LIB_A_OBJS): private CFLAGS += -fno-inline
 endif
 
 ifeq ($(MODE),dbg)
-$(TOOL_PLINKO_LIB_A_OBJS): private OVERRIDE_CFLAGS += -fno-inline
+$(TOOL_PLINKO_LIB_A_OBJS): private CFLAGS += -fno-inline
 endif
 
-$(TOOL_PLINKO_LIB_A_OBJS): private OVERRIDE_CFLAGS += -ffast-math -foptimize-sibling-calls -O2
+$(TOOL_PLINKO_LIB_A_OBJS): private CFLAGS += -ffast-math -foptimize-sibling-calls -O2
 
 TOOL_PLINKO_LIB_LIBS = $(foreach x,$(TOOL_PLINKO_LIB_ARTIFACTS),$($(x)))
 TOOL_PLINKO_LIB_SRCS = $(foreach x,$(TOOL_PLINKO_LIB_ARTIFACTS),$($(x)_SRCS))
@@ -67,6 +69,8 @@ TOOL_PLINKO_LIB_BINS = $(foreach x,$(TOOL_PLINKO_LIB_ARTIFACTS),$($(x)_BINS))
 TOOL_PLINKO_LIB_CHECKS = $(foreach x,$(TOOL_PLINKO_LIB_ARTIFACTS),$($(x)_CHECKS))
 TOOL_PLINKO_LIB_OBJS = $(foreach x,$(TOOL_PLINKO_LIB_ARTIFACTS),$($(x)_OBJS))
 TOOL_PLINKO_LIB_TESTS = $(foreach x,$(TOOL_PLINKO_LIB_ARTIFACTS),$($(x)_TESTS))
+
+endif
 
 .PHONY: o/$(MODE)/tool/plinko/lib
 o/$(MODE)/tool/plinko/lib: $(TOOL_PLINKO_LIB_CHECKS)

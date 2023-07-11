@@ -22,7 +22,6 @@ THIRD_PARTY_AWK_A_DIRECTDEPS =				\
 	LIBC_STDIO					\
 	LIBC_SYSV					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_TINYMATH					\
 	TOOL_ARGS					\
 	THIRD_PARTY_GDTOA
@@ -52,7 +51,7 @@ o/$(MODE)/third_party/awk/awk.com.dbg:			\
 	@$(APELINK)
 
 o/$(MODE)/third_party/awk/README.zip.o:			\
-		ZIPOBJ_FLAGS =				\
+		ZIPOBJ_FLAGS +=				\
 			-B
 
 THIRD_PARTY_AWK_BINS = $(THIRD_PARTY_AWK_COMS) $(THIRD_PARTY_AWK_COMS:%=%.dbg)

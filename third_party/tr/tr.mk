@@ -22,7 +22,6 @@ THIRD_PARTY_TR_DIRECTDEPS =			\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	THIRD_PARTY_GETOPT
 
 THIRD_PARTY_TR_DEPS :=				\
@@ -43,7 +42,7 @@ $(THIRD_PARTY_TR_A).pkg:			\
 
 o/$(MODE)/third_party/tr/tr.com.dbg:		\
 		$(THIRD_PARTY_TR)		\
-		o/$(MODE)/third_party/tr/tr.o	\
+		o/$(MODE)/third_party/tr/cmd.o	\
 		$(CRT)				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)

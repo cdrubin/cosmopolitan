@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/tpenc.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 
 /**
  * Writes wide character to stream.
@@ -40,3 +40,5 @@ wint_t fputwc_unlocked(wchar_t wc, FILE *f) {
     return -1;
   }
 }
+
+__strong_reference(fputwc_unlocked, putwc_unlocked);

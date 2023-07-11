@@ -30,7 +30,6 @@
 #include "libc/tinymath/complex.internal.h"
 #include "libc/tinymath/internal.h"
 #include "libc/tinymath/log2_data.internal.h"
-#ifndef TINY
 
 asm(".ident\t\"\\n\\n\
 fdlibm (fdlibm license)\\n\
@@ -39,7 +38,7 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /* origin: FreeBSD /usr/src/lib/msun/src/e_log10.c */
 /*
@@ -143,4 +142,6 @@ double log10(double x)
 	return val_lo + val_hi;
 }
 
-#endif /* !TINY */
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(log10, log10l);
+#endif

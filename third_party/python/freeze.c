@@ -5,6 +5,7 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/log/log.h"
 #include "libc/mem/mem.h"
 #include "third_party/python/Include/bytesobject.h"
 #include "third_party/python/Include/compile.h"
@@ -46,6 +47,8 @@ main(int argc, char *argv[])
     unsigned char *data;
     PyObject *code = NULL, *marshalled = NULL;
     int is_bootstrap = 1;
+
+    ShowCrashReports();
 
     if (argc == 2 && !strcmp(argv[1], "-n")) return 0;
 

@@ -32,7 +32,6 @@
 #include "libc/dns/dns.h"
 #include "libc/errno.h"
 #include "libc/log/bsd.h"
-#include "libc/mem/fmt.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/struct/pollfd.h"
@@ -43,7 +42,7 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/poll.h"
 #include "libc/sysv/consts/sock.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 // clang-format off
 
 asm(".ident\t\"\\n\\n\
@@ -70,7 +69,7 @@ asm(".include \"libc/disclaimer.inc\"");
 #define	RNICHOST	"whois.ripe.net"
 #define	VNICHOST	"whois.verisign-grs.com"
 
-#define	DEFAULT_PORT	"whois"
+#define	DEFAULT_PORT	"43"  // IANA abolished WHOIS lool; avoid /etc/services
 
 #define WHOIS_RECURSE	0x01
 #define WHOIS_QUICK	0x02

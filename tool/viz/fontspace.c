@@ -17,9 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/scale/cdecimate2xuint8x8.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
+#include "libc/fmt/libgen.h"
 #include "libc/intrin/bsr.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
@@ -31,7 +32,7 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_truetype.h"
 
 #define MAXCODE
@@ -69,7 +70,7 @@ int main(int argc, char *argv[]) {
   unsigned char *intotal;
   int w, h, i, j, c, arg, opt, errs, line, count, maxcode, s = 40 * 4, rc = 0;
   ShowCrashReports();
-  ioctl(0, TIOCGWINSZ, &ws);
+  tcgetwinsize(0, &ws);
   while ((opt = getopt(argc, argv, "vs:e:")) != -1) {
     switch (opt) {
       case 'v':

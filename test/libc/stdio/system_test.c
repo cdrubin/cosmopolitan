@@ -18,8 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
-#include "libc/mem/copyfd.internal.h"
 #include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/paths.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -28,8 +28,21 @@
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
+#ifdef __x86_64__
+
+STATIC_YOINK("_tr");
+STATIC_YOINK("glob");
 
 char testlib_enable_tmp_setup_teardown;
+
+void SetUp(void) {
+  if (IsWindows()) {
+    fprintf(stderr,
+            "TODO(jart): Why does system_test have issues on Windows when "
+            "running as a subprocess of something like runitd.com?\n");
+    exit(0);
+  }
+}
 
 TEST(system, haveShell) {
   ASSERT_TRUE(system(0));
@@ -54,6 +67,44 @@ TEST(system, testStdoutRedirect_withSpacesInFilename) {
   testlib_extract("/zip/echo.com", "echo.com", 0755);
   ASSERT_EQ(0, system("./echo.com hello >\"hello there.txt\""));
   EXPECT_STREQ("hello\n", _gc(xslurp("hello there.txt", 0)));
+}
+
+TEST(system, testStderrRedirect_toStdout) {
+  if (IsAsan()) return;  // TODO(jart): fix me
+  int pipefd[2];
+  int stdoutBack = dup(1);
+  ASSERT_NE(-1, stdoutBack);
+  ASSERT_EQ(0, pipe(pipefd));
+  ASSERT_NE(-1, dup2(pipefd[1], 1));
+  int stderrBack = dup(2);
+  ASSERT_NE(-1, stderrBack);
+  char buf[5] = {0};
+
+  ASSERT_NE(-1, dup2(1, 2));
+  bool success = false;
+  if (WEXITSTATUS(system("echo aaa 2>&1")) == 0) {
+    success = read(pipefd[0], buf, sizeof(buf) - 1) == (sizeof(buf) - 1);
+  }
+  ASSERT_NE(-1, dup2(stderrBack, 2));
+  ASSERT_EQ(true, success);
+  ASSERT_STREQ("aaa\n", buf);
+  buf[0] = 0;
+  buf[1] = 0;
+  buf[2] = 0;
+  buf[3] = 0;
+  testlib_extract("/zip/echo.com", "echo.com", 0755);
+  ASSERT_NE(-1, dup2(1, 2));
+  success = false;
+  if (WEXITSTATUS(system("./echo.com aaa 2>&1")) == 0) {
+    success = read(pipefd[0], buf, sizeof(buf) - 1) == (sizeof(buf) - 1);
+  }
+  ASSERT_NE(-1, dup2(stderrBack, 2));
+  ASSERT_EQ(true, success);
+  ASSERT_STREQ("aaa\n", buf);
+
+  ASSERT_NE(-1, dup2(stdoutBack, 1));
+  ASSERT_EQ(0, close(pipefd[1]));
+  ASSERT_EQ(0, close(pipefd[0]));
 }
 
 BENCH(system, bench) {
@@ -116,3 +167,82 @@ TEST(system, kill) {
   int ws = system("kill -TERM $$; usleep");
   if (!IsWindows()) ASSERT_EQ(SIGTERM, WTERMSIG(ws));
 }
+
+TEST(system, exitStatusPreservedAfterSemiColon) {
+  testlib_extract("/zip/false.com", "false.com", 0755);
+  ASSERT_EQ(1, WEXITSTATUS(system("false;")));
+  ASSERT_EQ(1, WEXITSTATUS(system("false; ")));
+  ASSERT_EQ(1, WEXITSTATUS(system("./false.com;")));
+  ASSERT_EQ(1, WEXITSTATUS(system("./false.com;")));
+  int pipefd[2];
+  int stdoutBack = dup(1);
+  ASSERT_NE(-1, stdoutBack);
+  ASSERT_EQ(0, pipe(pipefd));
+  ASSERT_NE(-1, dup2(pipefd[1], 1));
+  ASSERT_EQ(0, WEXITSTATUS(system("false; echo $?")));
+  char buf[3] = {0};
+  ASSERT_EQ(2, read(pipefd[0], buf, 2));
+  ASSERT_STREQ("1\n", buf);
+  ASSERT_EQ(0, WEXITSTATUS(system("./false.com; echo $?")));
+  buf[0] = 0;
+  buf[1] = 0;
+  ASSERT_EQ(2, read(pipefd[0], buf, 2));
+  ASSERT_STREQ("1\n", buf);
+  ASSERT_NE(-1, dup2(stdoutBack, 1));
+  ASSERT_EQ(0, close(pipefd[1]));
+  ASSERT_EQ(0, close(pipefd[0]));
+}
+
+TEST(system, allowsLoneCloseCurlyBrace) {
+  int pipefd[2];
+  int stdoutBack = dup(1);
+  ASSERT_NE(-1, stdoutBack);
+  ASSERT_EQ(0, pipe(pipefd));
+  ASSERT_NE(-1, dup2(pipefd[1], 1));
+  char buf[6] = {0};
+
+  ASSERT_EQ(0, WEXITSTATUS(system("echo \"aaa\"}")));
+  ASSERT_EQ(sizeof(buf) - 1, read(pipefd[0], buf, sizeof(buf) - 1));
+  ASSERT_STREQ("aaa}\n", buf);
+  buf[0] = 0;
+  buf[1] = 0;
+  buf[2] = 0;
+  buf[3] = 0;
+  buf[4] = 0;
+  testlib_extract("/zip/echo.com", "echo.com", 0755);
+  ASSERT_EQ(0, WEXITSTATUS(system("./echo.com \"aaa\"}")));
+  ASSERT_EQ(sizeof(buf) - 1, read(pipefd[0], buf, sizeof(buf) - 1));
+  ASSERT_STREQ("aaa}\n", buf);
+
+  ASSERT_NE(-1, dup2(stdoutBack, 1));
+  ASSERT_EQ(0, close(pipefd[1]));
+  ASSERT_EQ(0, close(pipefd[0]));
+}
+
+TEST(system, glob) {
+  testlib_extract("/zip/echo.com", "echo.com", 0755);
+  ASSERT_EQ(0, system("./ec*.com aaa"));
+  ASSERT_EQ(0, system("./ec?o.com aaa"));
+}
+
+TEST(system, env) {
+  ASSERT_EQ(0, system("env - a=b c=d >res"));
+  ASSERT_STREQ("a=b\nc=d\n", gc(xslurp("res", 0)));
+  ASSERT_EQ(0, system("env -i -0 a=b c=d >res"));
+  ASSERT_STREQN("a=b\0c=d\0", gc(xslurp("res", 0)), 8);
+  ASSERT_EQ(0, system("env -i0 a=b c=d >res"));
+  ASSERT_STREQN("a=b\0c=d\0", gc(xslurp("res", 0)), 8);
+  ASSERT_EQ(0, system("env - a=b c=d -u a z=g >res"));
+  ASSERT_STREQ("c=d\nz=g\n", gc(xslurp("res", 0)));
+  ASSERT_EQ(0, system("env - a=b c=d -ua z=g >res"));
+  ASSERT_STREQ("c=d\nz=g\n", gc(xslurp("res", 0)));
+  ASSERT_EQ(0, system("env - dope='show' >res"));
+  ASSERT_STREQ("dope=show\n", gc(xslurp("res", 0)));
+}
+
+TEST(system, tr) {
+  ASSERT_EQ(0, system("echo hello | tr a-z A-Z >res"));
+  ASSERT_STREQ("HELLO\n", gc(xslurp("res", 0)));
+}
+
+#endif /* __x86_64__ */

@@ -29,17 +29,17 @@ LIBC_ZIPOS_A_CHECKS =					\
 
 LIBC_ZIPOS_A_DIRECTDEPS =				\
 	LIBC_CALLS					\
+	LIBC_FMT					\
+	LIBC_INTRIN					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_FMT					\
-	LIBC_RUNTIME					\
-	LIBC_SYSV					\
-	LIBC_STR					\
-	LIBC_INTRIN					\
-	LIBC_STUBS					\
-	LIBC_SYSV_CALLS					\
 	LIBC_NT_KERNEL32				\
-	THIRD_PARTY_ZLIB
+	LIBC_RUNTIME					\
+	LIBC_STR					\
+	LIBC_SYSV					\
+	LIBC_SYSV_CALLS					\
+	LIBC_THREAD					\
+	THIRD_PARTY_PUFF
 
 LIBC_ZIPOS_A_DEPS :=					\
 	$(call uniq,$(foreach zipos,$(LIBC_ZIPOS_A_DIRECTDEPS),$($(zipos))))
@@ -55,6 +55,10 @@ $(LIBC_ZIPOS_A).pkg:					\
 o/$(MODE)/libc/zipos/.cosmo.zip.o: private		\
 		ZIPOBJ_FLAGS +=				\
 			-B
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/zipos/zipos.o: libc/zipos/zipos.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 LIBC_ZIPOS_LIBS = $(foreach zipos,$(LIBC_ZIPOS_ARTIFACTS),$($(zipos)))
 LIBC_ZIPOS_SRCS = $(foreach zipos,$(LIBC_ZIPOS_ARTIFACTS),$($(zipos)_SRCS))

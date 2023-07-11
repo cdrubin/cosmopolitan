@@ -25,15 +25,17 @@
 │ OTHER DEALINGS IN THE SOFTWARE.                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/vga/vga.internal.h"
 #include "libc/runtime/pc.internal.h"
 #include "libc/str/str.h"
+#include "libc/vga/vga.internal.h"
+
+#ifdef __x86_64__
 
 struct Tty _vga_tty;
 
 void _vga_reinit(struct Tty *tty, unsigned short starty, unsigned short startx,
                  unsigned init_flags) {
-  struct mman *mm = (struct mman *)(BANE + 0x0500);
+  struct mman *mm = __get_mm();
   unsigned char vid_type = mm->pc_video_type;
   unsigned short height = mm->pc_video_height, width = mm->pc_video_width,
                  stride = mm->pc_video_stride;
@@ -58,15 +60,17 @@ void _vga_reinit(struct Tty *tty, unsigned short starty, unsigned short startx,
    * Initialize our tty structure from the current screen geometry, screen
    * contents, cursor position, & character dimensions.
    */
-  _StartTty(tty, vid_type, height, width, stride, starty, startx,
-            chr_ht, chr_wid, vid_buf, init_flags);
+  _StartTty(tty, vid_type, height, width, stride, starty, startx, chr_ht,
+            chr_wid, vid_buf, init_flags);
 }
 
 textstartup void _vga_init(void) {
   if (IsMetal()) {
-    struct mman *mm = (struct mman *)(BANE + 0x0500);
+    struct mman *mm = __get_mm();
     unsigned short starty = mm->pc_video_curs_info.y,
                    startx = mm->pc_video_curs_info.x;
     _vga_reinit(&_vga_tty, starty, startx, 0);
   }
 }
+
+#endif /* __x86_64__ */

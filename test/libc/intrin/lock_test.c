@@ -21,10 +21,10 @@
 #include "libc/calls/struct/timespec.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/weaken.h"
-#include "libc/runtime/clone.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
@@ -122,10 +122,10 @@ void TestContendedLock(const char *name, int kind) {
   pthread_mutexattr_destroy(&attr);
   atomic_store(&ready, 0);
   atomic_store(&success, 0);
-  stk = _mapstack();
+  stk = NewCosmoStack();
   rc = clone(Worker, stk, GetStackSize() - 16 /* openbsd:stackbound */,
              CLONE_VM | CLONE_THREAD | CLONE_FS | CLONE_FILES | CLONE_SIGHAND |
-                 CLONE_PARENT_SETTID | CLONE_CHILD_SETTID |
+                 CLONE_SYSVSEM | CLONE_PARENT_SETTID | CLONE_CHILD_SETTID |
                  CLONE_CHILD_CLEARTID | CLONE_SETTLS,
              0, &tid, &tib, &tib.tib_tid);
   if (rc) {
@@ -145,7 +145,7 @@ void TestContendedLock(const char *name, int kind) {
   while (tib.tib_tid) donothing;
   ASSERT_EQ(1, atomic_load(&success));
   ASSERT_EQ(0, atomic_load(&counter));
-  _freestack(stk);
+  FreeCosmoStack(stk);
   ASSERT_EQ(0, pthread_mutex_destroy(&mu));
   ns = time2dbl(timespec_sub(t2, t1)) / n;
   kprintf("%s contended took %s\n", name, time2str(ns));
@@ -220,7 +220,7 @@ int main(int argc, char *argv[]) {
   TestContendedLock("PTHREAD_MUTEX_ERRORCHECK RAW TLS",
                     PTHREAD_MUTEX_ERRORCHECK);
 
-  __tls_enabled = 0;
+  __tls_enabled_set(false);
 
   TestUncontendedLock("PTHREAD_MUTEX_NORMAL RAW", PTHREAD_MUTEX_NORMAL);
   TestUncontendedLock("PTHREAD_MUTEX_RECURSIVE RAW", PTHREAD_MUTEX_RECURSIVE);

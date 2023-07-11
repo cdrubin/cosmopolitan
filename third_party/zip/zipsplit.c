@@ -26,6 +26,7 @@
 #include "libc/calls/struct/siginfo.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sicode.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/ss.h"
 
 #define DEFSIZ 36000L   /* Default split size (change in help() too) */
@@ -45,7 +46,6 @@
 #  define INDEX "zipsplit_idx"    /* Name of index file */
 #  define TEMPL_FMT "%%0%dld_zip"
 #  define TEMPL_SIZ 17
-#  define exit(p1) QDOSexit()
 #else
 #ifdef VM_CMS
 #  define INDEX "zipsplit.idx"    /* Name of index file */

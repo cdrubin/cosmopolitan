@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
@@ -25,16 +26,17 @@
 #include "libc/log/color.internal.h"
 #include "libc/log/internal.h"
 #include "libc/log/libfatal.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 
 const char *testlib_showerror_errno;
 const char *testlib_showerror_file;
 const char *testlib_showerror_func;
-const char *testlib_showerror_isfatal;
 const char *testlib_showerror_macro;
 const char *testlib_showerror_symbol;
 
+// TODO(jart): Pay off tech debt re duplication
 void testlib_showerror(const char *file, int line, const char *func,
                        const char *method, const char *symbol, const char *code,
                        char *v1, char *v2) {
@@ -48,19 +50,21 @@ void testlib_showerror(const char *file, int line, const char *func,
           "\t\t got %s\n"
           "\t%s%s\n"
           "\t%s%s\n",
-          RED2, UNBOLD, BLUE1, file, (long)line, RESET, method, func,
-          g_fixturename, hostname, getpid(), gettid(), code, v1, symbol, v2,
-          SUBTLE, strerror(errno), GetProgramExecutableName(), RESET);
-  free_s(&v1);
-  free_s(&v2);
+          RED2, UNBOLD, BLUE1, file, line, RESET, method, func, g_fixturename,
+          hostname, getpid(), gettid(), code, v1, symbol, v2, SUBTLE,
+          strerror(errno), GetProgramExecutableName(), RESET);
+  free(v1);
+  free(v2);
 }
 
-/* TODO(jart): Pay off tech debt re duplication */
-void testlib_showerror_(int line, const char *wantcode, const char *gotcode,
-                        char *FREED_want, char *FREED_got, const char *fmt,
-                        ...) {
+static void testlib_showerror_(int line,              //
+                               const char *wantcode,  //
+                               const char *gotcode,   //
+                               char *FREED_want,      //
+                               char *FREED_got,       //
+                               const char *fmt,       //
+                               va_list va) {
   int e;
-  va_list va;
   char hostname[128];
   e = errno;
   if (gethostname(hostname, sizeof(hostname))) {
@@ -80,19 +84,153 @@ void testlib_showerror_(int line, const char *wantcode, const char *gotcode,
   }
   if (!isempty(fmt)) {
     kprintf("\t");
-    va_start(va, fmt);
     kvprintf(fmt, va);
-    va_end(va);
     kprintf("\n");
   }
   kprintf("\t%s%s%s\n"
           "\t%s%s @ %s%s\n",
           SUBTLE, strerror(e), RESET, SUBTLE,
           firstnonnull(program_invocation_name, "unknown"), hostname, RESET);
-  free_s(&FREED_want);
-  free_s(&FREED_got);
+  /* free(FREED_want); */
+  /* free(FREED_got); */
   ++g_testlib_failed;
-  if (testlib_showerror_isfatal) {
-    testlib_abort();
-  }
+}
+
+void testlib_showerror_assert_eq(int line,              //
+                                 const char *wantcode,  //
+                                 const char *gotcode,   //
+                                 char *FREED_want,      //
+                                 char *FREED_got,       //
+                                 const char *fmt,       //
+                                 ...) {
+  va_list va;
+  testlib_showerror_macro = "ASSERT_EQ";
+  testlib_showerror_symbol = "=";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+  testlib_abort();
+}
+
+void testlib_showerror_expect_eq(int line,              //
+                                 const char *wantcode,  //
+                                 const char *gotcode,   //
+                                 char *FREED_want,      //
+                                 char *FREED_got,       //
+                                 const char *fmt,       //
+                                 ...) {
+  va_list va;
+  testlib_showerror_macro = "EXPECT_EQ";
+  testlib_showerror_symbol = "=";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+}
+
+void testlib_showerror_assert_ne(int line,              //
+                                 const char *wantcode,  //
+                                 const char *gotcode,   //
+                                 char *FREED_want,      //
+                                 char *FREED_got,       //
+                                 const char *fmt,       //
+                                 ...) {
+  va_list va;
+  testlib_showerror_macro = "ASSERT_NE";
+  testlib_showerror_symbol = "≠";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+  testlib_abort();
+}
+
+void testlib_showerror_expect_ne(int line,              //
+                                 const char *wantcode,  //
+                                 const char *gotcode,   //
+                                 char *FREED_want,      //
+                                 char *FREED_got,       //
+                                 const char *fmt,       //
+                                 ...) {
+  va_list va;
+  testlib_showerror_macro = "EXPECT_NE";
+  testlib_showerror_symbol = "≠";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+}
+
+void testlib_showerror_assert_true(int line,              //
+                                   const char *wantcode,  //
+                                   const char *gotcode,   //
+                                   char *FREED_want,      //
+                                   char *FREED_got,       //
+                                   const char *fmt,       //
+                                   ...) {
+  va_list va;
+  testlib_showerror_macro = "ASSERT_TRUE";
+  testlib_showerror_symbol = "";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+  testlib_abort();
+}
+
+void testlib_showerror_expect_true(int line,              //
+                                   const char *wantcode,  //
+                                   const char *gotcode,   //
+                                   char *FREED_want,      //
+                                   char *FREED_got,       //
+                                   const char *fmt,       //
+                                   ...) {
+  va_list va;
+  testlib_showerror_macro = "EXPECT_TRUE";
+  testlib_showerror_symbol = "";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+}
+
+void testlib_showerror_assert_false(int line,              //
+                                    const char *wantcode,  //
+                                    const char *gotcode,   //
+                                    char *FREED_want,      //
+                                    char *FREED_got,       //
+                                    const char *fmt,       //
+                                    ...) {
+  va_list va;
+  testlib_showerror_macro = "ASSERT_FALSE";
+  testlib_showerror_symbol = "!";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+  testlib_abort();
+}
+
+void testlib_showerror_expect_false(int line,              //
+                                    const char *wantcode,  //
+                                    const char *gotcode,   //
+                                    char *FREED_want,      //
+                                    char *FREED_got,       //
+                                    const char *fmt,       //
+                                    ...) {
+  va_list va;
+  testlib_showerror_macro = "EXPECT_FALSE";
+  testlib_showerror_symbol = "!";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
+}
+
+void testlib_showerror_expect_matrixeq(int line,              //
+                                       const char *wantcode,  //
+                                       const char *gotcode,   //
+                                       char *FREED_want,      //
+                                       char *FREED_got,       //
+                                       const char *fmt,       //
+                                       ...) {
+  va_list va;
+  testlib_showerror_macro = "EXPECT_MATRIXEQ";
+  testlib_showerror_symbol = "=";
+  va_start(va, fmt);
+  testlib_showerror_(line, wantcode, gotcode, FREED_want, FREED_got, fmt, va);
+  va_end(va);
 }

@@ -53,18 +53,21 @@ asm(".include \"libc/disclaimer.inc\"");
  * should use scalbn() instead.
  */
 
-double scalb(double x, double fn)
+/**
+ * Returns 𝑥 × 2ʸ.
+ */
+double scalb(double x, double y)
 {
-	if (isnan(x) || isnan(fn))
-		return x*fn;
-	if (!isfinite(fn)) {
-		if (fn > 0.0)
-			return x*fn;
+	if (isunordered(x, y))
+		return x*y;
+	if (!isfinite(y)) {
+		if (y > 0.0)
+			return x*y;
 		else
-			return x/(-fn);
+			return x/(-y);
 	}
-	if (rint(fn) != fn) return (fn-fn)/(fn-fn);
-	if ( fn > 65000.0) return scalbn(x, 65000);
-	if (-fn > 65000.0) return scalbn(x,-65000);
-	return scalbn(x,(int)fn);
+	if (rint(y) != y) return (y-y)/(y-y);
+	if ( y > 65000.0) return scalbn(x, 65000);
+	if (-y > 65000.0) return scalbn(x,-65000);
+	return scalbn(x,(int)y);
 }

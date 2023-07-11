@@ -153,7 +153,8 @@ o/$(MODE)/third_party/make/make.com.dbg:		\
 o/$(MODE)/third_party/make/make.com:			\
 		o/$(MODE)/third_party/make/make.com.dbg	\
 		o/$(MODE)/third_party/zip/zip.com	\
-		o/$(MODE)/tool/build/symtab.com
+		o/$(MODE)/tool/build/symtab.com		\
+		$(VM)
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)
@@ -161,15 +162,15 @@ o/$(MODE)/third_party/make/make.com:			\
 o/$(MODE)/third_party/make/strcache.o			\
 o/$(MODE)/third_party/make/expand.o			\
 o/$(MODE)/third_party/make/read.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-O2
 
 o/$(MODE)/third_party/make/hash.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-O3
 
 $(THIRD_PARTY_MAKE_OBJS): private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-DNO_ARCHIVES			\
 			-DHAVE_CONFIG_H			\
 			-DSTACK_FRAME_UNLIMITED		\

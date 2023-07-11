@@ -29,7 +29,6 @@ THIRD_PARTY_NSYNC_A_DIRECTDEPS =			\
 	LIBC_NT_KERNEL32				\
 	LIBC_NT_SYNCHRONIZATION				\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS
 
@@ -49,10 +48,14 @@ $(THIRD_PARTY_NSYNC_A).pkg:				\
 		$(THIRD_PARTY_NSYNC_A_OBJS)		\
 		$(foreach x,$(THIRD_PARTY_NSYNC_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(THIRD_PARTY_NSYNC_A_OBJS): private			\
-		OVERRIDE_CCFLAGS +=			\
+#$(THIRD_PARTY_NSYNC_A_OBJS): private			\
+		CCFLAGS +=				\
 			-ffunction-sections		\
 			-fdata-sections
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/third_party/nsync/compat.o: third_party/nsync/compat.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 THIRD_PARTY_NSYNC_LIBS = $(foreach x,$(THIRD_PARTY_NSYNC_ARTIFACTS),$($(x)))
 THIRD_PARTY_NSYNC_SRCS = $(foreach x,$(THIRD_PARTY_NSYNC_ARTIFACTS),$($(x)_SRCS))

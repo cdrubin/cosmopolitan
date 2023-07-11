@@ -57,6 +57,7 @@
            "gottpoff"
            "function"
            "object"
+           "notype"
            "got"
            "size"
            "gotoff"
@@ -211,25 +212,7 @@
 
    cpp-font-lock-keywords
 
-   `(;; GNU-Style Assembler Comment (Ltd. 80x86 &c.)
-     ;;
-     ;;   - Valid
-     ;;
-     ;;     * #heyho
-     ;;     * # heyho
-     ;;     * .org . #heyho
-     ;;     * .org . ####euhhcue
-     ;;     * .org .# ###euhhcue
-     ;;
-     ;;   - Ignored
-     ;;
-     ;;     * #if 0
-     ;;     * #endif
-     ;;     * .ascii "#heyho"
-     ;;
-     ("\\(#.*\\)$" 1 font-lock-comment-face)
-
-     ("'\\(\\\\?.\\)\\>" 1 font-lock-constant-face)
+   `(("'\\(\\\\?.\\)\\>" 1 font-lock-constant-face)
 
      ;; Register Value
      ;;

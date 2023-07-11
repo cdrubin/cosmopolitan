@@ -53,9 +53,11 @@ PYTHON_PROVIDE("cosmo.crc32c");
 PYTHON_PROVIDE("cosmo.syscount");
 PYTHON_PROVIDE("cosmo.popcount");
 PYTHON_PROVIDE("cosmo.decimate");
+PYTHON_PROVIDE("cosmo.ftrace");
+#ifdef __x86_64__
 PYTHON_PROVIDE("cosmo.getcpucore");
 PYTHON_PROVIDE("cosmo.getcpunode");
-PYTHON_PROVIDE("cosmo.ftrace");
+#endif /* __x86_64__ */
 
 PyDoc_STRVAR(cosmo_doc,
 "Cosmopolitan Libc Module\n\
@@ -103,6 +105,8 @@ PyDoc_STRVAR(getcpucore_doc,
 --\n\n\
 Returns 0-indexed CPU core on which process is currently scheduled.");
 
+#ifdef __x86_64__
+
 static PyObject *
 cosmo_getcpucore(PyObject *self, PyObject *noargs)
 {
@@ -119,6 +123,8 @@ cosmo_getcpunode(PyObject *self, PyObject *noargs)
 {
     return PyLong_FromUnsignedLong(TSC_AUX_NODE(rdpid()));
 }
+
+#endif /* __x86_64__ */
 
 PyDoc_STRVAR(crc32c_doc,
 "crc32c($module, bytes, init=0)\n\
@@ -138,6 +144,18 @@ cosmo_crc32c(PyObject *self, PyObject *args)
     crc = crc32c(init, data.buf, data.len);
     PyBuffer_Release(&data);
     return PyLong_FromUnsignedLong(crc);
+}
+
+PyDoc_STRVAR(verynice_doc,
+"verynice($module)\n\
+--\n\n\
+Makes current process as low-priority as possible.");
+
+static PyObject *
+cosmo_verynice(PyObject *self, PyObject *args)
+{
+    verynice();
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(decimate_doc,
@@ -196,6 +214,7 @@ PyDoc_STRVAR(pledge_doc,
 --\n\n\
 Permits syscall operations, e.g.\n\
 \n\
+    >>> cosmo.pledge(None, None)  # assert support\n\
     >>> cosmo.pledge('stdio rpath tty', None)\n\
 \n\
 This function implements the OpenBSD pledge() API for\n\
@@ -207,7 +226,7 @@ cosmo_pledge(PyObject *self, PyObject *args)
 {
     int e = errno;
     const char *x, *y;
-    if (!PyArg_ParseTuple(args, "sz:pledge", &x, &y)) return 0;
+    if (!PyArg_ParseTuple(args, "zz:pledge", &x, &y)) return 0;
     __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
     if (!pledge(x, y)) {
         Py_RETURN_NONE;
@@ -223,8 +242,9 @@ PyDoc_STRVAR(unveil_doc,
 --\n\n\
 Permits filesystem operations, e.g.\n\
 \n\
-    >>> cosmo.unveil('.', 'rwcx')\n\
-    >>> cosmo.unveil(None, None)\n\
+    >>> cosmo.unveil('', None)     # assert support\n\
+    >>> cosmo.unveil('.', 'rwcx')  # permit current dir\n\
+    >>> cosmo.unveil(None, None)   # commit policy\n\
 \n\
 This function implements the OpenBSD unveil() API for\n\
 OpenBSD and Linux where we use Landlock LSM. Read the\n\
@@ -233,11 +253,15 @@ Cosmopolitan Libc documentation to learn more.");
 static PyObject *
 cosmo_unveil(PyObject *self, PyObject *args)
 {
-    int e = errno;
     const char *x, *y;
+    int abi, e = errno;
     if (!PyArg_ParseTuple(args, "zz:unveil", &x, &y)) return 0;
-    if (!unveil(x, y)) {
-        Py_RETURN_NONE;
+    if ((abi = unveil(x, y)) != -1) {
+        if (abi) {
+            return PyLong_FromUnsignedLong(abi);
+        } else {
+            Py_RETURN_NONE;
+        }
     } else {
         PyErr_SetString(PyExc_SystemError, strerror(errno));
         errno = e;
@@ -332,9 +356,12 @@ static PyMethodDef cosmo_methods[] = {
     {"syscount", cosmo_syscount, METH_NOARGS, syscount_doc},
     {"popcount", cosmo_popcount, METH_VARARGS, popcount_doc},
     {"decimate", cosmo_decimate, METH_VARARGS, decimate_doc},
+    {"verynice", cosmo_verynice, METH_NOARGS, verynice_doc},
+#ifdef __x86_64__
     {"getcpucore", cosmo_getcpucore, METH_NOARGS, getcpucore_doc},
     {"getcpunode", cosmo_getcpunode, METH_NOARGS, getcpunode_doc},
-#ifdef __PG__
+#endif /* __x86_64__ */
+#ifdef FTRACE
     {"ftrace", cosmo_ftrace, METH_NOARGS, ftrace_doc},
 #endif
     {0},
@@ -385,7 +412,12 @@ PyInit_cosmo(void)
     return !PyErr_Occurred() ? m : 0;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab_cosmo = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab_cosmo = {
     "cosmo",
     PyInit_cosmo,
 };

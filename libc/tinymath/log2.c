@@ -30,13 +30,12 @@
 #include "libc/tinymath/complex.internal.h"
 #include "libc/tinymath/internal.h"
 #include "libc/tinymath/log2_data.internal.h"
-#ifndef TINY
 
 asm(".ident\t\"\\n\\n\
 Double-precision math functions (MIT License)\\n\
 Copyright 2018 ARM Limited\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /*
  * Double-precision log2(x) function.
@@ -159,4 +158,6 @@ double log2(double x)
 	return eval_as_double(y);
 }
 
-#endif /* !TINY */
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(log2, log2l);
+#endif

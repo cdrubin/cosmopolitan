@@ -20,8 +20,9 @@
 #include "libc/calls/state.internal.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/extend.internal.h"
-#include "libc/intrin/pushpop.h"
+#include "libc/intrin/pushpop.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/macros.internal.h"
 #include "libc/nt/runtime.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/str/str.h"
@@ -29,9 +30,12 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/thread/thread.h"
 
+#ifdef __x86_64__
 STATIC_YOINK("_init_g_fds");
+#endif
 
 struct Fds g_fds;
+static struct Fd g_fds_static[OPEN_MAX];
 
 static textwindows dontinline void SetupWinStd(struct Fds *fds, int i, int x) {
   int64_t h;
@@ -42,20 +46,24 @@ static textwindows dontinline void SetupWinStd(struct Fds *fds, int i, int x) {
   atomic_store_explicit(&fds->f, i + 1, memory_order_relaxed);
 }
 
-textstartup void InitializeFileDescriptors(void) {
+textstartup void __init_fds(void) {
   struct Fds *fds;
   __fds_lock_obj._type = PTHREAD_MUTEX_RECURSIVE;
-  pthread_atfork(_weaken(__fds_lock), _weaken(__fds_unlock),
-                 _weaken(__fds_funlock));
   fds = VEIL("r", &g_fds);
-  fds->p = fds->e = (void *)kMemtrackFdsStart;
   fds->n = 4;
   atomic_store_explicit(&fds->f, 3, memory_order_relaxed);
-  fds->e = _extend(fds->p, fds->n * sizeof(*fds->p), fds->e, MAP_PRIVATE,
-                   kMemtrackFdsStart + kMemtrackFdsSize);
+  if (_weaken(_extend)) {
+    fds->p = fds->e = (void *)kMemtrackFdsStart;
+    fds->e =
+        _weaken(_extend)(fds->p, fds->n * sizeof(*fds->p), fds->e, MAP_PRIVATE,
+                         kMemtrackFdsStart + kMemtrackFdsSize);
+  } else {
+    fds->p = g_fds_static;
+    fds->e = g_fds_static + OPEN_MAX;
+  }
   if (IsMetal()) {
     extern const char vga_console[];
-    pushmov(&fds->f, 3ull);
+    fds->f = 3;
     if (_weaken(vga_console)) {
       fds->p[0].kind = pushpop(kFdConsole);
       fds->p[1].kind = pushpop(kFdConsole);

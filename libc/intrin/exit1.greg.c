@@ -20,6 +20,7 @@
 #include "libc/intrin/asmflag.h"
 #include "libc/nt/thread.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/syslib.internal.h"
 #include "libc/sysv/consts/nr.h"
 #include "libc/thread/tls.h"
 
@@ -43,6 +44,7 @@ __msabi extern typeof(ExitThread) *const __imp_ExitThread;
  * @noreturn
  */
 privileged wontreturn void _Exit1(int rc) {
+#ifdef __x86_64__
   char cf;
   int ax, dx, di, si;
   if (!IsWindows() && !IsMetal()) {
@@ -65,11 +67,26 @@ privileged wontreturn void _Exit1(int rc) {
                    : /* no outputs */
                    : "a"(__NR_exit_group), "D"(rc)
                    : "rcx", "r11", "memory");
-      unreachable;
+      __builtin_unreachable();
     }
   } else if (IsWindows()) {
     __imp_ExitThread(rc);
-    unreachable;
+    __builtin_unreachable();
   }
   notpossible;
+#elif defined(__aarch64__)
+  if (IsLinux()) {
+    register long r0 asm("x0") = rc;
+    asm volatile("mov\tx8,%0\n\t"
+                 "svc\t0"
+                 : /* no outputs */
+                 : "i"(93), "r"(r0)
+                 : "x8", "memory");
+  } else if (IsXnu()) {
+    __syslib->pthread_exit(0);
+  }
+  notpossible;
+#else
+#error "arch unsupported"
+#endif
 }

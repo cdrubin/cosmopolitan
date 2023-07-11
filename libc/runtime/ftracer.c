@@ -25,12 +25,10 @@
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/stackframe.h"
 #include "libc/runtime/internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
-#include "libc/runtime/symbols.internal.h"
 #include "libc/thread/tls.h"
 #include "libc/thread/tls2.h"
-
-#define MAX_NESTING 512
 
 /**
  * @fileoverview Plain-text function call logging.
@@ -40,9 +38,14 @@
  * into gzip.
  */
 
-void ftrace_hook(void);
+#define MAX_NESTING 512
 
-static int g_stackdigs;
+#ifdef __x86_64__
+#define DETOUR_SKEW 2
+#elif defined(__aarch64__)
+#define DETOUR_SKEW 8
+#endif
+
 static struct CosmoFtrace g_ftrace;
 
 static privileged inline int GetNestingLevelImpl(struct StackFrame *frame) {
@@ -66,15 +69,19 @@ static privileged inline int GetNestingLevel(struct CosmoFtrace *ft,
 /**
  * Prints name of function being called.
  *
- * We insert CALL instructions that point to this function, in the
- * prologues of other functions. We assume those functions behave
- * according to the System Five NexGen32e ABI.
+ * Whenever a function is called, ftrace_hook() will be called from the
+ * function prologue which saves the parameter registers and calls this
+ * function, which is responsible for logging the function call.
+ *
+ * @see ftrace_install()
  */
 privileged void ftracer(void) {
+  uintptr_t fn;
   long stackuse;
   struct CosmoTib *tib;
   struct StackFrame *sf;
   struct CosmoFtrace *ft;
+  if (__ftrace <= 0) return;
   if (__tls_enabled) {
     tib = __get_tls_privileged();
     if (tib->tib_ftrace <= 0) return;
@@ -89,22 +96,13 @@ privileged void ftracer(void) {
   if (_cmpxchg(&ft->ft_noreentry, false, true)) {
     sf = __builtin_frame_address(0);
     sf = sf->next;
-    if (sf->addr != ft->ft_lastaddr) {
+    fn = sf->addr + DETOUR_SKEW;
+    if (fn != ft->ft_lastaddr) {
       stackuse = GetStackAddr() + GetStackSize() - (intptr_t)sf;
-      kprintf("%rFUN %6P %'13T %'*ld %*s%t\n", g_stackdigs, stackuse,
-              GetNestingLevel(ft, sf) * 2, "", sf->addr);
-      ft->ft_lastaddr = sf->addr;
+      kprintf("%rFUN %6P %'13T %'*ld %*s%t\n", ftrace_stackdigs, stackuse,
+              GetNestingLevel(ft, sf) * 2, "", fn);
+      ft->ft_lastaddr = fn;
     }
     ft->ft_noreentry = false;
-  }
-}
-
-textstartup int ftrace_install(void) {
-  if (GetSymbolTable()) {
-    g_stackdigs = LengthInt64Thousands(GetStackSize());
-    return __hook(ftrace_hook, GetSymbolTable());
-  } else {
-    kprintf("error: --ftrace failed to open symbol table\n");
-    return -1;
   }
 }

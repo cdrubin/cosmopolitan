@@ -20,11 +20,7 @@
 #include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
-#include "libc/elf/def.h"
-#include "libc/elf/scalar.h"
-#include "libc/elf/struct/phdr.h"
-#include "libc/elf/struct/shdr.h"
-#include "libc/elf/struct/sym.h"
+#include "libc/elf/tinyelf.internal.h"
 #include "libc/errno.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/strace.internal.h"
@@ -41,66 +37,6 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
 
-#define GetStr(tab, rva)     ((char *)(tab) + (rva))
-#define GetSection(e, s)     ((void *)((intptr_t)(e) + (size_t)(s)->sh_offset))
-#define GetShstrtab(e)       GetSection(e, GetShdr(e, (e)->e_shstrndx))
-#define GetSectionName(e, s) GetStr(GetShstrtab(e), (s)->sh_name)
-#define GetPhdr(e, i)                            \
-  ((Elf64_Phdr *)((intptr_t)(e) + (e)->e_phoff + \
-                  (size_t)(e)->e_phentsize * (i)))
-#define GetShdr(e, i)                            \
-  ((Elf64_Shdr *)((intptr_t)(e) + (e)->e_shoff + \
-                  (size_t)(e)->e_shentsize * (i)))
-
-static char *GetStrtab(Elf64_Ehdr *e, size_t *n) {
-  char *name;
-  Elf64_Half i;
-  Elf64_Shdr *shdr;
-  for (i = 0; i < e->e_shnum; ++i) {
-    shdr = GetShdr(e, i);
-    if (shdr->sh_type == SHT_STRTAB) {
-      name = GetSectionName(e, GetShdr(e, i));
-      if (name && !__strcmp(name, ".strtab")) {
-        if (n) *n = shdr->sh_size;
-        return GetSection(e, shdr);
-      }
-    }
-  }
-  return 0;
-}
-
-static Elf64_Sym *GetSymtab(Elf64_Ehdr *e, Elf64_Xword *n) {
-  Elf64_Half i;
-  Elf64_Shdr *shdr;
-  for (i = e->e_shnum; i > 0; --i) {
-    shdr = GetShdr(e, i - 1);
-    if (shdr->sh_type == SHT_SYMTAB) {
-      if (shdr->sh_entsize != sizeof(Elf64_Sym)) continue;
-      if (n) *n = shdr->sh_size / shdr->sh_entsize;
-      return GetSection(e, shdr);
-    }
-  }
-  return 0;
-}
-
-static void GetImageRange(Elf64_Ehdr *elf, intptr_t *x, intptr_t *y) {
-  unsigned i;
-  Elf64_Phdr *phdr;
-  intptr_t start, end, pstart, pend;
-  start = INTPTR_MAX;
-  end = 0;
-  for (i = 0; i < elf->e_phnum; ++i) {
-    phdr = GetPhdr(elf, i);
-    if (phdr->p_type != PT_LOAD) continue;
-    pstart = phdr->p_vaddr;
-    pend = phdr->p_vaddr + phdr->p_memsz;
-    if (pstart < start) start = pstart;
-    if (pend > end) end = pend;
-  }
-  if (x) *x = start;
-  if (y) *y = end;
-}
-
 static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
   int fd;
   void *map;
@@ -115,12 +51,12 @@ static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
   ptrdiff_t names_offset, name_base_offset, stp_offset;
   map = MAP_FAILED;
   if ((fd = open(filename, O_RDONLY)) == -1) return 0;
-  if ((filesize = getfiledescriptorsize(fd)) == -1) goto SystemError;
+  if ((filesize = lseek(fd, 0, SEEK_END)) == -1) goto SystemError;
   if (filesize > INT_MAX) goto RaiseE2big;
   if (filesize < 64) goto RaiseEnoexec;
   elf = map = mmap(0, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
   if (map == MAP_FAILED) goto SystemError;
-  if (READ32LE(map) != READ32LE("\177ELF")) goto RaiseEnoexec;
+  if (READ32LE((char *)map) != READ32LE("\177ELF")) goto RaiseEnoexec;
   if (!(name_base = GetStrtab(map, &m))) goto RaiseEnobufs;
   if (!(symtab = GetSymtab(map, &n))) goto RaiseEnobufs;
   tsz = 0;

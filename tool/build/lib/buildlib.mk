@@ -33,7 +33,6 @@ TOOL_BUILD_LIB_A_OBJS =					\
 
 TOOL_BUILD_LIB_A_DIRECTDEPS =				\
 	LIBC_CALLS					\
-	LIBC_ELF					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
@@ -43,7 +42,6 @@ TOOL_BUILD_LIB_A_DIRECTDEPS =				\
 	LIBC_SOCK					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
 	LIBC_TIME					\
@@ -68,9 +66,11 @@ $(TOOL_BUILD_LIB_A).pkg:				\
 		$(TOOL_BUILD_LIB_A_OBJS)		\
 		$(foreach x,$(TOOL_BUILD_LIB_A_DIRECTDEPS),$($(x)_A).pkg)
 
+ifeq ($(ARCH), x86_64)
 o/$(MODE)/tool/build/lib/ssefloat.o: private		\
 		TARGET_ARCH +=				\
 			-msse3
+endif
 
 o/$(MODE)/tool/build/lib/apetest.com.dbg:		\
 		$(TOOL_BUILD_LIB_A_DEPS)		\
@@ -95,6 +95,10 @@ o/$(MODE)/tool/build/lib/apetest.o:			\
 		tool/build/lib/apetest.c		\
 		libc/calls/calls.h
 
+# these assembly files are safe to build on aarch64
+o/$(MODE)/tool/build/lib/errnos.o: tool/build/lib/errnos.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+
 TOOL_BUILD_LIB_LIBS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)))
 TOOL_BUILD_LIB_SRCS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_SRCS))
 TOOL_BUILD_LIB_HDRS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_HDRS))
@@ -102,6 +106,8 @@ TOOL_BUILD_LIB_BINS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_BINS))
 TOOL_BUILD_LIB_CHECKS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_CHECKS))
 TOOL_BUILD_LIB_OBJS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_OBJS))
 TOOL_BUILD_LIB_TESTS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_TESTS))
+
+$(TOOL_BUILD_LIB_OBJS): tool/build/lib/buildlib.mk
 
 .PHONY: o/$(MODE)/tool/build/lib
 o/$(MODE)/tool/build/lib:				\

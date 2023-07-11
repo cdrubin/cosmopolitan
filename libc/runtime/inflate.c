@@ -19,8 +19,9 @@
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
+#include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
-#include "third_party/zlib/puff.h"
+#include "third_party/puff/puff.h"
 #include "third_party/zlib/zlib.h"
 
 /**
@@ -35,7 +36,10 @@
 int __inflate(void *out, size_t outsize, const void *in, size_t insize) {
   int rc;
   z_stream zs;
-  if (_weaken(inflateInit2) && _weaken(inflate) && _weaken(inflateEnd)) {
+  if (_weaken(inflateInit2) &&  //
+      _weaken(inflate) &&       //
+      _weaken(inflateEnd) &&    //
+      __runlevel >= RUNLEVEL_MALLOC) {
     zs.next_in = in;
     zs.avail_in = insize;
     zs.total_in = insize;
@@ -50,11 +54,9 @@ int __inflate(void *out, size_t outsize, const void *in, size_t insize) {
       rc = 0;
     } else if (rc == Z_OK) {
       rc = Z_STREAM_END;  // coerce to nonzero
-    } else {
-      rc = rc;
     }
   } else {
-    rc = puff(out, &outsize, in, &insize);
+    rc = _puff(out, &outsize, in, &insize);
   }
   STRACE("inflate([%#.*hhs%s], %'zu, %#.*hhs%s, %'zu) → %d", MIN(40, outsize),
          out, outsize > 40 ? "..." : "", outsize, MIN(40, insize), in,

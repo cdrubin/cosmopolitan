@@ -35,19 +35,20 @@
 #include "libc/sysv/errfuns.h"
 #include "libc/zipos/zipos.internal.h"
 
+#ifdef __x86_64__
+
 int sys_openat_metal(int dirfd, const char *file, int flags, unsigned mode) {
   int fd;
   struct MetalFile *state;
   if (dirfd != AT_FDCWD || strcmp(file, APE_COM_NAME)) return enoent();
   if (flags != O_RDONLY) return eacces();
-  if (!_weaken(__ape_com_base) || !_weaken(__ape_com_size))
-    return eopnotsupp();
+  if (!_weaken(__ape_com_base) || !_weaken(__ape_com_size)) return eopnotsupp();
   if ((fd = __reservefd(-1)) == -1) return -1;
   if (!_weaken(calloc) || !_weaken(free)) {
     struct DirectMap dm;
     dm = sys_mmap_metal(NULL, ROUNDUP(sizeof(struct MetalFile), 4096),
-                        PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
-                        -1, 0);
+                        PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1,
+                        0);
     state = dm.addr;
     if (state == (void *)-1) return -1;
   } else {
@@ -62,3 +63,5 @@ int sys_openat_metal(int dirfd, const char *file, int flags, unsigned mode) {
   g_fds.p[fd].handle = (intptr_t)state;
   return fd;
 }
+
+#endif /* __x86_64__ */

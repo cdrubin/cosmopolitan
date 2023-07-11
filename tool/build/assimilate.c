@@ -25,12 +25,13 @@
 #include "libc/intrin/kprintf.h"
 #include "libc/log/check.h"
 #include "libc/runtime/runtime.h"
+#include "libc/stdckdint.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/msync.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/regex/regex.h"
 
 STATIC_YOINK("strerror_wr");
@@ -40,7 +41,7 @@ STATIC_YOINK("strerror_wr");
 // digits not used: 0123456789
 // puncts not used: !"#$%&'()*+,-./;<=>@[\]^_`{|}~
 // letters duplicated: none
-#define GETOPTS "em"
+#define GETOPTS "fem"
 
 #define USAGE \
   "\
@@ -88,7 +89,6 @@ void GetOpts(int argc, char *argv[]) {
         g_mode = MODE_MACHO;
         break;
       case 'h':
-      case '?':
         write(1, USAGE, sizeof(USAGE) - 1);
         exit(0);
       default:
@@ -181,8 +181,7 @@ void GetMachoPayload(const char *image, size_t imagesize, int *out_offset,
   bs = atoi(script + rm[1].rm_so);
   skip = atoi(script + rm[2].rm_so);
   count = atoi(script + rm[3].rm_so);
-  if (__builtin_mul_overflow(skip, bs, &offset) ||
-      __builtin_mul_overflow(count, bs, &size)) {
+  if (ckd_mul(&offset, skip, bs) || ckd_mul(&size, count, bs)) {
     kprintf("%s: integer overflow parsing macho\n");
     exit(8);
   }
@@ -233,7 +232,7 @@ void Assimilate(void) {
     kprintf("%s: fstat() failed: %m\n", prog);
     exit(14);
   }
-  if (st.st_size < 8192) {
+  if (st.st_size < 4096) {
     kprintf("%s: ape binaries must be at least 4096 bytes\n", prog);
     exit(15);
   }

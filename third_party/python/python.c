@@ -226,7 +226,6 @@ PYTHON_YOINK("decimal");
 PYTHON_YOINK("difflib");
 PYTHON_YOINK("doctest");
 PYTHON_YOINK("dummy_threading");
-PYTHON_YOINK("threading");
 PYTHON_YOINK("enum");
 PYTHON_YOINK("filecmp");
 PYTHON_YOINK("fileinput");
@@ -306,7 +305,9 @@ PYTHON_YOINK("tabnanny");
 PYTHON_YOINK("tempfile");
 PYTHON_YOINK("textwrap");
 PYTHON_YOINK("this");
+PYTHON_YOINK("threading");
 PYTHON_YOINK("token");
+PYTHON_YOINK("tokenbucket");
 PYTHON_YOINK("tokenize");
 PYTHON_YOINK("trace");
 PYTHON_YOINK("traceback");
@@ -494,7 +495,29 @@ PYTHON_YOINK("smtplib");
 PYTHON_YOINK("nntplib");
 
 PYTHON_YOINK("asdl");
-#ifdef WITH_THREAD
+
+PYTHON_YOINK("_thread");
+PYTHON_YOINK("_thread.LockType");
+PYTHON_YOINK("_thread.RLock");
+PYTHON_YOINK("_thread.TIMEOUT_MAX");
+PYTHON_YOINK("_thread._count");
+PYTHON_YOINK("_thread._local");
+PYTHON_YOINK("_thread._set_sentinel");
+PYTHON_YOINK("_thread.allocate");
+PYTHON_YOINK("_thread.allocate_lock");
+PYTHON_YOINK("_thread.error");
+PYTHON_YOINK("_thread.exit");
+PYTHON_YOINK("_thread.exit_thread");
+PYTHON_YOINK("_thread.get_ident");
+PYTHON_YOINK("_thread.interrupt_main");
+PYTHON_YOINK("_thread.stack_size");
+PYTHON_YOINK("_thread.start_new");
+PYTHON_YOINK("_thread.start_new_thread");
+PYTHON_YOINK("concurrent");
+PYTHON_YOINK("concurrent.futures");
+PYTHON_YOINK("concurrent.futures._base");
+PYTHON_YOINK("concurrent.futures.process");
+PYTHON_YOINK("concurrent.futures.thread");
 PYTHON_YOINK("asynchat");
 PYTHON_YOINK("asyncore");
 PYTHON_YOINK("asyncio");
@@ -517,12 +540,8 @@ PYTHON_YOINK("asyncio.sslproto");
 PYTHON_YOINK("asyncio.streams");
 PYTHON_YOINK("asyncio.subprocess");
 PYTHON_YOINK("asyncio.tasks");
-PYTHON_YOINK("asyncio.test_utils");
 PYTHON_YOINK("asyncio.transports");
 PYTHON_YOINK("asyncio.unix_events");
-PYTHON_YOINK("asyncio.windows_events");
-PYTHON_YOINK("asyncio.windows_utils");
-#endif
 
 int
 main(int argc, char **argv)

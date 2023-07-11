@@ -17,14 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/str/str.h"
 
-#ifdef DescribeErrno
-#undef DescribeErrno
-#endif
-
-const char *DescribeErrno(char buf[20], int ax) {
+const char *(DescribeErrno)(char buf[20], int ax) {
   char *p = buf;
   const char *s;
   if (ax < 0) {

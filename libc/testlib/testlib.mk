@@ -38,17 +38,6 @@ LIBC_TESTLIB_A_SRCS_S =						\
 	libc/testlib/moby.S					\
 	libc/testlib/polluteregisters.S				\
 	libc/testlib/testcase.S					\
-	libc/testlib/thrashcodecache.S				\
-	libc/testlib/thunks/assert_eq.S				\
-	libc/testlib/thunks/assert_false.S			\
-	libc/testlib/thunks/assert_ne.S				\
-	libc/testlib/thunks/assert_true.S			\
-	libc/testlib/thunks/expect_eq.S				\
-	libc/testlib/thunks/expect_false.S			\
-	libc/testlib/thunks/expect_ne.S				\
-	libc/testlib/thunks/expect_true.S			\
-	libc/testlib/thunks/free.S				\
-	libc/testlib/thunks/jump.S				\
 	libc/testlib/viewables.S
 
 LIBC_TESTLIB_A_SRCS_C =						\
@@ -87,6 +76,7 @@ LIBC_TESTLIB_A_SRCS_C =						\
 	libc/testlib/strequals.c				\
 	libc/testlib/strerror.c					\
 	libc/testlib/testrunner.c				\
+	libc/testlib/thunks.c					\
 	libc/testlib/waitforexit.c				\
 	libc/testlib/waitforterm.c				\
 	libc/testlib/yield.c
@@ -111,13 +101,13 @@ LIBC_TESTLIB_A_DIRECTDEPS =					\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TIME						\
 	LIBC_TINYMATH						\
 	LIBC_X							\
 	LIBC_ZIPOS						\
+	THIRD_PARTY_COMPILER_RT					\
 	THIRD_PARTY_DLMALLOC					\
 	THIRD_PARTY_GDTOA					\
 	THIRD_PARTY_XED
@@ -139,6 +129,26 @@ o/$(MODE)/libc/testlib/viewables.o: libc/testlib/viewables.txt
 o/$(MODE)/libc/testlib/hyperion.o: libc/testlib/hyperion.txt
 o/$(MODE)/libc/testlib/moby.o: libc/testlib/moby.txt
 
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/testlib/bench.o: libc/testlib/bench.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/blocktronics.o: libc/testlib/blocktronics.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/combo.o: libc/testlib/combo.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/fixture.o: libc/testlib/fixture.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/hyperion.o: libc/testlib/hyperion.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/moby.o: libc/testlib/moby.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/polluteregisters.o: libc/testlib/polluteregisters.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/testcase.o: libc/testlib/testcase.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/viewables.o: libc/testlib/viewables.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+
 #───────────────────────────────────────────────────────────────────────────────
 
 LIBC_TESTLIB_ARTIFACTS += LIBC_TESTLIB_RUNNER_A
@@ -157,7 +167,6 @@ LIBC_TESTLIB_RUNNER_A_DIRECTDEPS =				\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_TESTLIB
 
 LIBC_TESTLIB_RUNNER_A_DEPS :=					\
@@ -197,7 +206,6 @@ LIBC_TESTMAIN_DIRECTDEPS =					\
 	LIBC_NEXGEN32E						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\

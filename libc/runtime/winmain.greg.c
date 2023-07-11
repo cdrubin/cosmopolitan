@@ -19,6 +19,7 @@
 #include "libc/calls/state.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/libfatal.internal.h"
@@ -40,6 +41,8 @@
 #include "libc/runtime/stack.h"
 #include "libc/runtime/winargs.internal.h"
 #include "libc/sock/internal.h"
+
+#ifdef __x86_64__
 
 #if IsTiny()
 __msabi extern typeof(CreateFileMapping) *const __imp_CreateFileMappingW;
@@ -64,6 +67,7 @@ __msabi extern typeof(VirtualProtect) *const __imp_VirtualProtect;
 
 extern int64_t __wincrashearly;
 extern const char kConsoleHandles[3];
+extern void cosmo(int, char **, char **, long (*)[2]) _Hide wontreturn;
 
 static const short kConsoleModes[3] = {
     kNtEnableProcessedInput | kNtEnableLineInput | kNtEnableEchoInput |
@@ -150,6 +154,7 @@ __msabi static textwindows wontreturn void WinMainNew(const char16_t *cmdline) {
                 : (DescribeNtConsoleInFlags)(inflagsbuf, kConsoleModes[i]),
               rc);
     }
+    (void)rc;
   }
   _Static_assert(sizeof(struct WinArgs) % FRAMESIZE == 0, "");
   _mmi.p = _mmi.s;
@@ -245,3 +250,5 @@ __msabi textwindows int64_t WinMain(int64_t hInstance, int64_t hPrevInstance,
   if (_weaken(WinMainForked)) _weaken(WinMainForked)();
   WinMainNew(cmdline);
 }
+
+#endif /* __x86_64__ */

@@ -5,6 +5,7 @@
 #include "libc/intrin/nopl.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/version.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/sysv/consts/ss.h"
 #include "libc/thread/tls.h"
@@ -45,6 +46,7 @@ struct MemoryIntervals {
 
 extern struct MemoryIntervals _mmi;
 
+void __mmi_init(void);
 void __mmi_lock(void);
 void __mmi_unlock(void);
 void __mmi_funlock(void);
@@ -69,11 +71,45 @@ size_t GetMemtrackSize(struct MemoryIntervals *);
 #define __mmi_unlock() (__threaded ? __mmi_unlock() : 0)
 #endif
 
+#ifdef __x86_64__
+/*
+ * AMD64 has 48-bit signed pointers (PML4T)
+ * AMD64 is trying to go bigger, i.e. 57-bit (PML5T)
+ * LINUX forbids userspace from leveraging negative pointers
+ * Q-EMU may impose smaller vaspaces emulating AMD on non-AMD
+ *
+ * Having "signed pointers" means these top sixteen bits
+ *
+ *     0x0000000000000000
+ *       ^^^^
+ *
+ * must be
+ *
+ *   - 0000 for positive pointers
+ *   - FFFF for negative pointers
+ *
+ * otherwise the instruction using the faulty pointer will fault.
+ */
 #define IsLegalPointer(p) \
   (-0x800000000000 <= (intptr_t)(p) && (intptr_t)(p) <= 0x7fffffffffff)
+#define ADDR_32_TO_48(x) (intptr_t)((uint64_t)(int)(x) << 16)
+#elif defined(__aarch64__)
+/*
+ * ARM64 has 48-bit unsigned pointers (Armv8.0-A)
+ * ARM64 can possibly go bigger, i.e. 52-bit (Armv8.2-A)
+ * ARM64 can impose arbitrarily smaller vaspaces, e.g. 40/44-bit
+ * APPLE in their limitless authoritarianism forbids 32-bit pointers
+ */
+#define IsLegalPointer(p) ((uintptr_t)(p) <= 0xffffffffffff)
+#define ADDR_32_TO_48(x)  (uintptr_t)((uint64_t)(uint32_t)(x) << 16)
+#else
+/* RISC-V Sipeed Nezha has 39-bit vaspace */
+#error "unsupported architecture"
+#endif
 
-forceinline pureconst bool IsLegalSize(size_t n) {
-  return n <= 0x7fffffffffff;
+forceinline pureconst bool IsLegalSize(uint64_t n) {
+  /* subtract frame size so roundup is safe */
+  return n <= 0x800000000000 - FRAMESIZE;
 }
 
 forceinline pureconst bool IsAutoFrame(int x) {
@@ -121,12 +157,21 @@ forceinline pureconst bool IsStackFrame(int x) {
          x <= (int)((stack + (GetStackSize() - FRAMESIZE)) >> 16);
 }
 
-forceinline pureconst bool IsOldStackFrame(int x) {
+forceinline pureconst bool IsOldStack(const void *x) {
   /* openbsd uses 4mb stack by default */
   /* freebsd uses 512mb stack by default */
   /* most systems use 8mb stack by default */
-  intptr_t old = ROUNDDOWN(__oldstack, GetStackSize());
-  return (old >> 16) <= x && x <= ((old + (GetStackSize() - FRAMESIZE)) >> 16);
+  size_t foss_stack_size = 1ul * 1024 * 1024;
+  uintptr_t top = ROUNDUP(__oldstack + 1, foss_stack_size);
+  uintptr_t bot = ROUNDDOWN(__oldstack, foss_stack_size);
+  return bot <= (uintptr_t)x && (uintptr_t)x < top;
+}
+
+forceinline pureconst bool IsOldStackFrame(int x) {
+  size_t foss_stack_size = 1ul * 1024 * 1024;
+  uintptr_t top = ROUNDUP(__oldstack + 1, foss_stack_size);
+  uintptr_t bot = ROUNDDOWN(__oldstack, foss_stack_size);
+  return (int)(bot >> 16) <= x && x <= (int)((top >> 16) - 1);
 }
 
 forceinline pureconst bool IsFixedFrame(int x) {
@@ -139,7 +184,7 @@ forceinline pureconst bool OverlapsImageSpace(const void *p, size_t n) {
   if (n) {
     BegA = p;
     EndA = BegA + (n - 1);
-    BegB = _base;
+    BegB = __executable_start;
     EndB = _end - 1;
     return MAX(BegA, BegB) < MIN(EndA, EndB);
   } else {

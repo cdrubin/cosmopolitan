@@ -60,13 +60,12 @@
 #   build/config.mk
 
 SHELL      = build/bootstrap/cocmd.com
-HOSTS     ?= freebsd openbsd netbsd rhel7 rhel5 xnu win10
 MAKEFLAGS += --no-builtin-rules
 
 .SUFFIXES:
 .DELETE_ON_ERROR:
 .FEATURES: output-sync
-.PHONY: all o bins check test depend tags
+.PHONY: all o bins check test depend tags aarch64 clean
 
 ifneq ($(m),)
 ifeq ($(MODE),)
@@ -87,7 +86,10 @@ o/$(MODE):			\
 	o/$(MODE)/examples	\
 	o/$(MODE)/third_party
 
+ifeq ($(USE_SYSTEM_TOOLCHAIN),)
 .STRICT = 1
+endif
+
 .PLEDGE = stdio rpath wpath cpath fattr proc
 .UNVEIL =			\
 	libc/integral		\
@@ -95,8 +97,10 @@ o/$(MODE):			\
 	rwc:/dev/shm		\
 	rx:build/bootstrap	\
 	rx:o/third_party/gcc	\
+	r:build/portcosmo.h	\
 	/proc/stat		\
 	rw:/dev/null		\
+	rw:/dev/full		\
 	w:o/stack.log		\
 	/etc/hosts		\
 	~/.runit.psk		\
@@ -110,17 +114,16 @@ include build/functions.mk			#─┐
 include build/definitions.mk			# ├──META
 include build/config.mk				# │  You can build
 include build/rules.mk				# │  You can topologically order
-include build/online.mk				# │
-include libc/stubs/stubs.mk			#─┘
+include build/online.mk				#─┘
 include libc/nexgen32e/nexgen32e.mk		#─┐
 include libc/sysv/sysv.mk			# ├──SYSTEM SUPPORT
 include libc/nt/nt.mk				# │  You can do math
 include libc/intrin/intrin.mk			# │  You can use the stack
-include libc/linux/linux.mk			# │  You can manipulate arrays
+include third_party/compiler_rt/compiler_rt.mk	# │  You can manipulate arrays
 include libc/tinymath/tinymath.mk		# │  You can issue raw system calls
-include third_party/compiler_rt/compiler_rt.mk	# │
 include libc/str/str.mk				# │
 include third_party/xed/xed.mk			# │
+include third_party/puff/puff.mk		# │
 include third_party/zlib/zlib.mk		# │
 include third_party/double-conversion/dc.mk	# │
 include libc/elf/elf.mk				# │
@@ -128,36 +131,42 @@ include ape/ape.mk				# │
 include libc/fmt/fmt.mk				# │
 include libc/vga/vga.mk				#─┘
 include libc/calls/calls.mk			#─┐
-include third_party/getopt/getopt.mk		# │
 include libc/runtime/runtime.mk			# ├──SYSTEMS RUNTIME
 include libc/crt/crt.mk				# │  You can issue system calls
+include tool/hello/hello.mk			# │
 include third_party/nsync/nsync.mk		# │
 include third_party/dlmalloc/dlmalloc.mk	#─┘
 include libc/mem/mem.mk				#─┐
-include libc/zipos/zipos.mk			# ├──DYNAMIC RUNTIME
-include third_party/gdtoa/gdtoa.mk		# │  You can now use stdio
-include libc/time/time.mk			# │  You can finally call malloc()
-include third_party/nsync/mem/mem.mk		# │
-include libc/thread/thread.mk			# │
+include third_party/gdtoa/gdtoa.mk		# ├──DYNAMIC RUNTIME
+include third_party/nsync/mem/mem.mk		# │  You can now use stdio
+include libc/thread/thread.mk			# │  You can finally call malloc()
+include libc/zipos/zipos.mk			# │
 include libc/stdio/stdio.mk			# │
-include third_party/libcxx/libcxx.mk		# │
+include libc/time/time.mk			# │
 include net/net.mk				# │
+include third_party/vqsort/vqsort.mk		# │
 include libc/log/log.mk				# │
+include third_party/getopt/getopt.mk		# │
 include third_party/bzip2/bzip2.mk		# │
 include dsp/core/core.mk			# │
+include third_party/musl/musl.mk		# │
 include libc/x/x.mk				# │
 include third_party/stb/stb.mk			# │
 include dsp/scale/scale.mk			# │
 include dsp/mpeg/mpeg.mk			# │
 include dsp/dsp.mk				# │
 include third_party/zlib/gz/gz.mk		# │
-include third_party/musl/musl.mk		# │
+include third_party/intel/intel.mk		# │
+include third_party/aarch64/aarch64.mk		# │
 include libc/libc.mk				#─┘
 include libc/sock/sock.mk			#─┐
 include dsp/tty/tty.mk				# ├──ONLINE RUNTIME
 include libc/dns/dns.mk				# │  You can communicate with the network
 include net/http/http.mk			# │
 include third_party/mbedtls/mbedtls.mk		# │
+include third_party/libcxx/libcxx.mk		# │
+include third_party/ggml/ggml.mk		# │
+include third_party/radpajama/radpajama.mk	# │
 include net/https/https.mk			# │
 include third_party/regex/regex.mk		#─┘
 include third_party/tidy/tidy.mk
@@ -172,6 +181,7 @@ include third_party/maxmind/maxmind.mk
 include net/finger/finger.mk
 include third_party/double-conversion/test/test.mk
 include third_party/lua/lua.mk
+include third_party/zstd/zstd.mk
 include third_party/tr/tr.mk
 include third_party/sed/sed.mk
 include third_party/awk/awk.mk
@@ -186,15 +196,16 @@ include third_party/mbedtls/test/test.mk
 include third_party/quickjs/quickjs.mk
 include third_party/lz4cli/lz4cli.mk
 include third_party/zip/zip.mk
+include third_party/xxhash/xxhash.mk
 include third_party/unzip/unzip.mk
 include tool/build/lib/buildlib.mk
 include third_party/chibicc/chibicc.mk
 include third_party/chibicc/test/test.mk
 include third_party/python/python.mk
-include tool/build/emucrt/emucrt.mk
-include tool/build/emubin/emubin.mk
 include tool/build/build.mk
 include tool/curl/curl.mk
+include tool/ape/ape.mk
+include third_party/qemu/qemu.mk
 include examples/examples.mk
 include examples/pyapp/pyapp.mk
 include examples/pylife/pylife.mk
@@ -205,7 +216,6 @@ include tool/lambda/lambda.mk
 include tool/plinko/lib/lib.mk
 include tool/plinko/plinko.mk
 include test/tool/plinko/test.mk
-include tool/hash/hash.mk
 include tool/net/net.mk
 include tool/viz/viz.mk
 include tool/tool.mk
@@ -259,21 +269,21 @@ CHECKS	 = $(foreach x,$(PKGS),$($(x)_CHECKS))
 
 bins:	$(BINS)
 check:	$(CHECKS)
-test:	$(TESTS)
+test:	$(TESTS) aarch64
 depend:	o/$(MODE)/depend
 tags:	TAGS HTAGS
 
 o/$(MODE)/.x:
 	@$(COMPILE) -AMKDIR -tT$@ $(MKDIR) $(@D)
 
-o/$(MODE)/srcs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x))))
+o/$(MODE)/srcs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x)))) $(SRCS)
 	$(file >$@,$(SRCS))
-o/$(MODE)/hdrs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x))))
+o/$(MODE)/hdrs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS) $(INCS),$(dir $(x)))) $(HDRS) $(INCS)
 	$(file >$@,$(HDRS) $(INCS))
-o/$(MODE)/incs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(INCS) $(INCS),$(dir $(x))))
+o/$(MODE)/incs.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(INCS) $(INCS),$(dir $(x)))) $(INCS) $(INCS)
 	$(file >$@,$(INCS))
 o/$(MODE)/depend: o/$(MODE)/.x o/$(MODE)/srcs.txt o/$(MODE)/hdrs.txt o/$(MODE)/incs.txt $(SRCS) $(HDRS) $(INCS)
-	@$(COMPILE) -AMKDEPS -L320 $(MKDEPS) -o $@ -r o/$(MODE)/ @o/$(MODE)/srcs.txt @o/$(MODE)/hdrs.txt @o/$(MODE)/incs.txt
+	$(COMPILE) -AMKDEPS -L320 $(MKDEPS) -o $@ -r o/$(MODE)/ @o/$(MODE)/srcs.txt @o/$(MODE)/hdrs.txt @o/$(MODE)/incs.txt
 
 o/$(MODE)/srcs-old.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(SRCS),$(dir $(x))))
 	$(file >$@) $(foreach x,$(SRCS),$(file >>$@,$(x)))
@@ -281,12 +291,12 @@ o/$(MODE)/hdrs-old.txt: o/$(MODE)/.x $(MAKEFILES) $(call uniq,$(foreach x,$(HDRS
 	$(file >$@) $(foreach x,$(HDRS) $(INCS),$(file >>$@,$(x)))
 
 TAGS: private .UNSANDBOXED = 1
-TAGS:	o/$(MODE)/srcs-old.txt $(SRCS) o/$(MODE)/third_party/ctags/ctags.com
+TAGS:	o/$(MODE)/srcs-old.txt $(SRCS) #o/$(MODE)/third_party/ctags/ctags.com
 	@$(RM) $@
 	@o/$(MODE)/third_party/ctags/ctags.com $(TAGSFLAGS) -L $< -o $@
 
 HTAGS: private .UNSANDBOXED = 1
-HTAGS:	o/$(MODE)/hdrs-old.txt $(HDRS) o/$(MODE)/third_party/ctags/ctags.com
+HTAGS:	o/$(MODE)/hdrs-old.txt $(filter-out third_party/libcxx/%,$(HDRS)) #o/$(MODE)/third_party/ctags/ctags.com
 	@$(RM) $@
 	@build/htags o/$(MODE)/third_party/ctags/ctags.com -L $< -o $@
 
@@ -298,6 +308,7 @@ loc: o/$(MODE)/tool/build/summy.com
 # PLEASE: MAINTAIN TOPOLOGICAL ORDER
 # FROM HIGHEST LEVEL TO LOWEST LEVEL
 COSMOPOLITAN_OBJECTS =			\
+	TOOL_ARGS			\
 	NET_HTTP			\
 	LIBC_DNS			\
 	LIBC_SOCK			\
@@ -309,7 +320,6 @@ COSMOPOLITAN_OBJECTS =			\
 	LIBC_LOG			\
 	LIBC_TIME			\
 	LIBC_ZIPOS			\
-	THIRD_PARTY_ZLIB		\
 	THIRD_PARTY_MUSL		\
 	LIBC_STDIO			\
 	THIRD_PARTY_GDTOA		\
@@ -335,6 +345,7 @@ COSMOPOLITAN_OBJECTS =			\
 	LIBC_NT_ADVAPI32		\
 	LIBC_NT_SYNCHRONIZATION		\
 	LIBC_FMT			\
+	THIRD_PARTY_PUFF		\
 	THIRD_PARTY_COMPILER_RT		\
 	LIBC_TINYMATH			\
 	THIRD_PARTY_XED			\
@@ -370,15 +381,14 @@ COSMOPOLITAN_HEADERS =			\
 	LIBC_ZIPOS			\
 	LIBC_VGA			\
 	NET_HTTP			\
+	TOOL_ARGS			\
 	THIRD_PARTY_DLMALLOC		\
 	THIRD_PARTY_GDTOA		\
 	THIRD_PARTY_GETOPT		\
 	THIRD_PARTY_MUSL		\
-	THIRD_PARTY_ZLIB		\
-	THIRD_PARTY_ZLIB_GZ		\
 	THIRD_PARTY_REGEX
 
-o/$(MODE)/cosmopolitan.a:	\
+o/$(MODE)/cosmopolitan.a:		\
 		$(foreach x,$(COSMOPOLITAN_OBJECTS),$($(x)_A_OBJS))
 
 o/cosmopolitan.h:							\
@@ -387,7 +397,8 @@ o/cosmopolitan.h:							\
 		$(foreach x,$(COSMOPOLITAN_HEADERS),$($(x)_HDRS))	\
 		$(foreach x,$(COSMOPOLITAN_HEADERS),$($(x)_INCS))
 	$(file >$(TMPDIR)/$(subst /,_,$@),libc/integral/normalize.inc $(foreach x,$(COSMOPOLITAN_HEADERS),$($(x)_HDRS)))
-	@$(COMPILE) -AROLLUP -T$@ o/$(MODE)/tool/build/rollup.com @$(TMPDIR)/$(subst /,_,$@) >$@
+	@$(ECHO) '#define COSMO' >$@
+	@$(COMPILE) -AROLLUP -T$@ o/$(MODE)/tool/build/rollup.com @$(TMPDIR)/$(subst /,_,$@) >>$@
 
 o/cosmopolitan.html: private .UNSANDBOXED = 1
 o/cosmopolitan.html:							\
@@ -415,7 +426,18 @@ toolchain:	o/cosmopolitan.h				\
 		o/$(MODE)/ape/ape.o				\
 		o/$(MODE)/ape/ape-copy-self.o			\
 		o/$(MODE)/ape/ape-no-modify-self.o		\
-		o/$(MODE)/cosmopolitan.a
+		o/$(MODE)/cosmopolitan.a			\
+		o/$(MODE)/third_party/libcxx/libcxx.a		\
+		o/$(MODE)/tool/build/fixupobj.com		\
+		o/$(MODE)/tool/build/zipcopy.com
+
+aarch64: private .INTERNET = true
+aarch64: private .UNSANDBOXED = true
+aarch64:
+	$(MAKE) m=aarch64
+
+clean:
+	$(RM) -r o
 
 # UNSPECIFIED PREREQUISITES TUTORIAL
 #

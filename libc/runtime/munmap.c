@@ -37,10 +37,7 @@
 
 #define IP(X)      (intptr_t)(X)
 #define ALIGNED(p) (!(IP(p) & (FRAMESIZE - 1)))
-#define ADDR(x)    ((int64_t)((uint64_t)(x) << 32) >> 16)
 #define FRAME(x)   ((int)((intptr_t)(x) >> 16))
-
-static noasan int Munmap(char *, size_t);
 
 static noasan void MunmapShadow(char *p, size_t n) {
   intptr_t a, b, x, y;
@@ -55,7 +52,7 @@ static noasan void MunmapShadow(char *p, size_t n) {
       // to be >1mb since we can only unmap it if it's aligned, and
       // as such we poison the edges if there are any.
       __repstosb((void *)a, kAsanUnmapped, x - a);
-      Munmap((void *)x, y - x);
+      _Munmap((void *)x, y - x);
       __repstosb((void *)y, kAsanUnmapped, b - y);
     } else {
       // otherwise just poison and assume reuse
@@ -95,13 +92,13 @@ static noasan void MunmapImpl(char *p, size_t n) {
       beg = MAX(_mmi.p[i].x, l);
       end = _mmi.p[i].y;
     } else {
-      unreachable;
+      __builtin_unreachable();
     }
     // openbsd even requires that if we mapped, for instance a 5 byte
     // file, that we be sure to call munmap(file, 5). let's abstract!
-    a = ADDR(beg);
-    b = ADDR(end) + FRAMESIZE;
-    c = ADDR(_mmi.p[i].x) + _mmi.p[i].size;
+    a = ADDR_32_TO_48(beg);
+    b = ADDR_32_TO_48(end) + FRAMESIZE;
+    c = ADDR_32_TO_48(_mmi.p[i].x) + _mmi.p[i].size;
     q = (char *)a;
     m = MIN(b, c) - a;
     if (!IsWindows()) {
@@ -115,29 +112,29 @@ static noasan void MunmapImpl(char *p, size_t n) {
   }
 }
 
-static noasan int Munmap(char *p, size_t n) {
+noasan int _Munmap(char *p, size_t n) {
   unsigned i;
   char poison;
   intptr_t a, b, x, y;
   _unassert(!__vforked);
   if (UNLIKELY(!n)) {
-    STRACE("n=0");
+    STRACE("munmap n is 0");
     return einval();
   }
   if (UNLIKELY(!IsLegalSize(n))) {
-    STRACE("n isn't 48-bit");
+    STRACE("munmap n isn't 48-bit");
     return einval();
   }
   if (UNLIKELY(!IsLegalPointer(p))) {
-    STRACE("p isn't 48-bit");
+    STRACE("munmap p isn't 48-bit");
     return einval();
   }
   if (UNLIKELY(!IsLegalPointer(p + (n - 1)))) {
-    STRACE("p+(n-1) isn't 48-bit");
+    STRACE("munmap p+(n-1) isn't 48-bit");
     return einval();
   }
   if (UNLIKELY(!ALIGNED(p))) {
-    STRACE("p isn't 64kb aligned");
+    STRACE("munmap(%p) isn't 64kb aligned", p);
     return einval();
   }
   MunmapImpl(p, n);
@@ -159,7 +156,7 @@ int munmap(void *p, size_t n) {
   int rc;
   size_t toto;
   __mmi_lock();
-  rc = Munmap(p, n);
+  rc = _Munmap(p, n);
 #if SYSDEBUG
   toto = __strace > 0 ? GetMemtrackSize(&_mmi) : 0;
 #endif

@@ -9,12 +9,20 @@ COSMOPOLITAN_C_START_
  */
 
 #if defined(__GNUC__) && defined(__x86_64__) && defined(__MNO_RED_ZONE__) && \
-    !defined(__STRICT_ANSI__)
+    !defined(__STRICT_ANSI__) && !defined(__cplusplus)
 #define errno                                                           \
   (*({                                                                  \
     errno_t *_ep;                                                       \
     asm("call\t__errno_location" : "=a"(_ep) : /* no inputs */ : "cc"); \
     _ep;                                                                \
+  }))
+#elif defined(__GNUC__) && defined(__aarch64__) && \
+    !defined(__STRICT_ANSI__) && !defined(__cplusplus)
+#define errno                             \
+  (*({                                    \
+    errno_t *_ep;                         \
+    asm("sub\t%0,x28,#1092" : "=r"(_ep)); \
+    _ep;                                  \
   }))
 #else
 #define errno (*__errno_location())

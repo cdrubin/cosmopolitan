@@ -18,13 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/pledge.internal.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/promises.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/sig.h"
@@ -33,7 +34,10 @@
 #include "libc/testlib/testlib.h"
 
 void SetUp(void) {
-  if (!__is_linux_2_6_23() && !IsOpenbsd()) exit(0);
+  if (pledge(0, 0) == -1) {
+    fprintf(stderr, "warning: pledge() not supported on this system\n");
+    exit(0);
+  }
 }
 
 TEST(pledge, testSoftError) {
@@ -77,7 +81,7 @@ TEST(pledge, testLogMessage_inSoftyMode) {
   read(fds[0], msg, sizeof(msg));
   close(fds[0]);
   if (IsLinux()) {
-    ASSERT_STARTSWITH("error: pledge inet for socket", msg);
+    ASSERT_STARTSWITH("error: protected syscall socket", msg);
   }
 }
 
@@ -95,7 +99,7 @@ TEST(pledge, testLogMessage_onKillProcess) {
   read(fds[0], msg, sizeof(msg));
   close(fds[0]);
   if (IsLinux()) {
-    ASSERT_STARTSWITH("error: pledge inet for socket", msg);
+    ASSERT_STARTSWITH("error: protected syscall socket", msg);
   }
 }
 

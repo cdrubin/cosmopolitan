@@ -17,11 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/mem/copyfd.internal.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/testlib/testlib.h"
 
-STATIC_YOINK("zip_uri_support");
+STATIC_YOINK("zipos");
 
 /**
  * Extracts zip asset to filesystem.
@@ -34,7 +33,7 @@ void testlib_extract(const char *zip, const char *to, int mode) {
   int fdin, fdout;
   ASSERT_NE(-1, (fdin = open(zip, O_RDONLY)));
   ASSERT_NE(-1, (fdout = creat(to, mode)));
-  ASSERT_NE(-1, _copyfd(fdin, fdout, -1));
+  ASSERT_NE(-1, copyfd(fdin, fdout, -1));
   ASSERT_NE(-1, close(fdout));
   ASSERT_NE(-1, close(fdin));
 }

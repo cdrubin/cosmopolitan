@@ -17,8 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
 
 /**
  * Creates session and sets the process group id.
@@ -26,7 +27,11 @@
  */
 int setsid(void) {
   int rc;
-  rc = sys_setsid();
+  if (!IsWindows() && !IsMetal()) {
+    rc = sys_setsid();
+  } else {
+    rc = 0;
+  }
   STRACE("setsid() → %d% m", rc);
   return rc;
 }

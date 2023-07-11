@@ -35,6 +35,7 @@
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
+#ifdef __x86_64__
 
 int systemfive_cancel(void);
 
@@ -208,7 +209,7 @@ static void ListenForSigThr(void) {
  *     void *p = _gc(malloc(123));
  *     read(0, p, 123);
  *
- * It's possible to put a thread in asynchronous cancellation mode using
+ * It's possible to put a thread in asynchronous cancellation mode with
  *
  *     pthread_setcancelstate(PTHREAD_CANCEL_ASYNCHRONOUS, 0);
  *     for (;;) donothing;
@@ -292,6 +293,8 @@ errno_t pthread_cancel(pthread_t thread) {
   }
   return rc;
 }
+
+#endif /* __x86_64__ */
 
 /**
  * Creates cancellation point in calling thread.

@@ -18,12 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asmflag.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/limits.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Returns nice value of thing.
@@ -47,8 +49,9 @@
  * @raise ESRCH if no such process existed
  * @see setpriority()
  */
-privileged int getpriority(int which, unsigned who) {
+int getpriority(int which, unsigned who) {
   int rc;
+#ifdef __x86_64__
   char cf;
   if (IsLinux()) {
     asm volatile("syscall"
@@ -70,9 +73,17 @@ privileged int getpriority(int which, unsigned who) {
       errno = rc;
       rc = -1;
     }
-  } else {
+  } else if (IsWindows()) {
     rc = sys_getpriority_nt(which, who);
+  } else {
+    rc = enosys();
   }
+#else
+  rc = sys_getpriority(which, who);
+  if (rc != -1) {
+    rc = NZERO - rc;
+  }
+#endif
   STRACE("getpriority(%s, %u) → %d% m", DescribeWhichPrio(which), who, rc);
   return rc;
 }

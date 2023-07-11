@@ -31,12 +31,13 @@ TEST_LIBC_TINYMATH_DIRECTDEPS =					\
 	LIBC_STDIO						\
 	LIBC_RUNTIME						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_TESTLIB						\
 	LIBC_TINYMATH						\
 	LIBC_X							\
+	THIRD_PARTY_COMPILER_RT					\
 	THIRD_PARTY_GDTOA					\
+	THIRD_PARTY_COMPILER_RT					\
 	THIRD_PARTY_DOUBLECONVERSION
 
 TEST_LIBC_TINYMATH_DEPS :=					\
@@ -56,7 +57,7 @@ o/$(MODE)/test/libc/tinymath/%.com.dbg:				\
 	@$(APELINK)
 
 $(TEST_LIBC_TINYMATH_OBJS): private				\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-fno-builtin
 
 .PHONY: o/$(MODE)/test/libc/tinymath

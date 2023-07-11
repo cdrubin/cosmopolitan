@@ -27,8 +27,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
 #include "libc/tinymath/complex.internal.h"
-#ifndef TINY
 
+asm(".ident\t\"\\n\\n\
+fdlibm (fdlibm license)\\n\
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.\"");
 asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
@@ -153,4 +155,6 @@ double atan(double x)
 	return sign ? -z : z;
 }
 
-#endif /* TINY */
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(atan, atanl);
+#endif

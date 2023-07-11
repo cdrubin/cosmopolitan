@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/metalfile.internal.h"
+#include "libc/fmt/conv.h"
 #include "libc/intrin/cmpxchg.h"
 #include "libc/intrin/promises.internal.h"
 #include "libc/intrin/strace.internal.h"
@@ -27,10 +28,12 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/thread/thread.h"
-#include "libc/zip.h"
+#include "libc/zip.internal.h"
 #include "libc/zipos/zipos.internal.h"
 
+#ifdef __x86_64__
 STATIC_YOINK(APE_COM_NAME);
+#endif
 
 static uint64_t __zipos_get_min_offset(const uint8_t *base,
                                        const uint8_t *cdir) {
@@ -59,44 +62,55 @@ static void __zipos_munmap_unneeded(const uint8_t *base, const uint8_t *cdir,
  * @threadsafe
  */
 struct Zipos *__zipos_get(void) {
-  int fd;
+  char *endptr;
   ssize_t size;
-  const char *msg;
+  int fd, err, msg;
   static bool once;
   struct Zipos *res;
+  uint8_t *map, *cdir;
   const char *progpath;
   static struct Zipos zipos;
-  uint8_t *map, *base, *cdir;
-  if (!once && PLEDGED(RPATH)) {
-    __zipos_lock();
-    progpath = GetProgramExecutableName();
-    if ((fd = open(progpath, O_RDONLY)) != -1) {
-      if ((size = getfiledescriptorsize(fd)) != -1ul &&
-          (map = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0)) != MAP_FAILED) {
-        if ((base = FindEmbeddedApe(map, size))) {
-          size -= base - map;
-        } else {
-          base = map;
-        }
-        if ((cdir = GetZipCdir(base, size)) && _cmpxchg(&zipos.map, 0, base)) {
-          __zipos_munmap_unneeded(base, cdir, map);
-          zipos.cdir = cdir;
-          msg = "ok";
-        } else {
-          munmap(map, size);
-          msg = "eocd not found";
-        }
-      } else {
-        msg = "map failed";
-      }
-      close(fd);
+  __zipos_lock();
+  if (!once) {
+    progpath = getenv("COSMOPOLITAN_INIT_ZIPOS");
+    if (progpath) {
+      fd = strtol(progpath, &endptr, 10);
+      if (*endptr) fd = -1;
     } else {
-      msg = "open failed";
+      fd = -1;
     }
+    if (fd != -1 || PLEDGED(RPATH)) {
+      if (fd == -1) {
+        progpath = GetProgramExecutableName();
+        fd = open(progpath, O_RDONLY);
+      }
+      if (fd != -1) {
+        if ((size = lseek(fd, 0, SEEK_END)) != -1 &&
+            (map = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0)) !=
+                MAP_FAILED) {
+          if ((cdir = GetZipEocd(map, size, &err))) {
+            __zipos_munmap_unneeded(map, cdir, map);
+            zipos.map = map;
+            zipos.cdir = cdir;
+            msg = kZipOk;
+          } else {
+            munmap(map, size);
+            msg = !cdir ? err : kZipErrorRaceCondition;
+          }
+        } else {
+          msg = kZipErrorMapFailed;
+        }
+        close(fd);
+      } else {
+        msg = kZipErrorOpenFailed;
+      }
+    } else {
+      msg = -666;
+    }
+    STRACE("__zipos_get(%#s) → %d% m", progpath, msg);
     once = true;
-    __zipos_unlock();
-    STRACE("__zipos_get(%#s) → %s% m", progpath, msg);
   }
+  __zipos_unlock();
   if (zipos.cdir) {
     res = &zipos;
   } else {

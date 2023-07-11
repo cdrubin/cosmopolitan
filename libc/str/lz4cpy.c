@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/bits.h"
-#include "libc/intrin/pushpop.h"
+#include "libc/intrin/pushpop.internal.h"
 #include "libc/intrin/repmovsb.h"
 #include "libc/nexgen32e/kompressor.h"
 #include "libc/str/str.h"
@@ -43,7 +43,7 @@ textstartup void *lz4cpy(void *dest, const void *blockdata, size_t blocksize) {
         length += *ip;
       } while (*ip++ == 255);
     }
-    repmovsb(&op, &ip, length);
+    repmovsb((void **)&op, (const void **)&ip, length);
     if (ip >= ipe) break;
     offset = READ16LE(ip);
     matchlen = token & fifteen;
@@ -54,7 +54,7 @@ textstartup void *lz4cpy(void *dest, const void *blockdata, size_t blocksize) {
       } while (*ip++ == 255);
     }
     match = op - offset;
-    repmovsb(&op, &match, (matchlen += 4));
+    repmovsb((void **)&op, (const void **)&match, (matchlen += 4));
   }
   return op;
 }

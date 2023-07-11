@@ -26,6 +26,9 @@
 TEST(wcwidth, test) {
   ASSERT_EQ(0, wcwidth(0));
   ASSERT_EQ(-1, wcwidth(1));
+  ASSERT_EQ(-1, wcwidth(-7));
+  ASSERT_EQ(1, wcwidth(0x10FFFD));
+  ASSERT_EQ(-1, wcwidth(0x10FFFD + 1));
 }
 
 TEST(strwidth, testCjkWidesAndCombiningLowLines_withThompsonPikeEncoding) {
@@ -33,9 +36,6 @@ TEST(strwidth, testCjkWidesAndCombiningLowLines_withThompsonPikeEncoding) {
   EXPECT_EQ(20, strwidth(/**/ "𐌰𐌱𐌲𐌳𐌴𐌵𐌶𐌷▒▒▒▒▒▒▒▒▒▒▒▒" /*│*/, 0));
   EXPECT_EQ(20, strwidth(/**/ "(╯°□°)╯𐄻︵ ̲┻̲━̲┻▒▒▒▒▒▒" /*│*/, 0));
   EXPECT_EQ(20, strwidth(/**/ "ちゃぶ台返し▒▒▒▒▒▒▒▒" /*│*/, 0));
-  EXPECT_EQ(20, strclen(/*─*/ "𐌰𐌱𐌲𐌳𐌴𐌵𐌶𐌷▒▒▒▒▒▒▒▒▒▒▒▒" /*│*/));
-  EXPECT_EQ(22, strclen(/*─*/ "(╯°□°)╯𐄻︵ ̲┻̲━̲┻▒▒▒▒▒▒" /*│*/));
-  EXPECT_EQ(14, strclen(/*─*/ "ちゃぶ台返し▒▒▒▒▒▒▒▒" /*│*/));
   EXPECT_EQ(68, strlen(/*──*/ "𐌰𐌱𐌲𐌳𐌴𐌵𐌶𐌷▒▒▒▒▒▒▒▒▒▒▒▒" /*│*/));
   EXPECT_EQ(56, strlen(/*──*/ "(╯°□°)╯𐄻︵ ̲┻̲━̲┻▒▒▒▒▒▒" /*│*/));
   EXPECT_EQ(42, strlen(/*──*/ "ちゃぶ台返し▒▒▒▒▒▒▒▒" /*│*/));
@@ -47,9 +47,6 @@ TEST(strwidth16, testCjkWidesAndCombiningLowLines_lengthIsNotShorts) {
   EXPECT_EQ(20, strwidth16(/**/ u"𐌰𐌱𐌲𐌳𐌴𐌵𐌶𐌷▒▒▒▒▒▒▒▒▒▒▒▒" /*│*/, 0));
   EXPECT_EQ(20, strwidth16(/**/ u"(╯°□°)╯𐄻︵ ̲┻̲━̲┻▒▒▒▒▒▒" /*│*/, 0));
   EXPECT_EQ(20, strwidth16(/**/ u"ちゃぶ台返し▒▒▒▒▒▒▒▒" /*│*/, 0));
-  EXPECT_EQ(20, strclen16(/*─*/ u"𐌰𐌱𐌲𐌳𐌴𐌵𐌶𐌷▒▒▒▒▒▒▒▒▒▒▒▒" /*│*/));
-  EXPECT_EQ(22, strclen16(/*─*/ u"(╯°□°)╯𐄻︵ ̲┻̲━̲┻▒▒▒▒▒▒" /*│*/));
-  EXPECT_EQ(14, strclen16(/*─*/ u"ちゃぶ台返し▒▒▒▒▒▒▒▒" /*│*/));
   EXPECT_EQ(28, strlen16(/*──*/ u"𐌰𐌱𐌲𐌳𐌴𐌵𐌶𐌷▒▒▒▒▒▒▒▒▒▒▒▒" /*│*/));
   EXPECT_EQ(23, strlen16(/*──*/ u"(╯°□°)╯𐄻︵ ̲┻̲━̲┻▒▒▒▒▒▒" /*│*/));
   EXPECT_EQ(14, strlen16(/*──*/ u"ちゃぶ台返し▒▒▒▒▒▒▒▒" /*│*/));

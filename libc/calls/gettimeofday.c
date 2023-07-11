@@ -31,20 +31,20 @@
 #include "libc/time/struct/timezone.h"
 
 typedef axdx_t gettimeofday_f(struct timeval *, struct timezone *, void *);
-
-extern gettimeofday_f *__gettimeofday;
+static gettimeofday_f __gettimeofday_init;
+static gettimeofday_f *__gettimeofday = __gettimeofday_init;
 
 /**
  * Returns system wall time in microseconds, e.g.
  *
  *     int64_t t;
- *     char p[30];
+ *     char p[20];
  *     struct tm tm;
  *     struct timeval tv;
  *     gettimeofday(&tv, 0);
  *     t = tv.tv_sec;
  *     gmtime_r(&t, &tm);
- *     FormatHttpDateTime(p, &tm);
+ *     iso8601(p, &tm);
  *     printf("%s\n", p);
  *
  * @param tv points to timeval that receives result if non-NULL
@@ -82,8 +82,15 @@ gettimeofday_f *__gettimeofday_get(bool *opt_out_isfast) {
     isfast = true;
     res = sys_gettimeofday_nt;
   } else if (IsXnu()) {
-    isfast = false;
+#ifdef __x86_64__
     res = sys_gettimeofday_xnu;
+    isfast = false;
+#elif defined(__aarch64__)
+    res = sys_gettimeofday_m1;
+    isfast = true;
+#else
+#error "unsupported architecture"
+#endif
   } else if (IsMetal()) {
     isfast = false;
     res = sys_gettimeofday_metal;
@@ -97,8 +104,10 @@ gettimeofday_f *__gettimeofday_get(bool *opt_out_isfast) {
   return res;
 }
 
-_Hide int __gettimeofday_init(struct timeval *tv, struct timezone *tz) {
+static axdx_t __gettimeofday_init(struct timeval *tv,   //
+                                  struct timezone *tz,  //
+                                  void *arg) {
   gettimeofday_f *gettime;
   __gettimeofday = gettime = __gettimeofday_get(0);
-  return gettime(tv, tz, 0).ax;
+  return gettime(tv, tz, 0);
 }

@@ -22,8 +22,6 @@
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
 
-typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
-
 static inline const unsigned char *rawmemchr_pure(const unsigned char *s,
                                                   unsigned char c) {
   for (;; ++s) {
@@ -33,6 +31,8 @@ static inline const unsigned char *rawmemchr_pure(const unsigned char *s,
   }
 }
 
+#ifdef __x86_64__
+typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
 noasan static inline const char *rawmemchr_sse(const char *s, unsigned char c) {
   unsigned k;
   unsigned m;
@@ -51,6 +51,13 @@ noasan static inline const char *rawmemchr_sse(const char *s, unsigned char c) {
   m = __builtin_ctzll(m);
   return (const char *)p + m;
 }
+#endif
+
+static inline noasan uint64_t UncheckedAlignedRead64(unsigned char *p) {
+  return (uint64_t)p[7] << 070 | (uint64_t)p[6] << 060 | (uint64_t)p[5] << 050 |
+         (uint64_t)p[4] << 040 | (uint64_t)p[3] << 030 | (uint64_t)p[2] << 020 |
+         (uint64_t)p[1] << 010 | (uint64_t)p[0] << 000;
+}
 
 /**
  * Returns pointer to first instance of character.
@@ -60,6 +67,7 @@ noasan static inline const char *rawmemchr_sse(const char *s, unsigned char c) {
  * @return is pointer to first instance of c
  */
 void *rawmemchr(const void *s, int c) {
+#ifdef __x86_64__
   const void *r;
   if (X86_HAVE(SSE)) {
     if (IsAsan()) __asan_verify(s, 1);
@@ -68,4 +76,23 @@ void *rawmemchr(const void *s, int c) {
     r = rawmemchr_pure(s, c);
   }
   return (void *)r;
+#else
+  uint64_t v, w;
+  const unsigned char *p;
+  p = s;
+  c &= 255;
+  v = 0x0101010101010101ul * c;
+  for (; (uintptr_t)p & 7; ++p) {
+    if (*p == c) return p;
+  }
+  for (;; p += 8) {
+    w = UncheckedAlignedRead64(p);
+    if ((w = ~(w ^ v) & ((w ^ v) - 0x0101010101010101) & 0x8080808080808080)) {
+      p += (unsigned)__builtin_ctzll(w) >> 3;
+      break;
+    }
+  }
+  assert(*p == c);
+  return p;
+#endif
 }

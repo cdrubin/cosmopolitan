@@ -17,10 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/calls/prctl.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/pr.h"
 #include "libc/sysv/errfuns.h"
 
@@ -29,7 +31,7 @@
  *
  * @raise ENOSYS on non-Linux
  */
-privileged int prctl(int operation, ...) {
+int prctl(int operation, ...) {
   int rc;
   va_list va;
   intptr_t a, b, c, d;
@@ -42,13 +44,11 @@ privileged int prctl(int operation, ...) {
   va_end(va);
 
   if (IsLinux()) {
-    asm volatile("mov\t%5,%%r10\n\t"
-                 "mov\t%6,%%r8\n\t"
-                 "syscall"
-                 : "=a"(rc)
-                 : "0"(157), "D"(operation), "S"(a), "d"(b), "g"(c), "g"(d)
-                 : "rcx", "r8", "r10", "r11", "memory");
-    if (rc > -4096u) errno = -rc, rc = -1;
+    rc = sys_prctl(operation, a, b, c, d);
+    if (rc < 0) {
+      errno = -rc;
+      rc = -1;
+    }
   } else {
     rc = enosys();
   }

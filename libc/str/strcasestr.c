@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/str/str.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/str/str.h"
 #include "libc/str/tab.internal.h"
 
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
@@ -36,6 +36,7 @@ typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
  * @see strstr()
  */
 noasan char *strcasestr(const char *haystack, const char *needle) {
+#ifdef __x86_64__
   char c;
   xmm_t *p;
   size_t i;
@@ -68,4 +69,18 @@ noasan char *strcasestr(const char *haystack, const char *needle) {
     if (!*haystack++) break;
   }
   return 0;
+#else
+  size_t i;
+  unsigned k, m;
+  if (haystack == needle || !*needle) return haystack;
+  for (;;) {
+    for (i = 0;; ++i) {
+      if (!needle[i]) return (/*unconst*/ char *)haystack;
+      if (!haystack[i]) break;
+      if (kToLower[needle[i] & 255] != kToLower[haystack[i] & 255]) break;
+    }
+    if (!*haystack++) break;
+  }
+  return 0;
+#endif
 }

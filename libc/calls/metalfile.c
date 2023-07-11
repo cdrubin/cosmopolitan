@@ -41,6 +41,8 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
 
+#ifdef __x86_64__
+
 #define MAP_ANONYMOUS_linux 0x00000020
 #define MAP_FIXED_linux     0x00000010
 #define MAP_SHARED_linux    0x00000001
@@ -61,7 +63,8 @@ textstartup noasan void InitializeMetalFile(void) {
      * The zipos code will automatically arrange to do this.  Alternatively,
      * user code can STATIC_YOINK this symbol.
      */
-    size_t size = ROUNDUP(_ezip - _base, 4096);
+    size_t size = ROUNDUP(_ezip - __executable_start, 4096);
+    // TODO(jart): Restore support for ZIPOS on metal.
     void *copied_base;
     struct DirectMap dm;
     dm = sys_mmap_metal(NULL, size, PROT_READ | PROT_WRITE,
@@ -73,3 +76,5 @@ textstartup noasan void InitializeMetalFile(void) {
     __ape_com_size = size;
   }
 }
+
+#endif /* __x86_64__ */

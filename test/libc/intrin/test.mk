@@ -32,7 +32,6 @@ TEST_LIBC_INTRIN_DIRECTDEPS =				\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
 	LIBC_THREAD					\
@@ -69,7 +68,7 @@ o/$(MODE)/test/libc/intrin/lock_test.com.dbg:		\
 	@$(APELINK)
 
 $(TEST_LIBC_INTRIN_OBJS): private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fno-builtin
 
 .PHONY: o/$(MODE)/test/libc/intrin

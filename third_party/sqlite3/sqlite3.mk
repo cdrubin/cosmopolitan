@@ -51,13 +51,13 @@ THIRD_PARTY_SQLITE3_A_DIRECTDEPS =					\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
 	LIBC_THREAD							\
 	LIBC_TIME							\
 	LIBC_TINYMATH							\
 	LIBC_ZIPOS							\
+	THIRD_PARTY_COMPILER_RT						\
 	THIRD_PARTY_GDTOA						\
 	THIRD_PARTY_LINENOISE						\
 	THIRD_PARTY_MUSL						\
@@ -79,7 +79,8 @@ o/$(MODE)/third_party/sqlite3/sqlite3.com.dbg:				\
 o/$(MODE)/third_party/sqlite3/sqlite3.com:				\
 		o/$(MODE)/third_party/sqlite3/sqlite3.com.dbg		\
 		o/$(MODE)/third_party/zip/zip.com			\
-		o/$(MODE)/tool/build/symtab.com
+		o/$(MODE)/tool/build/symtab.com				\
+		$(VM)
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)
@@ -136,12 +137,12 @@ THIRD_PARTY_SQLITE3_CPPFLAGS_DEBUG = -DSQLITE_DEBUG
 endif
 
 $(THIRD_PARTY_SQLITE3_A_OBJS): private					\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			$(THIRD_PARTY_SQLITE3_FLAGS)			\
 			$(THIRD_PARTY_SQLITE3_CPPFLAGS_DEBUG)		\
 
 $(THIRD_PARTY_SQLITE3_SHELL_OBJS): private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			$(THIRD_PARTY_SQLITE3_FLAGS)			\
 			$(THIRD_PARTY_SQLITE3_CPPFLAGS_DEBUG)		\
 			-DHAVE_READLINE=0				\
@@ -168,16 +169,16 @@ o//third_party/sqlite3/parse.o						\
 o//third_party/sqlite3/select.o						\
 o//third_party/sqlite3/pragma.o						\
 o//third_party/sqlite3/vdbe.o: private					\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-Os
 
 o/$(MODE)/third_party/sqlite3/shell.o: private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-DSTACK_FRAME_UNLIMITED
 
 $(THIRD_PARTY_SQLITE3_A_OBJS)						\
 $(THIRD_PARTY_SQLITE3_SHELL_OBJS): private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fdata-sections					\
 			-ffunction-sections
 
@@ -185,14 +186,14 @@ $(THIRD_PARTY_SQLITE3_SHELL_OBJS): private				\
 o/$(MODE)/third_party/sqlite3/expr.o					\
 o/$(MODE)/third_party/sqlite3/printf.o					\
 o/$(MODE)/third_party/sqlite3/parse.o: private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fpie
 
-o/$(MODE)/third_party/sqlite3/shell.o: private QUOTA = -M512m -C16 -L180
+o/$(MODE)/third_party/sqlite3/shell.o: private QUOTA = -M512m -C32 -L180
 o/$(MODE)/third_party/sqlite3/vdbe.o: private QUOTA = -M1024m
 o/$(MODE)/third_party/sqlite3/vdbe.shell.o: private QUOTA = -M1024m
-o/$(MODE)/third_party/sqlite3/fts5.o: private QUOTA = -M512m -C16
-o/$(MODE)/third_party/sqlite3/fts5.shell.o: private QUOTA = -M512m -C16 -L180
+o/$(MODE)/third_party/sqlite3/fts5.o: private QUOTA = -M512m -C32
+o/$(MODE)/third_party/sqlite3/fts5.shell.o: private QUOTA = -M512m -C32 -L180
 
 o/$(MODE)/third_party/sqlite3/rtree.o:					\
 		third_party/sqlite3/rtree.c				\

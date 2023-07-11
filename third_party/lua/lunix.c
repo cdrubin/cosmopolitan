@@ -16,14 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "third_party/lua/lunix.h"
 #include "libc/assert.h"
 #include "libc/atomic.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/cp.internal.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/makedev.h"
 #include "libc/calls/pledge.h"
-#include "libc/calls/struct/bpf.h"
+#include "libc/calls/struct/bpf.internal.h"
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/flock.h"
 #include "libc/calls/struct/itimerval.h"
@@ -51,7 +51,6 @@
 #include "libc/limits.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/fmt.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/synchronization.h"
@@ -100,6 +99,7 @@
 #include "libc/sysv/consts/sol.h"
 #include "libc/sysv/consts/st.h"
 #include "libc/sysv/consts/tcp.h"
+#include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/utime.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
@@ -112,7 +112,6 @@
 #include "third_party/lua/lgc.h"
 #include "third_party/lua/lua.h"
 #include "third_party/lua/luaconf.h"
-#include "third_party/lua/lunix.h"
 #include "third_party/nsync/futex.internal.h"
 #include "tool/net/luacheck.h"
 
@@ -146,7 +145,7 @@ static void *LuaAllocOrDie(lua_State *L, size_t n) {
     return p;
   } else {
     luaL_error(L, "out of memory");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -206,7 +205,7 @@ int LuaUnixSysretErrno(lua_State *L, const char *call, int olderr) {
   struct UnixErrno *ep;
   int i, unixerr, winerr;
   unixerr = errno;
-  winerr = GetLastError();
+  winerr = IsWindows() ? GetLastError() : 0;
   if (!IsTiny() && !(0 < unixerr && unixerr < (!IsWindows() ? 4096 : 65536))) {
     WARNF("errno should not be %d", unixerr);
   }
@@ -253,7 +252,7 @@ static int MakeSockaddr(lua_State *L, int i, struct sockaddr_storage *ss,
     if (!memccpy(((struct sockaddr_un *)ss)->sun_path, luaL_checkstring(L, i),
                  0, sizeof(((struct sockaddr_un *)ss)->sun_path))) {
       luaL_error(L, "unix path too long");
-      unreachable;
+      __builtin_unreachable();
     }
     *salen = sizeof(struct sockaddr_un);
     return i + 1;
@@ -278,7 +277,7 @@ static int PushSockaddr(lua_State *L, const struct sockaddr_storage *ss) {
     return 1;
   } else {
     luaL_error(L, "bad family");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -1488,7 +1487,7 @@ static int LuaUnixPledge(lua_State *L) {
   int olderr = errno;
   __pledge_mode = luaL_optinteger(L, 3, 0);
   return SysretBool(L, "pledge", olderr,
-                    pledge(luaL_checkstring(L, 1), luaL_optstring(L, 2, 0)));
+                    pledge(luaL_optstring(L, 1, 0), luaL_optstring(L, 2, 0)));
 }
 
 // sandbox.unveil([path:str[, permissions:str]])
@@ -1738,7 +1737,7 @@ static int LuaUnixSigaction(lua_State *L) {
   sig = luaL_checkinteger(L, 1);
   if (!(1 <= sig && sig <= NSIG)) {
     luaL_argerror(L, 1, "signal number invalid");
-    unreachable;
+    __builtin_unreachable();
   }
   if (lua_isnoneornil(L, 2)) {
     // if handler/flags/mask aren't passed,
@@ -1766,7 +1765,7 @@ static int LuaUnixSigaction(lua_State *L) {
     lua_pop(L, 1);
   } else {
     luaL_argerror(L, 2, "sigaction handler not integer or function");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!lua_isnoneornil(L, 4)) {
     mask = luaL_checkudata(L, 4, "unix.Sigset");
@@ -2018,6 +2017,12 @@ static int LuaUnixTiocgwinsz(lua_State *L) {
 // unix.sched_yield()
 static int LuaUnixSchedYield(lua_State *L) {
   sched_yield();
+  return 0;
+}
+
+// unix.verynice()
+static int LuaUnixVerynice(lua_State *L) {
+  verynice();
   return 0;
 }
 
@@ -2685,7 +2690,7 @@ static int LuaUnixMemoryRead(lua_State *L) {
     // extracts nul-terminated string
     if (i > m->size) {
       luaL_error(L, "out of range");
-      unreachable;
+      __builtin_unreachable();
     }
     n = strnlen(m->u.bytes + i, m->size - i);
   } else {
@@ -2694,7 +2699,7 @@ static int LuaUnixMemoryRead(lua_State *L) {
     n = luaL_checkinteger(L, 3);
     if (i > m->size || n >= m->size || i + n > m->size) {
       luaL_error(L, "out of range");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   pthread_mutex_lock(m->lock);
@@ -2723,7 +2728,7 @@ static int LuaUnixMemoryWrite(lua_State *L) {
   }
   if (i > m->size) {
     luaL_error(L, "out of range");
-    unreachable;
+    __builtin_unreachable();
   }
   if (lua_isnoneornil(L, b)) {
     // unix.Memory:write(data:str[, offset:int])
@@ -2743,13 +2748,13 @@ static int LuaUnixMemoryWrite(lua_State *L) {
     j = luaL_checkinteger(L, b);
     if (j > n) {
       luaL_argerror(L, b, "bytes is more than what's in data");
-      unreachable;
+      __builtin_unreachable();
     }
     n = j;
   }
   if (i + n > m->size) {
     luaL_error(L, "out of range");
-    unreachable;
+    __builtin_unreachable();
   }
   pthread_mutex_lock(m->lock);
   memcpy(m->u.bytes + i, s, n);
@@ -2764,7 +2769,7 @@ static atomic_long *GetWord(lua_State *L) {
   i = luaL_checkinteger(L, 2);
   if (i >= m->size / sizeof(*m->u.words)) {
     luaL_error(L, "out of range");
-    unreachable;
+    __builtin_unreachable();
   }
   return m->u.words + i;
 }
@@ -2840,7 +2845,7 @@ static int LuaUnixMemoryWait(lua_State *L) {
   expect = luaL_checkinteger(L, 3);
   if (!(INT32_MIN <= expect && expect <= INT32_MAX)) {
     luaL_argerror(L, 3, "must be an int32_t");
-    unreachable;
+    __builtin_unreachable();
   }
   if (lua_isnoneornil(L, 4)) {
     deadline = 0;  // wait forever
@@ -2927,15 +2932,15 @@ static int LuaUnixMapshared(lua_State *L) {
   n = luaL_checkinteger(L, 1);
   if (!n) {
     luaL_error(L, "can't map empty region");
-    unreachable;
+    __builtin_unreachable();
   }
   if (n % sizeof(long)) {
     luaL_error(L, "size must be multiple of word size");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!IsLegalSize(n)) {
     luaL_error(L, "map size too big");
-    unreachable;
+    __builtin_unreachable();
   }
   c = n;
   c += sizeof(*m->lock);
@@ -2943,7 +2948,7 @@ static int LuaUnixMapshared(lua_State *L) {
   c = ROUNDUP(c, g);
   if (!(p = _mapshared(c))) {
     luaL_error(L, "out of memory");
-    unreachable;
+    __builtin_unreachable();
   }
   m = lua_newuserdatauv(L, sizeof(*m), 1);
   luaL_setmetatable(L, "unix.Memory");
@@ -3094,7 +3099,7 @@ static DIR *GetDirOrDie(lua_State *L) {
   dirp = GetUnixDirSelf(L);
   if (*dirp) return *dirp;
   luaL_argerror(L, 1, "unix.UnixDir is closed");
-  unreachable;
+  __builtin_unreachable();
 }
 
 // unix.Dir:close()
@@ -3339,6 +3344,7 @@ static const luaL_Reg kLuaUnix[] = {
     {"unlink", LuaUnixUnlink},            // remove file
     {"unveil", LuaUnixUnveil},            // filesystem sandboxing
     {"utimensat", LuaUnixUtimensat},      // change access/modified time
+    {"verynice", LuaUnixVerynice},        // lowest priority
     {"wait", LuaUnixWait},                // wait for child to change status
     {"write", LuaUnixWrite},              // write to file or socket
     {0},                                  //
@@ -3368,12 +3374,18 @@ int LuaUnix(lua_State *L) {
   lua_setglobal(L, "__signal_handlers");
 
   LoadMagnums(L, kErrnoNames, "");
-  LoadMagnums(L, kOpenFlags, "O_");
   LoadMagnums(L, kSignalNames, "");
   LoadMagnums(L, kIpOptnames, "IP_");
   LoadMagnums(L, kTcpOptnames, "TCP_");
   LoadMagnums(L, kSockOptnames, "SO_");
   LoadMagnums(L, kClockNames, "CLOCK_");
+
+  // open()
+  LuaSetIntField(L, "O_RDONLY", O_RDONLY);
+  LuaSetIntField(L, "O_WRONLY", O_WRONLY);
+  LuaSetIntField(L, "O_RDWR", O_RDWR);
+  LuaSetIntField(L, "O_ACCMODE", O_ACCMODE);
+  LoadMagnums(L, kOpenFlags, "O_");
 
   // seek() whence
   LuaSetIntField(L, "SEEK_SET", SEEK_SET);

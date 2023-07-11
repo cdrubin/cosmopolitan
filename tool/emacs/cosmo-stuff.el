@@ -25,6 +25,8 @@
 (require 'ld-script)
 (require 'make-mode)
 
+(setq cosmo-dbg-mode "dbg")
+(setq cosmo-default-mode "")
 (setq c-doc-comment-style 'javadown)
 
 (add-to-list 'auto-mode-alist '("\\.x$" . c-mode))  ;; -aux-info
@@ -147,8 +149,8 @@
 ;;   M-3 C-c C-c   Compile w/ MODE=rel
 ;;   M-4 C-c C-c   Compile w/ MODE=dbg
 ;;   M-5 C-c C-c   Compile w/ MODE=""
-;;   M-7 C-c C-c   Compile w/ MODE=tinylinux
-;;   M-8 C-c C-c   Compile w/ clang tsan
+;;   M-7 C-c C-c   Compile w/ MODE=aarch64
+;;   M-8 C-c C-c   Compile w/ MODE=aarch64-tiny
 ;;   M-9 C-c C-c   Compile w/ chibicc
 
 (defun cosmo-intest (&optional file-name)
@@ -162,14 +164,14 @@
   (cond ((eq arg 1) "tiny")
         ((eq arg 2) "opt")
         ((eq arg 3) "rel")
-        ((eq arg 4) "dbg")
+        ((eq arg 4) cosmo-dbg-mode)
         ((eq arg 5) "")
         ((eq arg 6) "llvm")
-        ((eq arg 7) "tinylinux")
-        ((eq arg 8) "tsan")
+        ((eq arg 7) "aarch64")
+        ((eq arg 8) "aarch64-tiny")
         (default default)
-        ((cosmo-intest) "dbg")
-        (t "fastbuild")))
+        ((cosmo-intest) cosmo-dbg-mode)
+        (t cosmo-default-mode)))
 
 (defun cosmo--make-suffix (arg)
   (cond ((eq arg 9) ".chibicc")
@@ -225,7 +227,7 @@
                       ;; "nm -C --size o/$m/%s.o | sort -r"
                       "echo"
                       "size -A o/$m/$n.o | grep '^[.T]' | grep -v 'debug\\|command.line\\|stack' | sort -rnk2"
-                      "objdump %s -wzCd o/$m/$n%s.o | c++filt"))
+                      "build/objdump %s -wzCd o/$m/$n%s.o | c++filt"))
                    mode name suffix objdumpflags suffix))
           ((eq kind 'run)
            (format
@@ -233,13 +235,13 @@
              " && "
              `("m=%s; f=o/$m/%s.com"
                ,(concat "make -j12 $f MODE=$m")
-               "./$f"))
+               "build/run ./$f"))
             mode name))
           ((eq kind 'test)
            (format `"m=%s; f=o/$m/%s.com.ok && make -j12 $f MODE=$m" mode name))
           ((and (file-regular-p this)
                 (file-executable-p this))
-           (format "./%s" file))
+           (format "build/run ./%s" file))
           ('t
            (format
             (cosmo-join
@@ -249,7 +251,7 @@
                ;; "nm -C --size $f | sort -r"
                "echo"
                "size -A $f | grep '^[.T]' | grep -v 'debug\\|command.line\\|stack' | sort -rnk2"
-               "objdump %s -wzCd $f | c++filt"))
+               "build/objdump %s -wzCd $f | c++filt"))
             mode name suffix objdumpflags)))))
 
 (defun cosmo-compile (arg)
@@ -477,9 +479,9 @@
   (cond ((eq arg 9)
          (cosmo--assembly 1
                           "V=1 OVERRIDE_COPTS='-w -fverbose-asm -fsanitize=undefined -fno-sanitize=null -fno-sanitize=alignment -fno-sanitize=pointer-overflow'"))
-        ((not (eq 0 (logand 8 arg)))
-         (cosmo--assembly (setq arg (logand (lognot 8)))
-                          "V=1 OVERRIDE_COPTS='-w -fverbose-asm -fsanitize=address'"))
+        ;; ((not (eq 0 (logand 8 arg)))
+        ;;  (cosmo--assembly (setq arg (logand (lognot 8)))
+        ;;                   "V=1 OVERRIDE_COPTS='-w -fverbose-asm -fsanitize=address'"))
         (t (cosmo--assembly arg "V=1 OVERRIDE_COPTS='-w ' CPPFLAGS=''"))))
 
 (defun cosmo-assembly-native (arg)
@@ -606,7 +608,7 @@
               ((file-executable-p file)
                (compile (if (cosmo-contains "/" file)
                             file
-                          (format "./%s" file))))
+                          (format "build/run ./%s" file))))
               ((memq major-mode '(c-mode c++-mode asm-mode fortran-mode))
                (let* ((mode (cosmo--make-mode arg))
                       (compile-command (cosmo--compile-command this root 'run mode "" "" ".runs")))
@@ -614,9 +616,8 @@
               ((eq major-mode 'sh-mode)
                (compile (format "sh -c %s" file)))
               ((eq major-mode 'lua-mode)
-               (let* ((mode (cosmo--make-mode arg))
-                      (redbean ))
-                 (compile (format "make -j16 MODE=%s o/%s/tool/net/redbean.com && o/%s/tool/net/redbean.com -i %s" mode mode mode file))))
+               (let* ((mode (cosmo--make-mode arg)))
+                 (compile (format "make -j16 MODE=%s o/%s/tool/net/redbean.com && build/run o/%s/tool/net/redbean.com -i %s" mode mode mode file))))
               ((and (eq major-mode 'python-mode)
                     (cosmo-startswith "third_party/python/Lib/test/" file))
                (let ((mode (cosmo--make-mode arg)))
@@ -637,7 +638,7 @@
       (let ((default-directory root))
         (save-buffer)
         (cond ((memq major-mode '(c-mode c++-mode asm-mode fortran-mode))
-               (let* ((mode (cosmo--make-mode arg "fastbuild"))
+               (let* ((mode (cosmo--make-mode arg cosmo-default-mode))
                       (compile-command (cosmo--compile-command this root 'test mode "" "" ".ok")))
                  (compile compile-command)))
               ('t
@@ -653,7 +654,7 @@
       (let ((default-directory root))
         (save-buffer)
         (cond ((memq major-mode '(c-mode c++-mode asm-mode fortran-mode))
-               (let* ((mode (cosmo--make-mode arg "fastbuild"))
+               (let* ((mode (cosmo--make-mode arg cosmo-default-mode))
                       (compile-command (cosmo--compile-command this root 'run-win10 mode "" "" "")))
                  (compile compile-command)))
               ('t
@@ -685,7 +686,7 @@
   (let* ((this (or (buffer-file-name) dired-directory))
          (root (locate-dominating-file this "Makefile")))
     (when root
-      (let* ((mode (cosmo--make-mode arg "dbg"))
+      (let* ((mode (cosmo--make-mode arg cosmo-dbg-mode))
              (name (file-relative-name this root))
              (next (file-name-sans-extension name))
              (exec (format "o/%s/%s.com.dbg" mode next))

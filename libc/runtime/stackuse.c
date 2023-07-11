@@ -29,7 +29,7 @@
 
 static char stacklog[1024];
 
-size_t GetStackUsage(char *s, size_t n) {
+noasan size_t GetStackUsage(char *s, size_t n) {
   // RHEL5 MAP_GROWSDOWN seems to only grow to 68kb :'(
   // So we count non-zero bytes down from the top
   // First clear 64 bytes is considered the end
@@ -79,7 +79,6 @@ static textexit void LogStackUse(void) {
 }
 
 static textstartup void LogStackUseInit(void) {
-  if (IsTiny()) return;
   if (!PLEDGED(WPATH)) return;
   if (isdirectory("o/" MODE) &&
       getcwd(stacklog, sizeof(stacklog) - strlen("/o/" MODE "/stack.log"))) {

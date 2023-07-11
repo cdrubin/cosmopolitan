@@ -42,7 +42,6 @@
  * time. Among the more popular is CLOCK_MONOTONIC. This function has a
  * zero syscall implementation of that on modern x86.
  *
- *     nowl                l:        45𝑐        15𝑛𝑠
  *     rdtsc               l:        13𝑐         4𝑛𝑠
  *     gettimeofday        l:        44𝑐        14𝑛𝑠
  *     clock_gettime       l:        40𝑐        13𝑛𝑠
@@ -95,17 +94,30 @@ int clock_gettime(int clock, struct timespec *ts) {
   return rc;
 }
 
+#ifdef __aarch64__
+#define CGT_VDSO __vdsosym("LINUX_2.6.39", "__kernel_clock_gettime")
+#else
+#define CGT_VDSO __vdsosym("LINUX_2.6", "__vdso_clock_gettime")
+#endif
+
 /**
  * Returns pointer to fastest clock_gettime().
  */
 clock_gettime_f *__clock_gettime_get(bool *opt_out_isfast) {
   bool isfast;
   clock_gettime_f *res;
-  if (IsLinux() && (res = __vdsosym("LINUX_2.6", "__vdso_clock_gettime"))) {
+  if (IsLinux() && (res = CGT_VDSO)) {
     isfast = true;
   } else if (IsXnu()) {
-    isfast = false;
+#ifdef __x86_64__
     res = sys_clock_gettime_xnu;
+    isfast = false;
+#elif defined(__aarch64__)
+    res = sys_clock_gettime_m1;
+    isfast = true;
+#else
+#error "unsupported architecture"
+#endif
   } else if (IsWindows()) {
     isfast = true;
     res = sys_clock_gettime_nt;

@@ -27,6 +27,7 @@
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/rand.h"
 #include "libc/str/blake2.h"
+#include "libc/str/highwayhash64.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
@@ -60,6 +61,7 @@
 #include "third_party/mbedtls/sha512.h"
 #include "third_party/mbedtls/x509.h"
 #include "third_party/quickjs/libbf.h"
+#include "third_party/zlib/zlib.h"
 
 uint64_t rng[12];
 mbedtls_ecp_group grp;
@@ -265,6 +267,13 @@ TEST(sha512, test) {
   EXPECT_EQ(0, memcmp(want, d, 64));
 }
 
+static const uint64_t kTestKey1[4] = {
+    0x0706050403020100,
+    0x0F0E0D0C0B0A0908,
+    0x1716151413121110,
+    0x1F1E1D1C1B1A1918,
+};
+
 BENCH(mbedtls, bench) {
   uint8_t d[64];
   EZBENCH_N("md5", kHyperionSize, mbedtls_md5_ret(kHyperion, kHyperionSize, d));
@@ -279,6 +288,8 @@ BENCH(mbedtls, bench) {
   EZBENCH_N("blake2b256", kHyperionSize,
             BLAKE2B256(kHyperion, kHyperionSize, d));
   EZBENCH_N("crc32_z", kHyperionSize, crc32_z(0, kHyperion, kHyperionSize));
+  EZBENCH_N("highwayhash64", kHyperionSize,
+            HighwayHash64(kHyperion, kHyperionSize, kTestKey1));
 }
 
 char *mpi2str(mbedtls_mpi *m) {

@@ -24,9 +24,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "libc/calls/calls.h"
 #include "libc/calls/pledge.h"
 #include "libc/calls/pledge.internal.h"
-#include "libc/calls/struct/bpf.h"
-#include "libc/calls/struct/filter.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/struct/sysinfo.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/dce.h"
@@ -37,13 +37,15 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/fmt/libgen.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/promises.internal.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/log.h"
-#include "libc/log/rop.h"
+#include "libc/log/rop.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/math.h"
 #include "libc/nexgen32e/kcpuids.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
@@ -55,10 +57,10 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "libc/sysv/consts/pr.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/rlimit.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
-#include "third_party/libcxx/math.h"
 #include "third_party/make/commands.h"
 #include "third_party/make/dep.h"
 #include "third_party/make/os.h"
@@ -1315,7 +1317,7 @@ new_job (struct file *file)
   /* Start the command sequence, record it in a new
      'struct child', and add that to the chain.  */
 
-  c = xcalloc (sizeof (struct child));
+  c = xcalloc (1, sizeof (struct child));
   output_init (&c->output);
 
   c->file = file;
@@ -1810,7 +1812,7 @@ unveil_variable (const struct variable *var)
   return -1;
 }
 
-int
+static int
 get_base_cpu_freq_mhz (void)
 {
   return KCPUIDS(16H, EAX) & 0x7fff;
@@ -1830,7 +1832,7 @@ set_limit (int r, long lo, long hi)
   return setrlimit (r, &lim);
 }
 
-int
+static int
 set_cpu_limit (int secs)
 {
   int mhz, lim;
@@ -1954,6 +1956,7 @@ child_execute_job (struct childbase *child,
        strict ? " in .STRICT mode" : "",
        internet ? " with internet access" : ""));
 
+#ifdef __x86_64__
   /* [jart] Set cpu seconds quota.  */
   if (RLIMIT_CPU < RLIM_NLIMITS &&
       (s = get_target_variable (STRING_SIZE_TUPLE (".CPU"),
@@ -1966,6 +1969,7 @@ child_execute_job (struct childbase *child,
       else
         DB (DB_JOBS, (_("Failed to set CPU limit: %s\n"), strerror (errno)));
     }
+#endif /* __x86_64__ */
 
   /* [jart] Set virtual memory quota.  */
   if (RLIMIT_AS < RLIM_NLIMITS &&
@@ -2116,6 +2120,7 @@ child_execute_job (struct childbase *child,
   else if (!(~ipromises & (1ul << PROMISE_INET)) &&
            !(~ipromises & (1ul << PROMISE_DNS)))
     DB (DB_JOBS, (_("Internet access will be blocked by pledge\n")));
+#ifdef __x86_64__
   else
     {
       e = errno;
@@ -2141,6 +2146,7 @@ child_execute_job (struct childbase *child,
             }
         }
     }
+#endif
 
   /* [jart] Resolve command into executable path.  */
   if (!strict || !sandboxed)

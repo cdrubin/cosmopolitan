@@ -107,7 +107,8 @@
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-#if defined(__GNUC__) && __GNUC__ >= 6 && !defined(__chibicc__)
+#if defined(__GNUC__) && __GNUC__ >= 6 && !defined(__chibicc__) && \
+    defined(__x86_64__)
 #define EFIAPI __attribute__((__ms_abi__))
 #else
 #define EFIAPI /* TODO(jart): fix me */
@@ -409,9 +410,8 @@ typedef EFI_STATUS(EFIAPI *EFI_GRAPHICS_OUTPUT_PROTOCOL_SET_MODE)(
 typedef EFI_STATUS(EFIAPI *EFI_GRAPHICS_OUTPUT_PROTOCOL_BLT)(
     EFI_GRAPHICS_OUTPUT_PROTOCOL *This,
     EFI_GRAPHICS_OUTPUT_BLT_PIXEL *BltBuffer,
-    EFI_GRAPHICS_OUTPUT_BLT_OPERATION BltOperation,
-    uint32_t SourceX, uint32_t SourceY,
-    uint32_t DestinationX, uint32_t DestinationY,
+    EFI_GRAPHICS_OUTPUT_BLT_OPERATION BltOperation, uint32_t SourceX,
+    uint32_t SourceY, uint32_t DestinationX, uint32_t DestinationY,
     uint32_t Width, uint32_t Height, uint32_t Delta);
 
 typedef EFI_STATUS(EFIAPI *EFI_HANDLE_PROTOCOL)(EFI_HANDLE Handle,

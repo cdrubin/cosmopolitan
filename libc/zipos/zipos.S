@@ -22,8 +22,6 @@
 	zipos = 0
 	.globl	zipos
 
-	.yoink	__zip_end
-	.yoink	__zip_start
 	.yoink	__zipos_close
 	.yoink	__zipos_fcntl
 	.yoink	__zipos_fstat
@@ -34,6 +32,7 @@
 	.yoink	__zipos_read
 	.yoink	__zipos_stat
 	.yoink	__zipos_notat
+	.yoink	__zipos_Mmap
 
 //	TODO(jart): why does corruption happen when zip has no assets?
 	.yoink	.cosmo

@@ -21,12 +21,13 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/x/x.h"
-#include "third_party/musl/ftw.h"
+#include "libc/stdio/ftw.h"
 
 const char *prog;
 char tmpdir[PATH_MAX];
@@ -73,7 +74,8 @@ int Visit(const char *fpath, const struct stat *sb, int tflag,
 
 int main(int argc, char *argv[]) {
   if (!IsLinux()) return 0;
-  prog = argc > 0 ? argv[0] : "unbundle.com";
+  prog = argv[0];
+  if (!prog) prog = "unbundle";
   if (IsDirectory("o/third_party/gcc")) return 0;
   makedirs("o/third_party", 0755);
   FormatInt32(stpcpy(tmpdir, "o/third_party/gcc."), getpid());

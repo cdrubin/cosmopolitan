@@ -26,7 +26,6 @@ int ispunct(int);
 int toupper(int);
 int toascii(int);
 int hextoint(int);
-int _cescapec(int);
 
 int iswalnum(wint_t);
 int iswalpha(wint_t);
@@ -69,7 +68,6 @@ char *strchrnul(const char *, int) strlenesque returnsnonnull;
 void *rawmemchr(const void *, int) strlenesque returnsnonnull;
 size_t strlen16(const char16_t *) strlenesque;
 size_t strnlen16(const char16_t *, size_t) strlenesque;
-size_t strnlen16_s(const char16_t *, size_t);
 char16_t *strchr16(const char16_t *, int) strlenesque;
 void *memchr16(const void *, int, size_t) strlenesque;
 char16_t *strchrnul16(const char16_t *, int) strlenesque returnsnonnull;
@@ -79,12 +77,12 @@ size_t wcsnlen(const wchar_t *, size_t) strlenesque;
 size_t wcsnlen_s(const wchar_t *, size_t);
 wchar_t *wcschr(const wchar_t *, wchar_t) strlenesque;
 wchar_t *wmemchr(const wchar_t *, wchar_t, size_t) strlenesque;
-wchar_t *wcschrnul(const wchar_t *, wchar_t) strlenesque returnsnonnull;
+wchar_t *wcschrnul(const wchar_t *, wchar_t)
+strlenesque returnsnonnull;
 char *strstr(const char *, const char *) strlenesque;
 char *strcasestr(const char *, const char *) strlenesque;
 char16_t *strstr16(const char16_t *, const char16_t *) strlenesque;
 wchar_t *wcsstr(const wchar_t *, const wchar_t *) strlenesque;
-void *rawwmemchr(const void *, wchar_t) strlenesque returnsnonnull;
 int strcmp(const char *, const char *) strlenesque;
 int strncmp(const char *, const char *, size_t) strlenesque;
 int strcmp16(const char16_t *, const char16_t *) strlenesque;
@@ -103,7 +101,7 @@ char *strrchr(const char *, int) strlenesque;
 void *memrchr(const void *, int, size_t) strlenesque;
 char16_t *strrchr16(const char16_t *, int) strlenesque;
 void *memrchr16(const void *, int, size_t) strlenesque;
-wchar_t *wcsrchr(const wchar_t *, int) strlenesque;
+wchar_t *wcsrchr(const wchar_t *, wchar_t) strlenesque;
 void *wmemrchr(const wchar_t *, wchar_t, size_t) strlenesque;
 char *strpbrk(const char *, const char *) strlenesque;
 char16_t *strpbrk16(const char16_t *, const char16_t *) strlenesque;
@@ -154,7 +152,8 @@ wchar_t *wmemcpy(wchar_t *, const wchar_t *, size_t) memcpyesque;
 wchar_t *wmempcpy(wchar_t *, const wchar_t *, size_t) memcpyesque;
 wchar_t *wmemmove(wchar_t *, const wchar_t *, size_t) memcpyesque;
 void *tinymemccpy(void *, const void *, int, size_t) memcpyesque;
-void *memmem(const void *, size_t, const void *, size_t) libcesque nosideeffect;
+void *memmem(const void *, size_t, const void *, size_t)
+libcesque nosideeffect;
 ssize_t strfmon(char *, size_t, const char *, ...);
 long a64l(const char *);
 char *l64a(long);
@@ -172,6 +171,7 @@ bool _escapedos(char16_t *, unsigned, const char16_t *, unsigned) libcesque;
 
 typedef unsigned mbstate_t;
 
+uint64_t _tpenc(uint32_t) pureconst;
 axdx_t tprecode8to16(char16_t *, size_t, const char *);
 axdx_t tprecode16to8(char *, size_t, const char16_t *);
 wchar_t *wcsncpy(wchar_t *, const wchar_t *, size_t);
@@ -195,11 +195,6 @@ int wctomb(char *, wchar_t);
 int wctob(wint_t);
 wint_t btowc(int);
 
-size_t strclen(const char *) nosideeffect;
-size_t strnclen(const char *, size_t) nosideeffect;
-size_t strclen16(const char16_t *) nosideeffect;
-size_t strnclen16(const char16_t *, size_t) nosideeffect;
-
 typedef unsigned wctype_t;
 wctype_t wctype(const char *) strlenesque;
 int iswctype(wint_t, wctype_t) pureconst;
@@ -208,14 +203,16 @@ typedef const int *wctrans_t;
 wctrans_t wctrans(const char *);
 wint_t towctrans(wint_t, wctrans_t);
 
+int getsubopt(char **, char *const *, char **) paramsnonnull();
 char *strsignal(int) returnsnonnull libcesque;
 char *strsignal_r(int, char[hasatleast 15]) returnsnonnull libcesque;
 char *strerror(int) returnsnonnull dontthrow nocallback;
-int strerror_r(int, char *, size_t) dontthrow nocallback;
-int strerror_wr(int, uint32_t, char *, size_t) dontthrow nocallback;
-char *_strerrno(int) nosideeffect libcesque;
-char *_strerdoc(int) nosideeffect libcesque;
-int __xpg_strerror_r(int, char *, size_t) dontthrow nocallback;
+int strerror_r(int, char *, size_t)
+dontthrow nocallback;
+int strerror_wr(int, uint32_t, char *, size_t)
+dontthrow nocallback;
+int __xpg_strerror_r(int, char *, size_t)
+dontthrow nocallback;
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

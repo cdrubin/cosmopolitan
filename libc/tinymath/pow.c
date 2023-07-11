@@ -30,13 +30,12 @@
 #include "libc/tinymath/exp_data.internal.h"
 #include "libc/tinymath/internal.h"
 #include "libc/tinymath/pow_data.internal.h"
-#ifndef TINY
 
 asm(".ident\t\"\\n\\n\
-Double-precision math functions (MIT License)\\n\
-Copyright 2018 ARM Limited\"");
+Optimized Routines (MIT License)\\n\
+Copyright 2022 ARM Limited\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /*
  * Double-precision x^y function.
@@ -380,4 +379,7 @@ double pow(double x, double y)
 	return exp_inline(ehi, elo, sign_bias);
 }
 
-#endif /* !TINY */
+__weak_reference(pow, __pow_finite);
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(pow, powl);
+#endif

@@ -22,15 +22,15 @@
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/fmt/conv.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/mem/mem.h"
 #include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/ex.h"
@@ -41,7 +41,7 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/termios.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_image.h"
 #include "tool/viz/lib/graphic.h"
 
@@ -177,8 +177,8 @@ static void GetOpts(int *argc, char *argv[]) {
   g_winsize.ws_col = 80;
   g_winsize.ws_row = 24;
   if (!g_flags.full && (!g_flags.width || !g_flags.height)) {
-    ioctl(STDIN_FILENO, TIOCGWINSZ, &g_winsize) != -1 ||
-        ioctl(STDOUT_FILENO, TIOCGWINSZ, &g_winsize);
+    tcgetwinsize(STDIN_FILENO, &g_winsize) != -1 ||
+        tcgetwinsize(STDOUT_FILENO, &g_winsize);
   }
   ttyquantsetup(g_flags.quant, kTtyQuantRgb, g_flags.blocks);
 }

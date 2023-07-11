@@ -36,7 +36,7 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /* origin: FreeBSD /usr/src/lib/msun/src/s_sin.c */
 /*
@@ -121,3 +121,7 @@ double sin(double x)
 		return -__cos(y[0], y[1]);
 	}
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(sin, sinl);
+#endif

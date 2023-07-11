@@ -29,9 +29,8 @@ LIBC_STR_A_CHECKS =						\
 
 LIBC_STR_A_DIRECTDEPS =						\
 	LIBC_INTRIN						\
-	LIBC_STUBS						\
-	LIBC_SYSV						\
 	LIBC_NEXGEN32E						\
+	LIBC_SYSV						\
 	THIRD_PARTY_COMPILER_RT
 
 LIBC_STR_A_DEPS :=						\
@@ -45,13 +44,16 @@ $(LIBC_STR_A).pkg:						\
 		$(LIBC_STR_A_OBJS)				\
 		$(foreach x,$(LIBC_STR_A_DIRECTDEPS),$($(x)_A).pkg)
 
+o/$(MODE)/libc/str/wow.o: private				\
+		CC = gcc
+
 o/$(MODE)/libc/str/wmemset.o					\
 o/$(MODE)/libc/str/memset16.o					\
 o/$(MODE)/libc/str/dosdatetimetounix.o: private			\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-O3
 
-o/$(MODE)/libc/str/getzipcdir.o					\
+o/$(MODE)/libc/str/getzipeocd.o					\
 o/$(MODE)/libc/str/getzipcdircomment.o				\
 o/$(MODE)/libc/str/getzipcdircommentsize.o			\
 o/$(MODE)/libc/str/getzipcdiroffset.o				\
@@ -63,14 +65,14 @@ o/$(MODE)/libc/str/getzipcfileuncompressedsize.o		\
 o/$(MODE)/libc/str/getziplfilecompressedsize.o			\
 o/$(MODE)/libc/str/getziplfileuncompressedsize.o		\
 o/$(MODE)/libc/str/getzipcfiletimestamps.o: private		\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-Os
 
 o/$(MODE)/libc/str/iswpunct.o					\
 o/$(MODE)/libc/str/iswupper.o					\
 o/$(MODE)/libc/str/iswlower.o					\
 o/$(MODE)/libc/str/iswseparator.o: private			\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-fno-jump-tables
 
 o/$(MODE)/libc/str/bcmp.o					\
@@ -81,13 +83,13 @@ o/$(MODE)/libc/str/timevaltowindowstime.o			\
 o/$(MODE)/libc/str/timespectowindowstime.o			\
 o/$(MODE)/libc/str/windowstimetotimeval.o			\
 o/$(MODE)/libc/str/windowstimetotimespec.o: private		\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-O2
 
 # we can't use compiler magic because:
 #   kprintf() depends on these functions
 o/$(MODE)/libc/fmt/strsignal.greg.o: private			\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-fpie					\
 			-ffreestanding				\
 			$(NO_MAGIC)

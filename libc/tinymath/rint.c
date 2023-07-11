@@ -26,6 +26,7 @@
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
+#include "libc/runtime/fenv.h"
 
 asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
@@ -40,6 +41,12 @@ asm(".include \"libc/disclaimer.inc\"");
 #endif
 static const double_t toint = 1/EPS;
 
+/**
+ * Rounds to integer in current rounding mode.
+ *
+ * The floating-point exception `FE_INEXACT` is raised if the result is
+ * different from the input.
+ */
 double rint(double x)
 {
 	union {double f; uint64_t i;} u = {x};
@@ -57,3 +64,7 @@ double rint(double x)
 		return s ? -0.0 : 0;
 	return y;
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(rint, rintl);
+#endif

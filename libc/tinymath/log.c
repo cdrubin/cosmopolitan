@@ -2,8 +2,8 @@
 │vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
-│  Musl Libc                                                                   │
-│  Copyright © 2005-2014 Rich Felker, et al.                                   │
+│  Optimized Routines                                                          │
+│  Copyright (c) 1999-2022, Arm Limited.                                       │
 │                                                                              │
 │  Permission is hereby granted, free of charge, to any person obtaining       │
 │  a copy of this software and associated documentation files (the             │
@@ -29,13 +29,12 @@
 #include "libc/math.h"
 #include "libc/tinymath/internal.h"
 #include "libc/tinymath/log_data.internal.h"
-#ifndef TINY
 
 asm(".ident\t\"\\n\\n\
-Double-precision math functions (MIT License)\\n\
-Copyright 2018 ARM Limited\"");
+Optimized Routines (MIT License)\\n\
+Copyright 2022 ARM Limited\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /*
  * Double-precision log(x) function.
@@ -53,12 +52,6 @@ asm(".include \"libc/disclaimer.inc\"");
 #define N (1 << LOG_TABLE_BITS)
 #define OFF 0x3fe6000000000000
 
-/* Top 16 bits of a double.  */
-static inline uint32_t top16(double x)
-{
-	return asuint64(x) >> 48;
-}
-
 /**
  * Returns natural logarithm of 𝑥.
  */
@@ -70,7 +63,7 @@ double log(double x)
 	int k, i;
 
 	ix = asuint64(x);
-	top = top16(x);
+	top = ix >> 48;
 #define LO asuint64(1.0 - 0x1p-4)
 #define HI asuint64(1.0 + 0x1.09p-4)
 	if (UNLIKELY(ix - LO < HI - LO)) {
@@ -148,4 +141,6 @@ double log(double x)
 	return eval_as_double(y);
 }
 
-#endif /* !TINY */
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(log, logl);
+#endif

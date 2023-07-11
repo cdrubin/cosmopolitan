@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/asancodes.h"
@@ -28,45 +29,111 @@
 #include "libc/thread/spawn.h"
 #include "libc/thread/tls.h"
 
-#define I(x) ((intptr_t)x)
+#define I(x) ((uintptr_t)x)
 
-void Bzero(void *, size_t) asm("bzero");  // gcc bug
+static char *_mktls_finish(struct CosmoTib **out_tib, char *mem,
+                           struct CosmoTib *tib) {
+  struct CosmoTib *old;
+  old = __get_tls();
+  bzero(tib, sizeof(*tib));
+  tib->tib_self = tib;
+  tib->tib_self2 = tib;
+  tib->tib_ftrace = old->tib_ftrace;
+  tib->tib_strace = old->tib_strace;
+  tib->tib_sigmask = old->tib_sigmask;
+  atomic_store_explicit(&tib->tib_tid, -1, memory_order_relaxed);
+  if (out_tib) {
+    *out_tib = tib;
+  }
+  return mem;
+}
+
+static char *_mktls_below(struct CosmoTib **out_tib) {
+  size_t siz;
+  char *mem, *tls;
+  struct CosmoTib *tib;
+
+  siz = ROUNDUP(I(_tls_size) + sizeof(*tib), _Alignof(struct CosmoTib));
+  siz = ROUNDUP(siz, _Alignof(struct CosmoTib));
+  mem = memalign(_Alignof(struct CosmoTib), siz);
+
+  if (IsAsan()) {
+    // poison the space between .tdata and .tbss
+    __asan_poison(mem + I(_tdata_size), I(_tbss_offset) - I(_tdata_size),
+                  kAsanProtected);
+  }
+
+  tib = (struct CosmoTib *)(mem + siz - sizeof(*tib));
+  tls = mem + siz - sizeof(*tib) - I(_tls_size);
+
+  // copy in initialized data section
+  if (I(_tdata_size)) {
+    if (IsAsan()) {
+      __asan_memcpy(tls, _tdata_start, I(_tdata_size));
+    } else {
+      memcpy(tls, _tdata_start, I(_tdata_size));
+    }
+  }
+
+  // clear .tbss
+  bzero(tls + I(_tbss_offset), I(_tbss_size));
+
+  // set up thread information block
+  return _mktls_finish(out_tib, mem, tib);
+}
+
+static char *_mktls_above(struct CosmoTib **out_tib) {
+  size_t hiz, siz;
+  char *mem, *dtv, *tls;
+  struct CosmoTib *tib, *old;
+
+  // allocate memory for tdata, tbss, and tib
+  hiz = ROUNDUP(sizeof(*tib) + 2 * sizeof(void *), I(_tls_align));
+  siz = hiz + I(_tls_size);
+  mem = memalign(TLS_ALIGNMENT, siz);
+  if (!mem) return 0;
+
+  // poison memory between tdata and tbss
+  if (IsAsan()) {
+    __asan_poison(mem + hiz + I(_tdata_size), I(_tbss_offset) - I(_tdata_size),
+                  kAsanProtected);
+  }
+
+  tib = (struct CosmoTib *)mem;
+  dtv = mem + sizeof(*tib);
+  tls = mem + hiz;
+
+  // set dtv
+  ((uintptr_t *)dtv)[0] = 1;
+  ((void **)dtv)[1] = tls;
+
+  // initialize .tdata
+  if (I(_tdata_size)) {
+    if (IsAsan()) {
+      __asan_memcpy(tls, _tdata_start, I(_tdata_size));
+    } else {
+      memmove(tls, _tdata_start, I(_tdata_size));
+    }
+  }
+
+  // clear .tbss
+  if (I(_tbss_size)) {
+    bzero(tls + I(_tbss_offset), I(_tbss_size));
+  }
+
+  // set up thread information block
+  return _mktls_finish(out_tib, mem, tib);
+}
 
 /**
  * Allocates thread-local storage memory for new thread.
  * @return buffer that must be released with free()
  */
 char *_mktls(struct CosmoTib **out_tib) {
-  char *tls;
-  struct CosmoTib *neu, *old;
   __require_tls();
-
-  // allocate memory for tdata, tbss, and tib
-  tls = memalign(TLS_ALIGNMENT, I(_tls_size) + sizeof(struct CosmoTib));
-  if (!tls) return 0;
-
-  // poison memory between tdata and tbss
-  if (IsAsan()) {
-    __asan_poison(tls + I(_tdata_size), I(_tbss_offset) - I(_tdata_size),
-                  kAsanProtected);
-  }
-
-  // initialize tdata and clear tbss
-  memmove(tls, _tdata_start, I(_tdata_size));
-  Bzero(tls + I(_tbss_offset), I(_tbss_size) + sizeof(struct CosmoTib));
-
-  // set up thread information block
-  old = __get_tls();
-  neu = (struct CosmoTib *)(tls + I(_tls_size));
-  neu->tib_self = neu;
-  neu->tib_self2 = neu;
-  neu->tib_ftrace = old->tib_ftrace;
-  neu->tib_strace = old->tib_strace;
-  neu->tib_sigmask = old->tib_sigmask;
-  atomic_store_explicit(&neu->tib_tid, -1, memory_order_relaxed);
-
-  if (out_tib) {
-    *out_tib = neu;
-  }
-  return tls;
+#ifdef __x86_64__
+  return _mktls_below(out_tib);
+#else
+  return _mktls_above(out_tib);
+#endif
 }

@@ -6,9 +6,7 @@ PKGS += LIBC_LOG
 LIBC_LOG_ARTIFACTS += LIBC_LOG_A
 LIBC_LOG = $(LIBC_LOG_A_DEPS) $(LIBC_LOG_A)
 LIBC_LOG_A = o/$(MODE)/libc/log/log.a
-LIBC_LOG_A_FILES :=					\
-	$(wildcard libc/log/thunks/*)			\
-	$(wildcard libc/log/*)
+LIBC_LOG_A_FILES := $(wildcard libc/log/*)
 LIBC_LOG_A_HDRS = $(filter %.h,$(LIBC_LOG_A_FILES))
 LIBC_LOG_A_SRCS_C = $(filter %.c,$(LIBC_LOG_A_FILES))
 LIBC_LOG_A_SRCS_S = $(filter %.S,$(LIBC_LOG_A_FILES))
@@ -37,12 +35,12 @@ LIBC_LOG_A_DIRECTDEPS =					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
 	LIBC_ZIPOS					\
+	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_DLMALLOC				\
 	THIRD_PARTY_GDTOA
 
@@ -59,15 +57,15 @@ $(LIBC_LOG_A).pkg:					\
 
 o/$(MODE)/libc/log/backtrace2.o				\
 o/$(MODE)/libc/log/backtrace3.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fno-sanitize=all
 
 o/$(MODE)/libc/log/checkfail.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-mgeneral-regs-only
 
 o/$(MODE)/libc/log/watch.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-ffreestanding
 
 o/$(MODE)/libc/log/watch.o				\
@@ -76,13 +74,14 @@ o/$(MODE)/libc/log/checkaligned.o			\
 o/$(MODE)/libc/log/checkfail.o				\
 o/$(MODE)/libc/log/checkfail_ndebug.o			\
 o/$(MODE)/libc/log/restoretty.o				\
-o/$(MODE)/libc/log/oncrash.o				\
+o/$(MODE)/libc/log/oncrash_amd64.o			\
+o/$(MODE)/libc/log/oncrash_arm64.o			\
 o/$(MODE)/libc/log/onkill.o				\
 o/$(MODE)/libc/log/startfatal.o				\
 o/$(MODE)/libc/log/startfatal_ndebug.o			\
 o/$(MODE)/libc/log/ubsan.o				\
 o/$(MODE)/libc/log/die.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			$(NO_MAGIC)
 
 LIBC_LOG_LIBS = $(foreach x,$(LIBC_LOG_ARTIFACTS),$($(x)))

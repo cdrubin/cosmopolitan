@@ -55,7 +55,7 @@
 STATIC_STACK_SIZE(0x100000);
 
 STATIC_YOINK("__die");
-STATIC_YOINK("zip_uri_support");
+STATIC_YOINK("zipos");
 
 PYTHON_YOINK("cosmo");
 PYTHON_YOINK("_locale");
@@ -215,7 +215,10 @@ Complete(const char *p, linenoiseCompletions *c)
 static void
 TerminalCompletion(const char *p, linenoiseCompletions *c)
 {
+    PyGILState_STATE gilstate;
+    gilstate = PyGILState_Ensure();
     Complete(p, c);
+    PyGILState_Release(gilstate);
     if (PyErr_Occurred()) {
         PyErr_Clear();
     }

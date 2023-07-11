@@ -26,7 +26,6 @@ THIRD_PARTY_MAXMIND_A_DIRECTDEPS =					\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV
 
 THIRD_PARTY_MAXMIND_A_DEPS :=						\
@@ -42,7 +41,7 @@ $(THIRD_PARTY_MAXMIND_A).pkg:						\
 		$(foreach x,$(THIRD_PARTY_MAXMIND_A_DIRECTDEPS),$($(x)_A).pkg)
 
 $(THIRD_PARTY_MAXMIND_A_OBJS): private					\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fdata-sections					\
 			-ffunction-sections
 

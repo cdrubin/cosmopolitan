@@ -16,14 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/pledge.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/landlock.h"
-#include "libc/calls/pledge.h"
 #include "libc/calls/pledge.internal.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/sched_param.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/sysinfo.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -39,7 +39,6 @@
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
-#include "libc/mem/copyfd.internal.h"
 #include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/kcpuids.h"
@@ -61,7 +60,7 @@
 #include "libc/sysv/consts/sched.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 // MANUALLY TESTED BY RUNNING
 //
@@ -69,7 +68,7 @@
 //
 
 STATIC_YOINK("strerror_wr");
-STATIC_YOINK("zip_uri_support");
+STATIC_YOINK("zipos");
 
 #define USAGE \
   "\
@@ -318,16 +317,20 @@ int SetLimit(int r, long lo, long hi) {
   return setrlimit(r, &lim);
 }
 
-int GetBaseCpuFreqMhz(void) {
+static int GetBaseCpuFreqMhz(void) {
   return KCPUIDS(16H, EAX) & 0x7fff;
 }
 
 int SetCpuLimit(int secs) {
+#ifdef __x86_64__
   int mhz, lim;
   if (secs <= 0) return 0;
   if (!(mhz = GetBaseCpuFreqMhz())) return eopnotsupp();
   lim = ceil(3100. / mhz * secs);
   return SetLimit(RLIMIT_CPU, lim, lim);
+#else
+  return 0;
+#endif
 }
 
 bool PathExists(const char *path) {
@@ -367,24 +370,6 @@ int UnveilIfExists(const char *path, const char *perm) {
     }
   }
   return -1;
-}
-
-void MakeProcessNice(void) {
-  if (!g_nice) return;
-  if (setpriority(PRIO_PROCESS, 0, 19) == -1) {
-    kprintf("error: setpriority(PRIO_PROCESS, 0, 19) failed: %m\n");
-    exit(23);
-  }
-  if (ioprio_set(IOPRIO_WHO_PROCESS, 0,
-                 IOPRIO_PRIO_VALUE(IOPRIO_CLASS_IDLE, 0)) == -1) {
-    kprintf("error: ioprio_set() failed: %m\n");
-    exit(23);
-  }
-  struct sched_param p = {sched_get_priority_min(SCHED_IDLE)};
-  if (sched_setscheduler(0, SCHED_IDLE, &p) == -1) {
-    kprintf("error: sched_setscheduler(SCHED_IDLE) failed: %m\n");
-    exit(23);
-  }
 }
 
 void ApplyFilesystemPolicy(unsigned long ipromises) {
@@ -537,7 +522,7 @@ int Extract(const char *from, const char *to, int mode) {
     close(fdin);
     return -1;
   }
-  if (_copyfd(fdin, fdout, -1) == -1) {
+  if (copyfd(fdin, fdout, -1) == -1) {
     close(fdout);
     close(fdin);
     return -1;
@@ -591,8 +576,9 @@ int main(int argc, char *argv[]) {
     NormalizeFileDescriptors();
   }
 
-  // set resource limits
-  MakeProcessNice();
+  if (g_nice) {
+    verynice();
+  }
 
   if (SetCpuLimit(g_cpuquota) == -1) {
     kprintf("error: setrlimit(%s) failed: %m\n", "RLIMIT_CPU");
@@ -673,7 +659,7 @@ int main(int argc, char *argv[]) {
   }
 
   // figure out where we want the dso
-  if (IsDynamicExecutable(prog)) {
+  if (_IsDynamicExecutable(prog)) {
     isdynamic = true;
     if ((s = getenv("TMPDIR")) ||  //
         (s = getenv("HOME")) ||    //
@@ -772,7 +758,8 @@ int main(int argc, char *argv[]) {
   if (!(~ipromises & (1ul << PROMISE_EXEC))) {
     g_promises = xstrcat(g_promises, ' ', "exec");
     if (!g_qflag) {
-      __pledge_mode |= PLEDGE_STDERR_LOGGING;
+      // TODO(jart): Fix me.
+      // __pledge_mode |= PLEDGE_STDERR_LOGGING;
     }
   }
   if (isdynamic) {

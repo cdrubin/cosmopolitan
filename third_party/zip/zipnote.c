@@ -26,6 +26,7 @@
 #include "libc/calls/struct/siginfo.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sicode.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/ss.h"
 
 /* Calculate size of static line buffer used in write (-w) mode. */
@@ -70,10 +71,6 @@ struct option_struct far options[] = {
 
 void zipnoteerr(int c, ZCONST char *h);
 void zipnotewarn(ZCONST char *a, ZCONST char *b);
-#endif
-
-#ifdef QDOS
-#define exit(p1) QDOSexit()
 #endif
 
 int set_filetype(out_path)

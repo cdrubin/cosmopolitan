@@ -28,10 +28,17 @@ THIRD_PARTY_PYTHON_CHECKS =						\
 	$(THIRD_PARTY_PYTHON_STAGE1_A).pkg 				\
 	$(THIRD_PARTY_PYTHON_STAGE2_A).pkg				\
 	$(THIRD_PARTY_PYTHON_PYTEST_A).pkg				\
-	$(THIRD_PARTY_PYTHON_PYTEST_PYMAINS:%=o/$(MODE)/%.runs)		\
 	$(THIRD_PARTY_PYTHON_HDRS:%=o/$(MODE)/%.ok)			\
 	o/$(MODE)/third_party/python/python.pkg				\
 	o/$(MODE)/third_party/python/freeze.pkg
+
+# TODO: Deal with aarch64 under qemu not making execve() easy.
+ifneq ($(MODE), dbg)
+ifeq ($(ARCH), x86_64)
+THIRD_PARTY_PYTHON_CHECKS +=						\
+	$(THIRD_PARTY_PYTHON_PYTEST_PYMAINS:%=o/$(MODE)/%.runs)
+endif
+endif
 
 ################################################################################
 # STAGE ONE - BOOTSTRAPPING PYTHON
@@ -149,6 +156,7 @@ THIRD_PARTY_PYTHON_HDRS =						\
 	third_party/python/Include/unicodeobject.h			\
 	third_party/python/Include/warnings.h				\
 	third_party/python/Include/weakrefobject.h			\
+	third_party/python/Modules/bextra.h				\
 	third_party/python/Modules/unicodedata.h			\
 	third_party/python/Modules/unicodedata_unidata.h		\
 	third_party/python/Modules/_decimal/docstrings.h		\
@@ -180,6 +188,7 @@ THIRD_PARTY_PYTHON_HDRS =						\
 	third_party/python/Modules/_sqlite/row.h			\
 	third_party/python/Modules/_sqlite/statement.h			\
 	third_party/python/Modules/_sqlite/util.h			\
+	third_party/python/Modules/cjkcodecs/xloadzd.h			\
 	third_party/python/Modules/cjkcodecs/cjkcodecs.h		\
 	third_party/python/Modules/cjkcodecs/multibytecodec.h		\
 	third_party/python/Modules/cjkcodecs/somanyencodings.h		\
@@ -236,7 +245,6 @@ THIRD_PARTY_PYTHON_INCS =						\
 	third_party/python/Python/opcode_targets.inc			\
 	third_party/python/Python/wordcode_helpers.inc			\
 	third_party/python/Python/ceval_gil.inc				\
-	third_party/python/Python/thread_nt.inc				\
 	third_party/python/Python/clinic/import.inc			\
 	third_party/python/Python/clinic/bltinmodule.inc		\
 	third_party/python/Modules/expat/asciitab.inc			\
@@ -291,6 +299,7 @@ THIRD_PARTY_PYTHON_INCS =						\
 	third_party/python/Modules/clinic/audioop.inc
 
 THIRD_PARTY_PYTHON_STAGE1_A_SRCS =					\
+	third_party/python/Modules/_threadmodule.c			\
 	third_party/python/Modules/_tracemalloc.c			\
 	third_party/python/Modules/faulthandler.c			\
 	third_party/python/Objects/abstract.c				\
@@ -408,7 +417,9 @@ THIRD_PARTY_PYTHON_STAGE1_A_SRCS =					\
 	third_party/python/Python/symtable.c				\
         third_party/python/Parser/listnode.c				\
 	third_party/python/Python/sysmodule.c				\
+	third_party/python/Python/thread.c				\
 	third_party/python/Python/traceback.c				\
+	third_party/python/Modules/bextra.c				\
 	third_party/python/Modules/unicodedata_3.2.0.c			\
 	third_party/python/Modules/unicodedata_bidirectionalnames.c	\
 	third_party/python/Modules/unicodedata_categorynames.c		\
@@ -449,9 +460,9 @@ THIRD_PARTY_PYTHON_STAGE1_A_DIRECTDEPS =				\
 	LIBC_NEXGEN32E							\
 	LIBC_NT_KERNEL32						\
 	LIBC_RUNTIME							\
+	LIBC_THREAD							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
 	LIBC_TIME							\
@@ -467,11 +478,13 @@ THIRD_PARTY_PYTHON_STAGE1_A_DEPS =					\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_PYTHON_STAGE1_A_DIRECTDEPS),$($(x))))
 
 o//third_party/python/Python/importlib.inc:				\
+		$(VM)							\
 		o/$(MODE)/third_party/python/freeze.com			\
 		third_party/python/Lib/importlib/_bootstrap.py
 	@$(COMPILE) -AFREEZE -wT$@ $^ $@
 
 o//third_party/python/Python/importlib_external.inc:			\
+		$(VM)							\
 		o/$(MODE)/third_party/python/freeze.com			\
 		third_party/python/Lib/importlib/_bootstrap_external.py
 	@$(COMPILE) -AFREEZE -wT$@ $^ $@
@@ -504,7 +517,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS_OBJS =					\
 
 THIRD_PARTY_PYTHON_STAGE2_A_DATA_OBJS =					\
 	$(THIRD_PARTY_PYTHON_STAGE2_A_DATA:%=o/$(MODE)/%.zip.o)		\
-	third_party/python/Lib/.zip.o
+	o/$(MODE)/third_party/python/Lib/.zip.o
 
 THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/runpythonmodule.c				\
@@ -544,6 +557,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/Modules/_io/textio.c				\
 	third_party/python/Modules/_hashmbedtls.c			\
 	third_party/python/Modules/_json.c				\
+	third_party/python/Modules/_multiprocessing/semaphore.c 	\
 	third_party/python/Modules/_multiprocessing/multiprocessing.c 	\
 	third_party/python/Modules/_localemodule.c			\
 	third_party/python/Modules/_lsprof.c				\
@@ -573,6 +587,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/Modules/atexitmodule.c			\
 	third_party/python/Modules/audioop.c				\
 	third_party/python/Modules/binascii.c				\
+	third_party/python/Modules/cjkcodecs/xloadzd.c			\
 	third_party/python/Modules/cjkcodecs/_codecs_cn.c		\
 	third_party/python/Modules/cjkcodecs/_codecs_hk.c		\
 	third_party/python/Modules/cjkcodecs/_codecs_iso2022.c		\
@@ -673,6 +688,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/Modules/mmapmodule.c				\
 	third_party/python/Modules/parsermodule.c			\
 	third_party/python/Modules/posixmodule.c			\
+	third_party/python/Modules/tokenbucket.c			\
 	third_party/python/Modules/pwdmodule.c				\
 	third_party/python/Modules/pyexpat.c				\
 	third_party/python/Modules/resource.c				\
@@ -721,6 +737,28 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 	third_party/python/Lib/_sysconfigdata_m_cosmo_x86_64_cosmo.py		\
 	third_party/python/Lib/_threading_local.py				\
 	third_party/python/Lib/_weakrefset.py					\
+	third_party/python/Lib/asyncio/base_events.py	\
+	third_party/python/Lib/asyncio/base_futures.py	\
+	third_party/python/Lib/asyncio/base_subprocess.py	\
+	third_party/python/Lib/asyncio/base_tasks.py	\
+	third_party/python/Lib/asyncio/compat.py	\
+	third_party/python/Lib/asyncio/constants.py	\
+	third_party/python/Lib/asyncio/coroutines.py	\
+	third_party/python/Lib/asyncio/events.py	\
+	third_party/python/Lib/asyncio/futures.py	\
+	third_party/python/Lib/asyncio/__init__.py	\
+	third_party/python/Lib/asyncio/locks.py	\
+	third_party/python/Lib/asyncio/log.py	\
+	third_party/python/Lib/asyncio/proactor_events.py	\
+	third_party/python/Lib/asyncio/protocols.py	\
+	third_party/python/Lib/asyncio/queues.py	\
+	third_party/python/Lib/asyncio/selector_events.py	\
+	third_party/python/Lib/asyncio/sslproto.py	\
+	third_party/python/Lib/asyncio/streams.py	\
+	third_party/python/Lib/asyncio/subprocess.py	\
+	third_party/python/Lib/asyncio/tasks.py	\
+	third_party/python/Lib/asyncio/transports.py	\
+	third_party/python/Lib/asyncio/unix_events.py	\
 	third_party/python/Lib/abc.py						\
 	third_party/python/Lib/aifc.py						\
 	third_party/python/Lib/antigravity.py					\
@@ -756,6 +794,11 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 	third_party/python/Lib/difflib.py					\
 	third_party/python/Lib/dis.py						\
 	third_party/python/Lib/dummy_threading.py				\
+	third_party/python/Lib/concurrent/__init__.py			\
+	third_party/python/Lib/concurrent/futures/__init__.py			\
+	third_party/python/Lib/concurrent/futures/process.py			\
+	third_party/python/Lib/concurrent/futures/thread.py			\
+	third_party/python/Lib/concurrent/futures/_base.py			\
 	third_party/python/Lib/email/__init__.py				\
 	third_party/python/Lib/email/_encoded_words.py				\
 	third_party/python/Lib/email/_header_value_parser.py			\
@@ -1127,16 +1170,17 @@ THIRD_PARTY_PYTHON_STAGE2_A_DIRECTDEPS =				\
 	LIBC_NEXGEN32E							\
 	LIBC_NT_KERNEL32						\
 	LIBC_RUNTIME							\
+	LIBC_THREAD							\
 	LIBC_SOCK							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
 	LIBC_TIME							\
 	LIBC_TINYMATH							\
 	LIBC_X								\
 	LIBC_ZIPOS							\
+	NET_HTTP							\
 	NET_HTTPS							\
 	THIRD_PARTY_BZIP2						\
 	THIRD_PARTY_GDTOA						\
@@ -1195,7 +1239,7 @@ THIRD_PARTY_PYTHON_PYTEST_A_PYS =						\
 	third_party/python/Lib/test/autotest.py					\
 	third_party/python/Lib/test/bytecode_helper.py				\
 	third_party/python/Lib/test/coding20731.py				\
-	third_party/python/Lib/test/datetimetester.py					\
+	third_party/python/Lib/test/datetimetester.py				\
 	third_party/python/Lib/test/dis_module.py				\
 	third_party/python/Lib/test/doctest_aliases.py				\
 	third_party/python/Lib/test/double_const.py				\
@@ -1231,6 +1275,7 @@ THIRD_PARTY_PYTHON_PYTEST_A_PYS =						\
 	third_party/python/Lib/test/pydoc_mod.py				\
 	third_party/python/Lib/test/pydocfodder.py				\
 	third_party/python/Lib/test/re_tests.py					\
+	third_party/python/Lib/test/lock_tests.py				\
 	third_party/python/Lib/test/reperf.py					\
 	third_party/python/Lib/test/sample_doctest.py				\
 	third_party/python/Lib/test/sample_doctest_no_docstrings.py		\
@@ -1844,7 +1889,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_index.py				\
 	third_party/python/Lib/test/test_int.py					\
 	third_party/python/Lib/test/test_int_literal.py				\
-	third_party/python/Lib/test/test_ioctl.py				\
 	third_party/python/Lib/test/test_ipaddress.py				\
 	third_party/python/Lib/test/test_isinstance.py				\
 	third_party/python/Lib/test/test_iter.py				\
@@ -1883,6 +1927,8 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_pow.py					\
 	third_party/python/Lib/test/test_pprint.py				\
 	third_party/python/Lib/test/test_print.py				\
+	third_party/python/Lib/test/test_thread.py				\
+	third_party/python/Lib/test/test_threadsignals.py			\
 	third_party/python/Lib/test/test_profile.py				\
 	third_party/python/Lib/test/test_property.py				\
 	third_party/python/Lib/test/test_pstats.py				\
@@ -1930,7 +1976,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_symbol.py				\
 	third_party/python/Lib/test/test_symtable.py				\
 	third_party/python/Lib/test/test_syntax.py				\
-	third_party/python/Lib/test/test_sys.py					\
 	third_party/python/Lib/test/test_sys_setprofile.py			\
 	third_party/python/Lib/test/test_syslog.py				\
 	third_party/python/Lib/test/test_tarfile.py				\
@@ -1971,7 +2016,13 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_zipapp.py				\
 	third_party/python/Lib/test/test_zlib.py
 
+# TODO: test_threading passing probably requires more mutexes in libc/calls/
+# TODO: test_sys is potentially flaky now that we have threads
+
 THIRD_PARTY_PYTHON_PYTEST_TODOS =						\
+	third_party/python/Lib/test/test_sys.py					\
+	third_party/python/Lib/test/test_threading.py				\
+	third_party/python/Lib/test/test_threading_local.py			\
 	third_party/python/Lib/test/mp_preload.py				\
 	third_party/python/Lib/test/outstanding_bugs.py				\
 	third_party/python/Lib/test/pythoninfo.py				\
@@ -2098,1526 +2149,1168 @@ o/$(MODE)/third_party/python/Lib/test/test_wsgiref.py.runs: private	\
 
 o/$(MODE)/third_party/python/Lib/test/test_epoll.py.runs:		\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
+o/$(MODE)/third_party/python/Lib/test/test_wsgiref.py.runs:		\
+		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
 o/$(MODE)/third_party/python/Lib/test/test_fcntl.py.runs:		\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc flock
 o/$(MODE)/third_party/python/Lib/test/test_signal.py.runs:		\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc flock inet
 o/$(MODE)/third_party/python/Lib/test/test_timeout.py.runs:		\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
-o/$(MODE)/third_party/python/Lib/test/test_ioctl.py.runs:		\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc tty
 
-o/$(MODE)/third_party/python/Lib/test/test_grammar.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_grammar $(PYTESTARGS)
+PYTHONTESTER = $(VM) o/$(MODE)/third_party/python/pythontester.com
 
-o/$(MODE)/third_party/python/Lib/test/test_set.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_set $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_grammar.py.runs: $(PYTHONTESTER)
+	$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_grammar $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_genexps.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_genexps $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_set.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_set $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_genexps.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_genexps $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_sqlite.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sqlite $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_sqlite.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sqlite $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_bz2.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_bz2 $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_bz2.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_bz2 $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_zlib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_zlib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_zlib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_zlib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_opcodes.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_opcodes $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_opcodes.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_opcodes $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_marshal.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_marshal $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_marshal.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_marshal $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_pow.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pow $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_pow.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pow $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_binascii.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_binascii $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_binascii.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_binascii $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_binhex.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_binhex $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_binhex.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_binhex $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_capi.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_capi $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_capi.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_capi $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test__locale.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test__locale $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test__locale.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test__locale $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_binop.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_binop $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_binop.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_binop $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test___future__.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test___future__ $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test___future__.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test___future__ $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test__opcode.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test__opcode $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test__opcode.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test__opcode $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_abc.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_abc $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_abc.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_abc $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_bytes.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_bytes $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_bytes.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_bytes $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_setcomps.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_setcomps $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_setcomps.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_setcomps $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_itertools.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_itertools $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_itertools.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_itertools $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_listcomps.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_listcomps $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_listcomps.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_listcomps $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_aifc.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_aifc $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_aifc.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_aifc $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_audioop.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_audioop $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_audioop.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_audioop $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_bool.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_bool $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_bool.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_bool $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_base64.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_base64 $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_base64.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_base64 $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_baseexception.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_baseexception $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_baseexception.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_baseexception $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_array.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_array $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_array.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_array $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_builtin.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_builtin $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_builtin.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_builtin $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_charmapcodec.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_charmapcodec $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_charmapcodec.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_charmapcodec $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_codecs.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecs $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_codecs.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecs $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_codeop.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codeop $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_codeop.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codeop $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_cgi.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cgi $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_cgi.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cgi $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_abstract_numbers.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_abstract_numbers $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_abstract_numbers.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_abstract_numbers $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_augassign.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_augassign $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_augassign.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_augassign $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_bigaddrspace.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_bigaddrspace $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_bigaddrspace.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_bigaddrspace $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_class.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_class $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_class.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_class $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_call.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_call $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_call.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_call $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_buffer.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_buffer $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_buffer.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_buffer $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_bufio.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_bufio $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_bufio.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_bufio $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_enum.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_enum $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_enum.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_enum $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_code.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_code $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_code.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_code $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_cmd.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cmd $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_cmd.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cmd $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_pwd.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pwd $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_pwd.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pwd $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_cmath.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cmath $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_cmath.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cmath $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_defaultdict.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_defaultdict $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_defaultdict.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_defaultdict $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_decorators.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_decorators $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_decorators.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_decorators $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_copy.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_copy $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_copy.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_copy $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_csv.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_csv $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_csv.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_csv $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_difflib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_difflib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_difflib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_difflib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_colorsys.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_colorsys $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_colorsys.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_colorsys $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_compare.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_compare $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_compare.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_compare $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_copyreg.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_copyreg $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_copyreg.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_copyreg $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_collections.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_collections $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_collections.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_collections $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_format.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_format $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_format.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_format $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_fractions.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_fractions $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_fractions.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fractions $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_eof.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_eof $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_eof.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_eof $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_fnmatch.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_fnmatch $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_fnmatch.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fnmatch $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_frame.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_frame $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_frame.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_frame $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_dummy_threading.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dummy_threading $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_dummy_threading.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dummy_threading $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_dynamic.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dynamic $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_dynamic.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dynamic $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_dict.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dict $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_dict.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dict $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_wsgiref.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_wsgiref $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_wsgiref.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_wsgiref $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_wave.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_wave $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_wave.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_wave $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_urlparse.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_urlparse $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_urlparse.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_urlparse $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_userdict.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_userdict $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_userdict.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_userdict $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_userlist.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_userlist $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_userlist.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_userlist $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_userstring.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_userstring $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_userstring.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_userstring $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_utf8source.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_utf8source $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_utf8source.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_utf8source $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_uu.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_uu $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_uu.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_uu $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test__encoded_words.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test__encoded_words $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test__encoded_words.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test__encoded_words $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test__header_value_parser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test__header_value_parser $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test__header_value_parser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test__header_value_parser $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_asian_codecs.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_asian_codecs $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_asian_codecs.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_asian_codecs $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_contentmanager.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_contentmanager $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_contentmanager.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_contentmanager $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_defect_handling.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_defect_handling $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_defect_handling.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_defect_handling $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_email.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_email $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_email.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_email $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_generator.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_generator $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_generator.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_generator $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_headerregistry.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_headerregistry $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_headerregistry.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_headerregistry $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_inversion.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_inversion $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_inversion.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_inversion $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_message.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_message $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_message.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_message $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_parser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_parser $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_parser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_parser $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_pickleable.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_pickleable $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_pickleable.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_pickleable $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_policy.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_policy $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_policy.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_policy $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_email/test_utils.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_email.test_utils $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_email/test_utils.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_email.test_utils $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_strtod.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_strtod $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_strtod.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_strtod $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_struct.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_struct $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_struct.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_struct $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_structmembers.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_structmembers $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_structmembers.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_structmembers $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_hash.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_hash $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_hash.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_hash $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_heapq.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_heapq $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_heapq.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_heapq $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_operator.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_operator $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_operator.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_operator $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_optparse.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_optparse $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_optparse.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_optparse $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_finalization.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_finalization $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_finalization.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_finalization $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_enumerate.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_enumerate $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_enumerate.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_enumerate $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_errno.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_errno $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_errno.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_errno $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_html.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_html $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_html.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_html $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_htmlparser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_htmlparser $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_htmlparser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_htmlparser $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_http_cookiejar.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_http_cookiejar $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_http_cookiejar.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_http_cookiejar $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_http_cookies.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_http_cookies $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_http_cookies.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_http_cookies $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_list.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_list $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_list.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_list $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_long.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_long $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_long.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_long $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_longexp.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_longexp $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_longexp.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_longexp $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_glob.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_glob $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_global.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_global $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_ipaddress.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_ipaddress $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_isinstance.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_isinstance $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_iter.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_iter $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_json/__main__.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_json $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_tarfile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_tarfile $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_iterlen.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_iterlen $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_stat.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_stat $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_memoryio.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_memoryio $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_memoryview.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_memoryview $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_metaclass.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_metaclass $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_mimetypes.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_mimetypes $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_kdf.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_kdf $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_cosmo.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cosmo $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_scratch.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_scratch $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_hashlib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_hashlib $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_complex.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_complex $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_funcattrs.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_funcattrs $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_functools.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_functools $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_int.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_int $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_int_literal.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_int_literal $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_bisect.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_bisect $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_pyexpat.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pyexpat $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_ioctl.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_ioctl $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_getopt.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_getopt $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_sort.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sort $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_slice.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_slice $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_decimal.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_decimal $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_deque.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_deque $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_mmap.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_mmap $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_poll.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_poll $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_robotparser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_robotparser $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_re.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_re $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_range.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_range $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_sax.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sax $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_scope.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_scope $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_stringprep.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_stringprep $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_syntax.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_syntax $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_unicodedata.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unicodedata $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_unpack.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unpack $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_unpack_ex.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unpack_ex $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_file.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_file $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_uuid.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_uuid $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_filecmp.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_filecmp $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_fileinput.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_fileinput $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_fileio.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_fileio $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_float.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_float $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_pickle.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pickle $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_pickletools.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pickletools $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_tuple.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_tuple $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_reprlib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_reprlib $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_strftime.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_strftime $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_quopri.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_quopri $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_with.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_with $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_raise.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_raise $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_yield_from.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_yield_from $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_typechecks.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_typechecks $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_types.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_types $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_random.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_random $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_typing.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_typing $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_unary.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unary $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_print.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_print $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_pprint.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pprint $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_secrets.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_secrets $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_select.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_select $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_selectors.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_selectors $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_contains.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_contains $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_super.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_super $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_unicode.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unicode $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_unicode_file.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unicode_file $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_unicode_identifiers.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unicode_identifiers $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_glob.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_glob $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_global.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_global $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_ipaddress.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_ipaddress $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_isinstance.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_isinstance $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_iter.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_iter $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_json/__main__.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_json $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_tarfile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_tarfile $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_iterlen.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_iterlen $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_stat.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_stat $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_memoryio.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_memoryio $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_memoryview.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_memoryview $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_metaclass.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_metaclass $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_mimetypes.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_mimetypes $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_kdf.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_kdf $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_cosmo.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cosmo $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_scratch.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_scratch $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_hashlib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_hashlib $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_complex.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_complex $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_funcattrs.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_funcattrs $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_functools.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_functools $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_int.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_int $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_int_literal.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_int_literal $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_bisect.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_bisect $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_pyexpat.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pyexpat $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_ioctl.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_ioctl $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_getopt.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_getopt $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_sort.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sort $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_slice.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_slice $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_decimal.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_decimal $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_deque.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_deque $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_mmap.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_mmap $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_poll.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_poll $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_robotparser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_robotparser $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_re.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_re $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_range.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_range $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_sax.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sax $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_scope.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_scope $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_stringprep.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_stringprep $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_syntax.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_syntax $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_unicodedata.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unicodedata $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_unpack.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unpack $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_unpack_ex.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unpack_ex $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_file.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_file $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_uuid.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_uuid $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_filecmp.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_filecmp $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_fileinput.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fileinput $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_fileio.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fileio $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_float.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_float $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_pickle.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pickle $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_pickletools.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pickletools $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_tuple.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_tuple $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_reprlib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_reprlib $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_strftime.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_strftime $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_quopri.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_quopri $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_with.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_with $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_raise.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_raise $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_yield_from.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_yield_from $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_typechecks.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_typechecks $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_types.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_types $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_random.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_random $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_typing.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_typing $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_unary.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unary $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_print.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_print $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_thread.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_thread $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_threading.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_threading $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_threading_local.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_threading_local $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_threadsignals.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_threadsignals $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_pprint.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pprint $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_secrets.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_secrets $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_select.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_select $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_selectors.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_selectors $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_contains.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_contains $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_super.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_super $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_unicode.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unicode $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_unicode_file.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unicode_file $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_unicode_identifiers.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unicode_identifiers $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because exdev renaming
-# o/$(MODE)/third_party/python/Lib/test/test_unicode_file_functions.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unicode_file_functions $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_unicode_file_functions.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unicode_file_functions $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_textwrap.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_textwrap $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_textwrap.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_textwrap $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_pulldom.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pulldom $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_pulldom.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pulldom $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_minidom.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_minidom $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_minidom.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_minidom $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_xml_dom_minicompat.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_xml_dom_minicompat $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_xml_dom_minicompat.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_xml_dom_minicompat $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_xml_etree_c.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_xml_etree_c $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_xml_etree_c.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_xml_etree_c $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_coroutines.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_coroutines $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_coroutines.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_coroutines $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_tempfile.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_tempfile $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_tempfile.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_tempfile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_normalization.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_normalization $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_normalization.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_normalization $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because it needs /bin/sh
-# o/$(MODE)/third_party/python/Lib/test/test_os.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_os $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_os.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_os $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_logging.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_logging $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_logging.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_logging $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_io.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_io $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_io.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_io $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_gzip.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_gzip $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_gzip.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_gzip $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_tracemalloc.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_tracemalloc $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_tracemalloc.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_tracemalloc $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_configparser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_configparser $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_configparser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_configparser $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_flufl.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_flufl $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_flufl.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_flufl $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_keyword.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_keyword $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_keywordonlyarg.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_keywordonlyarg $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_sys.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sys $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_cgitb.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cgitb $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_asyncgen.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_asyncgen $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_runpy.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_runpy $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_doctest.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_doctest $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_doctest2.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_doctest2 $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_calendar.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_calendar $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_asynchat.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_asynchat $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_asdl_parser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_asdl_parser $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_atexit.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_atexit $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_dis.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dis $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_asyncore.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_asyncore $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_epoll.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_epoll $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_cmd_line.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cmd_line $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_cmd_line_script.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cmd_line_script $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_code_module.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_code_module $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codeccallbacks.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codeccallbacks $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecmaps_cn.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecmaps_cn $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecmaps_jp.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecmaps_jp $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecencodings_cn.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecencodings_cn $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecencodings_hk.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecencodings_hk $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecmaps_hk.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecmaps_hk $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecmaps_kr.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecmaps_kr $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecmaps_tw.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecmaps_tw $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecencodings_iso2022.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecencodings_iso2022 $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecencodings_jp.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecencodings_jp $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecencodings_kr.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecencodings_kr $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_codecencodings_tw.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_codecencodings_tw $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_compile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_compile $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_contextlib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_contextlib $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_cprofile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_cprofile $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_crashers.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_crashers $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_crypt.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_crypt $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_datetime.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_datetime $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_descrtut.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_descrtut $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_devpoll.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_devpoll $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_dict_version.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dict_version $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_dictcomps.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dictcomps $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_dictviews.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dictviews $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_dtrace.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dtrace $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_dynamicclassattribute.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_dynamicclassattribute $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_eintr.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_eintr $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_exception_hierarchy.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_exception_hierarchy $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_xmlrpc_net.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_xmlrpc_net $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_bigmem.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_bigmem $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_exception_variations.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_exception_variations $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_exceptions.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_exceptions $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_time.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_time $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_docxmlrpc.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_docxmlrpc $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_extcall.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_extcall $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_faulthandler.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_faulthandler $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_fcntl.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_fcntl $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_file_eintr.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_file_eintr $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_fork1.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_fork1 $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_fstring.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_fstring $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_ftplib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_ftplib $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_future.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_future $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_future3.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_future3 $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_future4.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_future4 $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_future5.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_future5 $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_gc.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_gc $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_gdb.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_gdb $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_generator_stop.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_generator_stop $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_generators.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_generators $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_genericpath.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_genericpath $(PYTESTARGS)
-
-o/$(MODE)/third_party/python/Lib/test/test_getargs2.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_getargs2 $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_keyword.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_keyword $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_keywordonlyarg.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_keywordonlyarg $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_sys.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sys $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_cgitb.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cgitb $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_asyncgen.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_asyncgen $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_runpy.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_runpy $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_doctest.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_doctest $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_doctest2.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_doctest2 $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_calendar.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_calendar $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_asynchat.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_asynchat $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_asdl_parser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_asdl_parser $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_atexit.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_atexit $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_dis.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dis $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_asyncore.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_asyncore $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_epoll.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_epoll $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_cmd_line.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cmd_line $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_cmd_line_script.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cmd_line_script $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_code_module.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_code_module $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codeccallbacks.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codeccallbacks $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecmaps_cn.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecmaps_cn $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecmaps_jp.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecmaps_jp $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecencodings_cn.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecencodings_cn $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecencodings_hk.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecencodings_hk $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecmaps_hk.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecmaps_hk $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecmaps_kr.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecmaps_kr $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecmaps_tw.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecmaps_tw $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecencodings_iso2022.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecencodings_iso2022 $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecencodings_jp.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecencodings_jp $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecencodings_kr.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecencodings_kr $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_codecencodings_tw.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecencodings_tw $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_compile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_compile $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_contextlib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_contextlib $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_cprofile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cprofile $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_crashers.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_crashers $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_crypt.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_crypt $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_datetime.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_datetime $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_descrtut.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_descrtut $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_devpoll.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_devpoll $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_dict_version.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dict_version $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_dictcomps.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dictcomps $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_dictviews.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dictviews $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_dtrace.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dtrace $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_dynamicclassattribute.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_dynamicclassattribute $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_eintr.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_eintr $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_exception_hierarchy.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_exception_hierarchy $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_xmlrpc_net.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_xmlrpc_net $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_bigmem.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_bigmem $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_exception_variations.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_exception_variations $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_exceptions.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_exceptions $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_time.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_time $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_docxmlrpc.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_docxmlrpc $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_extcall.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_extcall $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_faulthandler.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_faulthandler $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_fcntl.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fcntl $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_file_eintr.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_file_eintr $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_fork1.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fork1 $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_fstring.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fstring $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_ftplib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_ftplib $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_future.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_future $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_future3.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_future3 $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_future4.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_future4 $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_future5.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_future5 $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_gc.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_gc $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_gdb.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_gdb $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_generator_stop.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_generator_stop $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_generators.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_generators $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_genericpath.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_genericpath $(PYTESTARGS)
+
+o/$(MODE)/third_party/python/Lib/test/test_getargs2.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_getargs2 $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it reads /etc/passwd
-# o/$(MODE)/third_party/python/Lib/test/test_getpass.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_getpass $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_getpass.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_getpass $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_gettext.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_gettext $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_gettext.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_gettext $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it reads /etc/passwd
-# o/$(MODE)/third_party/python/Lib/test/test_grp.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_grp $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_grp.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_grp $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_imaplib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_imaplib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_imaplib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_imaplib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_imghdr.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_imghdr $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_imghdr.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_imghdr $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_imp.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_imp $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_imp.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_imp $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_index.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_index $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_index.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_index $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_kqueue.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_kqueue $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_kqueue.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_kqueue $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_largefile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_largefile $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_largefile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_largefile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_linecache.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_linecache $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_linecache.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_linecache $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_locale.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_locale $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_locale.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_locale $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_macpath.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_macpath $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_macpath.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_macpath $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_macurl2path.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_macurl2path $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_macurl2path.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_macurl2path $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because exdev renaming
-# o/$(MODE)/third_party/python/Lib/test/test_mailbox.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_mailbox $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_mailbox.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_mailbox $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_mailcap.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_mailcap $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_mailcap.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_mailcap $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_module.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_module $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_module.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_module $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_modulefinder.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_modulefinder $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_modulefinder.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_modulefinder $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_multibytecodec.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_multibytecodec $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_multibytecodec.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_multibytecodec $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_fork.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_multiprocessing_fork $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_fork.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_multiprocessing_fork $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_forkserver.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_multiprocessing_forkserver $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_forkserver.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_multiprocessing_forkserver $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_main_handling.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_multiprocessing_main_handling $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_main_handling.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_multiprocessing_main_handling $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_spawn.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_multiprocessing_spawn $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_multiprocessing_spawn.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_multiprocessing_spawn $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_netrc.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_netrc $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_netrc.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_netrc $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_nis.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_nis $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_nis.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_nis $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_nntplib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_nntplib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_nntplib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_nntplib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_ntpath.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_ntpath $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_ntpath.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_ntpath $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_numeric_tower.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_numeric_tower $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_numeric_tower.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_numeric_tower $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_ossaudiodev.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_ossaudiodev $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_ossaudiodev.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_ossaudiodev $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_parser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_parser $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_parser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_parser $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because exdev renaming
-# o/$(MODE)/third_party/python/Lib/test/test_pathlib.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pathlib $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_pathlib.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pathlib $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_pdb.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pdb $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_pdb.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pdb $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_peepholer.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_peepholer $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_peepholer.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_peepholer $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because it needs /bin/sh
-# o/$(MODE)/third_party/python/Lib/test/test_pipes.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pipes $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_pipes.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pipes $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_pkgimport.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pkgimport $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_pkgimport.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pkgimport $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_platform.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_platform $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_platform.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_platform $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_plistlib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_plistlib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_plistlib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_plistlib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_httplib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_httplib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_httplib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_httplib $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because it needs /bin/sh
-# o/$(MODE)/third_party/python/Lib/test/test_popen.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_popen $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_popen.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_popen $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_poplib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_poplib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_poplib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_poplib $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_posix.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_posix $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_posix.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_posix $(PYTESTARGS)
 
 # [jart] unsupported with landlock right now because exdev renaming
-# o/$(MODE)/third_party/python/Lib/test/test_posixpath.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_posixpath $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_posixpath.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_posixpath $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_profile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_profile $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_profile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_profile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_property.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_property $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_property.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_property $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_pstats.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pstats $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_pstats.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pstats $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_pty.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pty $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_pty.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pty $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_py_compile.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_py_compile $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_py_compile.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_py_compile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_pyclbr.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pyclbr $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_pyclbr.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pyclbr $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_pydoc.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_pydoc $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_pydoc.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_pydoc $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_readline.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_readline $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_readline.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_readline $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_regrtest.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_regrtest $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_regrtest.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_regrtest $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_repl.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_repl $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_repl.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_repl $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_resource.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_resource $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_resource.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_resource $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_richcmp.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_richcmp $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_richcmp.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_richcmp $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_sched.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sched $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_sched.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sched $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_script_helper.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_script_helper $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_script_helper.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_script_helper $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_shlex.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_shlex $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_shlex.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_shlex $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_shutil.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_shutil $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_shutil.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_shutil $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_signal.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_signal $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_signal.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_signal $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_site.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_site $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_site.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_site $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_smtpd.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_smtpd $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_smtpd.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_smtpd $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_smtplib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_smtplib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_smtplib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_smtplib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_smtpnet.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_smtpnet $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_smtpnet.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_smtpnet $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_sndhdr.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sndhdr $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_sndhdr.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sndhdr $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_socket.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_socket $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_socket.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_socket $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_socketserver.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_socketserver $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_socketserver.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_socketserver $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_spwd.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_spwd $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_spwd.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_spwd $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_startfile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_startfile $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_startfile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_startfile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_statistics.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_statistics $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_statistics.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_statistics $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_string.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_string $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_string.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_string $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_string_literals.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_string_literals $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_string_literals.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_string_literals $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_strptime.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_strptime $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_strptime.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_strptime $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_structseq.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_structseq $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_structseq.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_structseq $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_subclassinit.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_subclassinit $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_subclassinit.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_subclassinit $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_subprocess.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_subprocess $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_subprocess.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_subprocess $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_sunau.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sunau $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_sunau.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sunau $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_support.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_support $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_support.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_support $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_symbol.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_symbol $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_symbol.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_symbol $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_symtable.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_symtable $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_symtable.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_symtable $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_sys_setprofile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_sys_setprofile $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_sys_setprofile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_sys_setprofile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_syslog.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_syslog $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_syslog.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_syslog $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_telnetlib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_telnetlib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_telnetlib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_telnetlib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_threadedtempfile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_threadedtempfile $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_threadedtempfile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_threadedtempfile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_timeit.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_timeit $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_timeit.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_timeit $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_timeout.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_timeout $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_timeout.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_timeout $(PYTESTARGS)
 
 # TODO(jart): what's wrong with this since landlock?
-# o/$(MODE)/third_party/python/Lib/test/test_tokenize.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_tokenize $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_tokenize.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_tokenize $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_trace.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_trace $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_trace.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_trace $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_traceback.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_traceback $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_traceback.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_traceback $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_turtle.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_turtle $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_turtle.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_turtle $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_unittest.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_unittest $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_unittest.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_unittest $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_univnewlines.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_univnewlines $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_univnewlines.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_univnewlines $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_urllib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_urllib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_urllib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_urllib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_urllib2.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_urllib2 $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_urllib2.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_urllib2 $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_urllib2_localnet.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_urllib2_localnet $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_urllib2_localnet.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_urllib2_localnet $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_urllib2net.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_urllib2net $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_urllib2net.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_urllib2net $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_urllib_response.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_urllib_response $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_urllib_response.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_urllib_response $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_urllibnet.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_urllibnet $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_urllibnet.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_urllibnet $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_wait3.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_wait3 $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_wait3.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_wait3 $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_wait4.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_wait4 $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_wait4.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_wait4 $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_webbrowser.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_webbrowser $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_webbrowser.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_webbrowser $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_xdrlib.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_xdrlib $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_xdrlib.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_xdrlib $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_weakref.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_weakref $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_weakref.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_weakref $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_weakset.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_weakset $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_weakset.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_weakset $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_zipapp.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_zipapp $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_zipapp.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_zipapp $(PYTESTARGS)
 
 # [jart] incompatible with landlock because it uses current directory for temp files
-# o/$(MODE)/third_party/python/Lib/test/test_zipimport.py.runs: \
-# 		o/$(MODE)/third_party/python/pythontester.com
-# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_zipimport $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test_zipimport.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_zipimport $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_zipfile.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_zipfile $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_zipfile.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_zipfile $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_zipfile64.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_zipfile64 $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_zipfile64.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_zipfile64 $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/mp_preload.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.mp_preload $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/mp_preload.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.mp_preload $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/bisect.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.bisect $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/bisect.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.bisect $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/signalinterproctester.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.signalinterproctester $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/signalinterproctester.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.signalinterproctester $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/pythoninfo.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.pythoninfo $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/pythoninfo.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.pythoninfo $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/datetimetester.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.datetimetester $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/datetimetester.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.datetimetester $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/outstanding_bugs.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.outstanding_bugs $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/outstanding_bugs.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.outstanding_bugs $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/sortperf.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.sortperf $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/sortperf.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.sortperf $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_openpty.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_openpty $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_openpty.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_openpty $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_queue.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_queue $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_queue.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_queue $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_ordered_dict.py.runs: \
-		o/$(MODE)/third_party/python/pythontester.com
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $< -m test.test_ordered_dict $(PYTESTARGS)
+o/$(MODE)/third_party/python/Lib/test/test_ordered_dict.py.runs: $(PYTHONTESTER)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_ordered_dict $(PYTESTARGS)
 
 ################################################################################
 
@@ -3685,7 +3378,7 @@ o/$(MODE)/third_party/python/Modules/posixmodule.o:			\
 
 $(THIRD_PARTY_PYTHON_STAGE1_A_OBJS)					\
 $(THIRD_PARTY_PYTHON_STAGE2_A_OBJS): private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fwrapv						\
 			-ffunction-sections				\
 			-fdata-sections
@@ -3694,7 +3387,7 @@ o/$(MODE)/third_party/python/Python/ceval.o				\
 o/$(MODE)/third_party/python/Objects/object.o				\
 o/$(MODE)/third_party/python/Python/graminit.o				\
 o/$(MODE)/third_party/python/Objects/abstract.o: private		\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fno-function-sections				\
 			-fno-data-sections
 
@@ -3712,7 +3405,7 @@ o/$(MODE)/third_party/python/Objects/memoryobject.o			\
 o/$(MODE)/third_party/python/Objects/unicodeobject.o			\
 o/$(MODE)/third_party/python/Python/ast.o				\
 o/$(MODE)/third_party/python/Python/compile.o: private			\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fpie
 
 o//third_party/python/Modules/_decimal/libmpdec/basearith.o		\
@@ -3741,38 +3434,38 @@ o//third_party/python/Objects/obmalloc.o				\
 o//third_party/python/Objects/funcobject.o				\
 o//third_party/python/Objects/pyhash.o					\
 o//third_party/python/Python/ceval.o: private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-O2
 
 $(THIRD_PARTY_PYTHON_STAGE1_A_OBJS)					\
 $(THIRD_PARTY_PYTHON_STAGE2_A_OBJS): private				\
-		OVERRIDE_CPPFLAGS +=					\
+		CPPFLAGS +=						\
 			-DPy_BUILD_CORE					\
 			-DMULTIARCH='"x86_64-cosmo"'
 
 ifneq ($(MODE),dbg)
 $(THIRD_PARTY_PYTHON_STAGE1_A_OBJS)					\
 $(THIRD_PARTY_PYTHON_STAGE2_A_OBJS): private				\
-		OVERRIDE_CPPFLAGS +=					\
+		CPPFLAGS +=						\
 			-DNDEBUG
 endif
 
 o/$(MODE)/third_party/python/Python/sysmodule.o: private		\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-DABIFLAGS='"m"'
 
 # NOTE: Care must be taken that the compiler doesn't try to "optimize"
 #       the indirect jumps by sharing them between all opcodes. Such
 #       optimizations can be disabled on gcc by using -fno-gcse.
 o/$(MODE)/third_party/python/Python/ceval.o: private			\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fno-gcse
 
 # Issue #23654: Turn off ICC's tail call optimization for the
 #               stack_overflow generator. ICC turns the recursive tail
 #               call into a loop. [Let's do GCC too, just to be safe.]
 o/$(MODE)/third_party/python/Modules/faulthandler.o: private		\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-fno-optimize-sibling-calls
 
 o/$(MODE)/third_party/python/Lib/mimetypes.o: private PYFLAGS += -Y.python/mime.types
@@ -4267,8 +3960,8 @@ o/$(MODE)/third_party/python/Lib/test/test_resource.py.runs: private QUOTA = -C1
 o/$(MODE)/third_party/python/Lib/test/test_email/test_email.py.runs: private QUOTA = -C32 -M1024m
 o/$(MODE)/third_party/python/Lib/test/test_selectors.py.runs: private QUOTA = -L180
 o/$(MODE)/third_party/python/Lib/test/test_trace.py.runs: private QUOTA = -L300
-o/$(MODE)/third_party/python/Lib/test/test_multibytecodec.py.runs: private QUOTA = -L300
-o/$(MODE)/third_party/python/Lib/test/test_bz2.py.runs: private QUOTA = -L300
+o/$(MODE)/third_party/python/Lib/test/test_multibytecodec.py.runs: private QUOTA = -C128 -L600 -L300
+o/$(MODE)/third_party/python/Lib/test/test_bz2.py.runs: private QUOTA = -C128 -L600 -L300
 o/$(MODE)/third_party/python/Lib/test/test_bytes.py.runs: private QUOTA = -L300
 o/$(MODE)/third_party/python/Lib/test/test_urlparse.py.runs: private QUOTA = -L300
 o/$(MODE)/third_party/python/Modules/_decimal/libmpdec/mpdecimal.o: private QUOTA = -L180
@@ -4307,7 +4000,6 @@ THIRD_PARTY_PYTHON_PYTHON_DIRECTDEPS =					\
 	LIBC_STDIO							\
 	LIBC_MEM							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_LOG							\
 	LIBC_SYSV							\
 	LIBC_X								\
@@ -4335,7 +4027,8 @@ o/$(MODE)/third_party/python/python.com.dbg:				\
 o/$(MODE)/third_party/python/python.com:				\
 		o/$(MODE)/third_party/python/python.com.dbg		\
 		o/$(MODE)/third_party/zip/zip.com			\
-		o/$(MODE)/tool/build/symtab.com
+		o/$(MODE)/tool/build/symtab.com				\
+		$(VM)
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)
@@ -4357,7 +4050,7 @@ THIRD_PARTY_PYTHON_FREEZE_DIRECTDEPS =					\
 	LIBC_STDIO							\
 	LIBC_MEM							\
 	LIBC_STR							\
-	LIBC_STUBS							\
+	LIBC_LOG							\
 	LIBC_SYSV							\
 	LIBC_X								\
 	THIRD_PARTY_GETOPT						\
@@ -4395,7 +4088,6 @@ o/$(MODE)/third_party/python/chibicc.inc:				\
 		libc/mem/mem.h						\
 		libc/nexgen32e/kcpuids.h				\
 		libc/runtime/runtime.h					\
-		libc/runtime/symbolic.h					\
 		libc/stdio/stdio.h					\
 		libc/str/str.h						\
 		libc/str/unicode.h					\
@@ -4497,6 +4189,11 @@ o/$(MODE)/third_party/python/hello.com.dbg:				\
 	@$(APELINK)
 
 $(THIRD_PARTY_PYTHON_HELLO_OBJS): private PYFLAGS += -C2 -m
+
+# this directory entry is at the tip of the tree
+# therefore building it requires special care
+o/$(MODE)/third_party/python/Lib/.zip.o: third_party/python/.python
+	@$(COMPILE) -wAZIPOBJ $(ZIPOBJ) -C2 $(OUTPUT_OPTION) third_party/python/.python
 
 # these need to be explictly defined because landlock make won't sandbox
 # prerequisites with a trailing slash.

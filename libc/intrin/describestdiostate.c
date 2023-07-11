@@ -17,14 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/str/str.h"
 
-#ifdef DescribeStdioState
-#undef DescribeStdioState
-#endif
-
-const char *DescribeStdioState(char buf[12], int x) {
+const char *(DescribeStdioState)(char buf[12], int x) {
   if (!x) return "";
   if (x == -1) return "EOF";
   if (x > 0) return _strerrno(x);

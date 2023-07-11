@@ -19,7 +19,7 @@
 #include "libc/assert.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/bits.h"
-#include "libc/log/rop.h"
+#include "libc/log/rop.internal.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/stack.h"
@@ -353,7 +353,7 @@ static int SerializeTable(lua_State *L, char **buf, int idx,
   int rc;
   bool multi;
   intptr_t rsp, bot;
-  if (UNLIKELY(!HaveStackMemory(GUARDSIZE))) {
+  if (UNLIKELY(!HaveStackMemory(APE_GUARDSIZE))) {
     z->reason = "out of stack";
     return -1;
   }
@@ -437,6 +437,6 @@ int LuaEncodeLuaData(lua_State *L, char **buf, int idx,
     return rc;
   } else {
     luaL_error(L, "can't set stack depth");
-    unreachable;
+    __builtin_unreachable();
   }
 }

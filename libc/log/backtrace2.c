@@ -103,11 +103,13 @@ static int PrintBacktraceUsingAddr2line(int fd, const struct StackFrame *bp) {
       return -1;
     }
     addr = frame->addr;
-    if (addr == _weakaddr("__gc")) {
+#ifdef __x86_64__
+    if (addr == (uintptr_t)_weaken(__gc)) {
       do {
         --gi;
-      } while ((addr = garbage->p[gi].ret) == _weakaddr("__gc"));
+      } while ((addr = garbage->p[gi].ret) == (uintptr_t)_weaken(__gc));
     }
+#endif
     argv[i++] = buf + j;
     buf[j++] = '0';
     buf[j++] = 'x';
@@ -117,13 +119,13 @@ static int PrintBacktraceUsingAddr2line(int fd, const struct StackFrame *bp) {
   if (sys_pipe2(pipefds, O_CLOEXEC) == -1) {
     return -1;
   }
-  if ((pid = __sys_fork().ax) == -1) {
+  if ((pid = sys_fork()) == -1) {
     sys_close(pipefds[0]);
     sys_close(pipefds[1]);
     return -1;
   }
   if (!pid) {
-    sys_dup2(pipefds[1], 1);
+    sys_dup2(pipefds[1], 1, 0);
     sys_execve(addr2line, argv, environ);
     _Exit(127);
   }
@@ -146,11 +148,11 @@ static int PrintBacktraceUsingAddr2line(int fd, const struct StackFrame *bp) {
                        strlen(" (discriminator ") - 1)) &&
           (p3 = memchr(p2, '\n', got - (p2 - p1)))) {
         if (p3 > p2 && p3[-1] == '\r') --p3;
-        sys_write(2, p1, p2 - p1);
+        _klog(p1, p2 - p1);
         got -= p3 - p1;
         p1 += p3 - p1;
       } else {
-        sys_write(2, p1, got);
+        _klog(p1, got);
         break;
       }
     }

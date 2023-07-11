@@ -25,14 +25,12 @@ THIRD_PARTY_MBEDTLS_A_DIRECTDEPS =					\
 	LIBC_NEXGEN32E							\
 	LIBC_RUNTIME							\
 	LIBC_SOCK							\
-	LIBC_LOG							\
 	LIBC_STDIO							\
 	LIBC_STR							\
 	LIBC_SYSV							\
 	LIBC_TIME							\
 	NET_HTTP							\
 	THIRD_PARTY_COMPILER_RT						\
-	THIRD_PARTY_GDTOA						\
 	THIRD_PARTY_ZLIB
 
 THIRD_PARTY_MBEDTLS_A_DEPS :=						\
@@ -48,29 +46,27 @@ $(THIRD_PARTY_MBEDTLS_A).pkg:						\
 		$(foreach x,$(THIRD_PARTY_MBEDTLS_A_DIRECTDEPS),$($(x)_A).pkg)
 
 $(THIRD_PARTY_MBEDTLS_A_OBJS): private					\
-			OVERRIDE_CFLAGS +=				\
+			CFLAGS +=					\
 				-fdata-sections				\
 				-ffunction-sections
 
 o/$(MODE)/third_party/mbedtls/everest.o: private			\
-			OVERRIDE_CFLAGS +=				\
+			CFLAGS +=					\
 				-O3
 
 o/$(MODE)/third_party/mbedtls/bigmul4.o					\
 o/$(MODE)/third_party/mbedtls/bigmul6.o: private			\
-			OVERRIDE_CFLAGS +=				\
+			CFLAGS +=					\
 				-O2
 
+ifeq ($(ARCH), x86_64)
 o/$(MODE)/third_party/mbedtls/shiftright-avx.o: private			\
-			OVERRIDE_CFLAGS +=				\
+			CFLAGS +=					\
 				-O3 -mavx
-
-o/$(MODE)/third_party/mbedtls/shiftright2-avx.o: private		\
-			OVERRIDE_CFLAGS +=				\
-				-O3 -mavx
+endif
 
 o/$(MODE)/third_party/mbedtls/zeroize.o: private			\
-			OVERRIDE_CFLAGS +=				\
+			CFLAGS +=					\
 				-O3					\
 				-x-no-pg				\
 				-fomit-frame-pointer			\

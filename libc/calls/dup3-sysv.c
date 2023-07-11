@@ -63,6 +63,6 @@ int32_t sys_dup3(int32_t oldfd, int32_t newfd, int flags) {
   if (!g_dup3.demodernize) {
     return __sys_dup3(oldfd, newfd, flags);
   } else {
-    return __fixupnewfd(sys_dup2(oldfd, newfd), flags);
+    return __fixupnewfd(sys_dup2(oldfd, newfd, 0), flags);
   }
 }

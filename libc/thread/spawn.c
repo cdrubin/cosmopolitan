@@ -16,12 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/thread/spawn.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/clone.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
@@ -32,7 +32,6 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/posixthread.internal.h"
-#include "libc/thread/spawn.h"
 #include "libc/thread/tls.h"
 #include "libc/thread/wait0.internal.h"
 
@@ -50,6 +49,8 @@
  * Your spawn library abstracts clone() which also works on all
  * platforms; however our implementation of clone() is significantly
  * complicated so we strongly recommend always favoring this API.
+ *
+ * @deprecated
  */
 
 #define _TLSZ ((intptr_t)_tls_size)
@@ -68,7 +69,7 @@ static int Spawner(void *arg, int tid) {
   rc = spawner->fun(spawner->arg, tid);
   _pthread_ungarbage();
   free(spawner);
-  return 0;
+  return rc;
 }
 
 /**
@@ -92,6 +93,7 @@ static int Spawner(void *arg, int tid) {
  *     except when it isn't specified, in which case, the thread is kind
  *     of detached and will (currently) just leak the stack / tls memory
  * @return 0 on success, or -1 w/ errno
+ * @deprecated
  */
 int _spawn(int fun(void *, int), void *arg, struct spawn *opt_out_thread) {
   errno_t rc;
@@ -117,7 +119,7 @@ int _spawn(int fun(void *, int), void *arg, struct spawn *opt_out_thread) {
 
   // we must use _mapstack() to allocate the stack because OpenBSD has
   // very strict requirements for what's allowed to be used for stacks
-  if (!(th->stk = _mapstack())) {
+  if (!(th->stk = NewCosmoStack())) {
     free(th->tls);
     return -1;
   }
@@ -127,12 +129,12 @@ int _spawn(int fun(void *, int), void *arg, struct spawn *opt_out_thread) {
   spawner->arg = arg;
   rc = clone(Spawner, th->stk, GetStackSize() - 16 /* openbsd:stackbound */,
              CLONE_VM | CLONE_THREAD | CLONE_FS | CLONE_FILES | CLONE_SIGHAND |
-                 CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_SETTID |
-                 CLONE_CHILD_CLEARTID,
-             spawner, &th->ptid, th->tib, &th->tib->tib_tid);
+                 CLONE_SYSVSEM | CLONE_SETTLS | CLONE_PARENT_SETTID |
+                 CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID,
+             spawner, &th->ptid, __adj_tls(th->tib), &th->tib->tib_tid);
   if (rc) {
     errno = rc;
-    _freestack(th->stk);
+    FreeCosmoStack(th->stk);
     free(th->tls);
     return -1;
   }
@@ -144,6 +146,8 @@ int _spawn(int fun(void *, int), void *arg, struct spawn *opt_out_thread) {
  * Waits for thread created by _spawn() to terminate.
  *
  * This will free your thread's stack and tls memory too.
+ *
+ * @deprecated
  */
 int _join(struct spawn *th) {
   int rc;

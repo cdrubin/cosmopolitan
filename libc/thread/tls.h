@@ -39,12 +39,20 @@ struct CosmoTib {
 };
 
 extern int __threaded;
-extern bool __tls_enabled;
 extern unsigned __tls_index;
+
+#ifdef __x86_64__
+extern bool __tls_enabled;
+#define __tls_enabled_set(x) __tls_enabled = x
+#else
+#define __tls_enabled        true
+#define __tls_enabled_set(x) (void)0
+#endif
 
 void __require_tls(void);
 void __set_tls(struct CosmoTib *);
 
+#ifdef __x86_64__
 /**
  * Returns location of thread information block.
  *
@@ -56,6 +64,15 @@ void __set_tls(struct CosmoTib *);
     asm("mov\t%%fs:0,%0" : "=r"(_t) : /* no inputs */ : "memory"); \
     _t;                                                            \
   })
+#define __adj_tls(tib) (tib)
+#elif defined(__aarch64__)
+#define __get_tls()                          \
+  ({                                         \
+    register struct CosmoTib *_t asm("x28"); \
+    _t - 1;                                  \
+  })
+#define __adj_tls(tib) ((struct CosmoTib *)(tib) + 1)
+#endif
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

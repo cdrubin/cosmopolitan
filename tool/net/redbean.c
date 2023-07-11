@@ -16,10 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
 #include "libc/assert.h"
 #include "libc/atomic.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/pledge.h"
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/flock.h"
@@ -30,10 +30,11 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/timespec.h"
+#include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/dns/dns.h"
 #include "libc/dns/hoststxt.h"
-#include "libc/dos.h"
+#include "libc/dos.internal.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
@@ -75,12 +76,14 @@
 #include "libc/str/str.h"
 #include "libc/str/strwidth.h"
 #include "libc/sysv/consts/af.h"
+#include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/clone.h"
 #include "libc/sysv/consts/dt.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/f.h"
+#include "libc/sysv/consts/hwcap.h"
 #include "libc/sysv/consts/inaddr.h"
 #include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/madv.h"
@@ -103,14 +106,14 @@
 #include "libc/thread/tls.h"
 #include "libc/x/x.h"
 #include "libc/x/xasprintf.h"
-#include "libc/zip.h"
+#include "libc/zip.internal.h"
 #include "net/http/escape.h"
 #include "net/http/http.h"
 #include "net/http/ip.h"
 #include "net/http/tokenbucket.h"
 #include "net/http/url.h"
 #include "net/https/https.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/lua/cosmo.h"
 #include "third_party/lua/lauxlib.h"
 #include "third_party/lua/lrepl.h"
@@ -136,10 +139,19 @@
 #include "tool/net/luacheck.h"
 #include "tool/net/sandbox.h"
 
-STATIC_STACK_SIZE(0x40000);
-STATIC_YOINK("zip_uri_support");
+STATIC_STACK_SIZE(0x80000);
+
+STATIC_YOINK("zipos");
+
+#ifndef TINY
+STATIC_YOINK("blink_linux_aarch64");  // for raspberry pi
+STATIC_YOINK("blink_xnu_aarch64");    // is apple silicon
+#endif
+
 #if !IsTiny()
+#ifdef __x86_64__
 STATIC_YOINK("ShowCrashReportsEarly");
+#endif
 #endif
 
 /**
@@ -171,8 +183,8 @@ STATIC_YOINK("ShowCrashReportsEarly");
 #define MONITOR_MICROS   150000
 #define READ(F, P, N)    readv(F, &(struct iovec){P, N}, 1)
 #define WRITE(F, P, N)   writev(F, &(struct iovec){P, N}, 1)
-#define LockInc(P)       asm volatile("lock incq\t%0" : "=m"(*(P)))
-#define LockDec(P)       asm volatile("lock decq\t%0" : "=m"(*(P)))
+#define LockInc(P)       (*(_Atomic(typeof(*(P))) *)(P))++
+#define LockDec(P)       (*(_Atomic(typeof(*(P))) *)(P))--
 #define AppendCrlf(P)    mempcpy(P, "\r\n", 2)
 #define HasHeader(H)     (!!cpm.msg.headers[H].a)
 #define HeaderData(H)    (inbuf.p + cpm.msg.headers[H].a)
@@ -478,7 +490,6 @@ static size_t zsize;
 static lua_State *GL;
 static lua_State *YL;
 static uint8_t *zmap;
-static uint8_t *zbase;
 static uint8_t *zcdir;
 static size_t hdrsize;
 static size_t amtread;
@@ -498,6 +509,7 @@ static const char *histpath;
 static struct pollfd *polls;
 static size_t payloadlength;
 static int64_t cacheseconds;
+static const char *cachedirective;
 static const char *monitortty;
 static const char *serverheader;
 static struct Strings stagedirs;
@@ -637,7 +649,7 @@ static void DropOutput(void) {
 }
 
 static bool ShouldAvoidGzip(void) {
-  return IsGenuineCosmo() || (IsGenuineBlink() && !X86_HAVE(JIT));
+  return (IsGenuineBlink() && !X86_HAVE(JIT));
 }
 
 static char *MergePaths(const char *p, size_t n, const char *q, size_t m,
@@ -656,7 +668,7 @@ static long FindRedirect(const char *s, size_t n) {
   l = 0;
   r = redirects.n - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     c = CompareSlices(redirects.p[m].path.s, redirects.p[m].path.n, s, n);
     if (c < 0) {
       l = m + 1;
@@ -1037,8 +1049,9 @@ static void ProgramTimeout(long ms) {
   }
 }
 
-static void ProgramCache(long x) {
+static void ProgramCache(long x, const char *s) {
   cacheseconds = x;
+  if (s) cachedirective = s;
 }
 
 static void SetDefaults(void) {
@@ -1046,7 +1059,7 @@ static void SetDefaults(void) {
                              VERSION >> 010, VERSION >> 000)));
   __log_level = kLogInfo;
   maxpayloadsize = 64 * 1024;
-  ProgramCache(-1);
+  ProgramCache(-1, "must-revalidate");
   ProgramTimeout(60 * 1000);
   ProgramSslTicketLifetime(24 * 60 * 60);
   sslfetchverify = true;
@@ -1071,6 +1084,21 @@ static bool HasString(struct Strings *l, const char *s, size_t n) {
   return false;
 }
 
+static void UpdateLuaPath(const char *s) {
+#ifndef STATIC
+  lua_State *L = GL;
+  int n = lua_gettop(L);
+  lua_getglobal(L, "package");
+  if (lua_istable(L, -1)) {
+    lua_getfield(L, -1, "path");
+    lua_pushstring(L, _gc(xasprintf("%s;%s/.lua/?.lua;%s/.lua/?/init.lua",
+                                    luaL_optstring(L, -1, ""), s, s)));
+    lua_setfield(L, -3, "path");
+  }
+  lua_settop(L, n);
+#endif
+}
+
 static void ProgramDirectory(const char *path) {
   char *s;
   size_t n;
@@ -1082,6 +1110,7 @@ static void ProgramDirectory(const char *path) {
   n = strlen(s);
   INFOF("(cfg) program directory: %s", s);
   AddString(&stagedirs, s, n);
+  UpdateLuaPath(s);
 }
 
 static void ProgramHeader(const char *s) {
@@ -1164,22 +1193,24 @@ static void LogLuaError(char *hook, char *err) {
   ERRORF("(lua) failed to run %s: %s", hook, err);
 }
 
-static bool LuaEvalCode(const char *code) {
+// handles `-e CODE` (frontloads web server code)
+// handles `-i -e CODE` (interprets expression and exits)
+static void LuaEvalCode(const char *code) {
   lua_State *L = GL;
   int status = luaL_loadstring(L, code);
   if (status != LUA_OK || LuaCallWithTrace(L, 0, 0, NULL) != LUA_OK) {
     LogLuaError("lua code", lua_tostring(L, -1));
     lua_pop(L, 1);  // pop error
-    return false;
+    exit(1);
   }
   AssertLuaStackIsAt(L, 0);
-  return true;
 }
 
-static bool LuaEvalFile(const char *path) {
+// handle `-F PATH` arg
+static void LuaEvalFile(const char *path) {
   char *f = _gc(xslurp(path, 0));
   if (!f) FATALF("(cfg) error: failed to read file %`'s", path);
-  return LuaEvalCode(f);
+  LuaEvalCode(f);
 }
 
 static bool LuaOnClientConnection(void) {
@@ -1874,6 +1905,7 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
   gethostname(hbuf, sizeof(hbuf));
   for (i = 0; i < htxt->entries.i; ++i) {
     for (j = 0; j < ips.n; ++j) {
+      if (IsLoopbackIp(ips.p[j])) continue;
       if (ips.p[j] == READ32BE(htxt->entries.p[i].ip)) {
         isduplicate = false;
         s = htxt->strings.p + htxt->entries.p[i].name;
@@ -1896,6 +1928,7 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
     }
   }
   for (i = 0; i < ips.n; ++i) {
+    if (IsLoopbackIp(ips.p[i])) continue;
     san = realloc(san, ++nsan * sizeof(*san));
     san[nsan - 1].tag = MBEDTLS_X509_SAN_IP_ADDRESS;
     san[nsan - 1].ip4 = ips.p[i];
@@ -2063,11 +2096,11 @@ static int64_t GetGmtOffset(int64_t t) {
 
 forceinline bool IsCompressed(struct Asset *a) {
   return !a->file &&
-         ZIP_LFILE_COMPRESSIONMETHOD(zbase + a->lf) == kZipCompressionDeflate;
+         ZIP_LFILE_COMPRESSIONMETHOD(zmap + a->lf) == kZipCompressionDeflate;
 }
 
 forceinline int GetMode(struct Asset *a) {
-  return a->file ? a->file->st.st_mode : GetZipCfileMode(zbase + a->cf);
+  return a->file ? a->file->st.st_mode : GetZipCfileMode(zmap + a->cf);
 }
 
 forceinline bool IsCompressionMethodSupported(int method) {
@@ -2114,26 +2147,25 @@ static void IndexAssets(void) {
   n = GetZipCdirRecords(zcdir);
   m = _roundup2pow(MAX(1, n) * HASH_LOAD_FACTOR);
   p = xcalloc(m, sizeof(struct Asset));
-  for (cf = GetZipCdirOffset(zcdir); n--; cf += ZIP_CFILE_HDRSIZE(zbase + cf)) {
-    CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zbase + cf));
-    if (!IsCompressionMethodSupported(
-            ZIP_CFILE_COMPRESSIONMETHOD(zbase + cf))) {
+  for (cf = GetZipCdirOffset(zcdir); n--; cf += ZIP_CFILE_HDRSIZE(zmap + cf)) {
+    CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zmap + cf));
+    if (!IsCompressionMethodSupported(ZIP_CFILE_COMPRESSIONMETHOD(zmap + cf))) {
       WARNF("(zip) don't understand zip compression method %d used by %`'.*s",
-            ZIP_CFILE_COMPRESSIONMETHOD(zbase + cf),
-            ZIP_CFILE_NAMESIZE(zbase + cf), ZIP_CFILE_NAME(zbase + cf));
+            ZIP_CFILE_COMPRESSIONMETHOD(zmap + cf),
+            ZIP_CFILE_NAMESIZE(zmap + cf), ZIP_CFILE_NAME(zmap + cf));
       continue;
     }
-    hash = Hash(ZIP_CFILE_NAME(zbase + cf), ZIP_CFILE_NAMESIZE(zbase + cf));
+    hash = Hash(ZIP_CFILE_NAME(zmap + cf), ZIP_CFILE_NAMESIZE(zmap + cf));
     step = 0;
     do {
       i = (hash + (step * (step + 1)) >> 1) & (m - 1);
       ++step;
     } while (p[i].hash);
-    GetZipCfileTimestamps(zbase + cf, &lm, 0, 0, gmtoff);
+    GetZipCfileTimestamps(zmap + cf, &lm, 0, 0, gmtoff);
     p[i].hash = hash;
     p[i].cf = cf;
-    p[i].lf = GetZipCfileOffset(zbase + cf);
-    p[i].istext = !!(ZIP_CFILE_INTERNALATTRIBUTES(zbase + cf) & kZipIattrText);
+    p[i].lf = GetZipCfileOffset(zmap + cf);
+    p[i].istext = !!(ZIP_CFILE_INTERNALATTRIBUTES(zmap + cf) & kZipIattrText);
     p[i].lastmodified = lm.tv_sec;
     p[i].lastmodifiedstr = FormatUnixHttpDateTime(xmalloc(30), lm.tv_sec);
   }
@@ -2145,7 +2177,7 @@ static bool OpenZip(bool force) {
   int fd;
   size_t n;
   struct stat st;
-  uint8_t *m, *b, *d, *p;
+  uint8_t *m, *d, *p;
   if (stat(zpath, &st) != -1) {
     if (force || st.st_ino != zst.st_ino || st.st_size > zst.st_size) {
       if (st.st_ino == zst.st_ino) {
@@ -2157,22 +2189,15 @@ static bool OpenZip(bool force) {
       if ((m = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0)) !=
           MAP_FAILED) {
         n = st.st_size;
-        if ((p = FindEmbeddedApe(m, n))) {
-          b = p;
-          n -= p - m;
-        } else {
-          b = m;
-        }
-        if ((d = GetZipCdir(b, n))) {
+        if ((d = GetZipEocd(m, n, 0))) {
           if (zmap) {
-            LOGIFNEG1(munmap(zmap, zbase + zsize - zmap));
+            LOGIFNEG1(munmap(zmap, zsize));
           }
           zmap = m;
-          zbase = b;
           zsize = n;
           zcdir = d;
-          DCHECK(IsZipCdir32(zbase, zsize, zcdir - zbase) ||
-                 IsZipCdir64(zbase, zsize, zcdir - zbase));
+          DCHECK(IsZipEocd32(zmap, zsize, zcdir - zmap) == kZipOk ||
+                 IsZipEocd64(zmap, zsize, zcdir - zmap) == kZipOk);
           memcpy(&zst, &st, sizeof(st));
           IndexAssets();
           return true;
@@ -2202,8 +2227,8 @@ static struct Asset *GetAssetZip(const char *path, size_t pathlen) {
     i = (hash + (step * (step + 1)) >> 1) & (assets.n - 1);
     if (!assets.p[i].hash) return NULL;
     if (hash == assets.p[i].hash &&
-        pathlen == ZIP_CFILE_NAMESIZE(zbase + assets.p[i].cf) &&
-        memcmp(path, ZIP_CFILE_NAME(zbase + assets.p[i].cf), pathlen) == 0) {
+        pathlen == ZIP_CFILE_NAMESIZE(zmap + assets.p[i].cf) &&
+        memcmp(path, ZIP_CFILE_NAME(zmap + assets.p[i].cf), pathlen) == 0) {
       return &assets.p[i];
     }
   }
@@ -2275,14 +2300,15 @@ static char *AppendExpires(char *p, int64_t t) {
   return AppendCrlf(p);
 }
 
-static char *AppendCache(char *p, int64_t seconds) {
+static char *AppendCache(char *p, int64_t seconds, char *directive) {
   if (seconds < 0) return p;
   p = stpcpy(p, "Cache-Control: max-age=");
   p = FormatUint64(p, seconds);
   if (!seconds) {
     p = stpcpy(p, ", no-store");
-  } else {
-    p = stpcpy(p, ", must-revalidate");
+  } else if (directive && *directive) {
+    p = stpcpy(p, ", ");
+    p = stpcpy(p, directive);
   }
   p = AppendCrlf(p);
   return AppendExpires(p, shared->nowish.tv_sec + seconds);
@@ -2351,18 +2377,18 @@ static void *LoadAsset(struct Asset *a, size_t *out_size) {
     return NULL;
   }
   if (!a->file) {
-    size = GetZipLfileUncompressedSize(zbase + a->lf);
+    size = GetZipLfileUncompressedSize(zmap + a->lf);
     if (size == SIZE_MAX || !(data = malloc(size + 1))) return NULL;
     if (IsCompressed(a)) {
-      if (!Inflate(data, size, ZIP_LFILE_CONTENT(zbase + a->lf),
-                   GetZipCfileCompressedSize(zbase + a->cf))) {
+      if (!Inflate(data, size, ZIP_LFILE_CONTENT(zmap + a->lf),
+                   GetZipCfileCompressedSize(zmap + a->cf))) {
         free(data);
         return NULL;
       }
     } else {
-      memcpy(data, ZIP_LFILE_CONTENT(zbase + a->lf), size);
+      memcpy(data, ZIP_LFILE_CONTENT(zmap + a->lf), size);
     }
-    if (!Verify(data, size, ZIP_LFILE_CRC32(zbase + a->lf))) {
+    if (!Verify(data, size, ZIP_LFILE_CRC32(zmap + a->lf))) {
       free(data);
       return NULL;
     }
@@ -2438,7 +2464,7 @@ static char *CommitOutput(char *p) {
   size_t outbuflen;
   if (!cpm.contentlength) {
     outbuflen = appendz(cpm.outbuf).i;
-    if (cpm.istext && outbuflen >= 100) {
+    if (cpm.istext && !cpm.isyielding && outbuflen >= 100) {
       if (!IsTiny() && !IsSslCompressed()) {
         p = stpcpy(p, "Vary: Accept-Encoding\r\n");
       }
@@ -2509,10 +2535,10 @@ static char *ServeErrorImpl(unsigned code, const char *reason,
     cpm.content = FreeLater(xslurp(a->file->path.s, &cpm.contentlength));
     return AppendContentType(p, "text/html; charset=utf-8");
   } else {
-    cpm.content = (char *)ZIP_LFILE_CONTENT(zbase + a->lf);
-    cpm.contentlength = GetZipCfileCompressedSize(zbase + a->cf);
+    cpm.content = (char *)ZIP_LFILE_CONTENT(zmap + a->lf);
+    cpm.contentlength = GetZipCfileCompressedSize(zmap + a->cf);
     if (IsCompressed(a)) {
-      n = GetZipLfileUncompressedSize(zbase + a->lf);
+      n = GetZipLfileUncompressedSize(zmap + a->lf);
       if ((s = FreeLater(malloc(n))) &&
           Inflate(s, n, cpm.content, cpm.contentlength)) {
         cpm.content = s;
@@ -2521,13 +2547,18 @@ static char *ServeErrorImpl(unsigned code, const char *reason,
         return ServeDefaultErrorPage(p, code, reason, details);
       }
     }
-    if (Verify(cpm.content, cpm.contentlength,
-               ZIP_LFILE_CRC32(zbase + a->lf))) {
+    if (Verify(cpm.content, cpm.contentlength, ZIP_LFILE_CRC32(zmap + a->lf))) {
       return AppendContentType(p, "text/html; charset=utf-8");
     } else {
       return ServeDefaultErrorPage(p, code, reason, details);
     }
   }
+}
+
+static char *ServeErrorWithPath(unsigned code, const char *reason,
+                                const char *path, size_t pathlen) {
+  ERRORF("(srvr) server error: %d %s %`'.*s", code, reason, pathlen, path);
+  return ServeErrorImpl(code, reason, NULL);
 }
 
 static char *ServeErrorWithDetail(unsigned code, const char *reason,
@@ -2601,7 +2632,6 @@ static int LuaCallWithYield(lua_State *L) {
     YL = co;
     cpm.generator = YieldGenerator;
     if (!cpm.isyielding) cpm.isyielding = 1;
-    cpm.istext = false;  // reset istext flag to avoid zipping yielded chunk
     status = LUA_OK;
   }
   return status;
@@ -2721,7 +2751,7 @@ static ssize_t InflateGenerator(struct iovec v[3]) {
     dg.t = dg.s.avail_out ? 1 : 2;
   } else if (rc == Z_STREAM_END) {
     CHECK_EQ(Z_OK, inflateEnd(&dg.s));
-    CHECK_EQ(ZIP_CFILE_CRC32(zbase + dg.a->cf), dg.c);
+    CHECK_EQ(ZIP_CFILE_CRC32(zmap + dg.a->cf), dg.c);
     dg.t = 3;
   }
   return v[0].iov_len + v[1].iov_len + v[2].iov_len;
@@ -2733,7 +2763,7 @@ static char *ServeAssetDecompressed(struct Asset *a) {
   uint32_t crc;
   LockInc(&shared->c.inflates);
   LockInc(&shared->c.decompressedresponses);
-  size = GetZipCfileUncompressedSize(zbase + a->cf);
+  size = GetZipCfileUncompressedSize(zmap + a->cf);
   DEBUGF("(srvr) ServeAssetDecompressed(%ld)→%ld", cpm.contentlength, size);
   if (cpm.msg.method == kHttpHead) {
     cpm.content = 0;
@@ -2751,7 +2781,7 @@ static char *ServeAssetDecompressed(struct Asset *a) {
     return SetStatus(200, "OK");
   } else if ((p = FreeLater(malloc(size))) &&
              Inflate(p, size, cpm.content, cpm.contentlength) &&
-             Verify(p, size, ZIP_CFILE_CRC32(zbase + a->cf))) {
+             Verify(p, size, ZIP_CFILE_CRC32(zmap + a->cf))) {
     cpm.content = p;
     cpm.contentlength = size;
     return SetStatus(200, "OK");
@@ -2771,8 +2801,8 @@ static inline char *ServeAssetPrecompressed(struct Asset *a) {
   uint32_t crc;
   DEBUGF("(srvr) ServeAssetPrecompressed()");
   LockInc(&shared->c.precompressedresponses);
-  crc = ZIP_CFILE_CRC32(zbase + a->cf);
-  size = GetZipCfileUncompressedSize(zbase + a->cf);
+  crc = ZIP_CFILE_CRC32(zmap + a->cf);
+  size = GetZipCfileUncompressedSize(zmap + a->cf);
   cpm.gzipped = size;
   WRITE32LE(gzip_footer + 0, crc);
   WRITE32LE(gzip_footer + 4, size);
@@ -2979,7 +3009,7 @@ td { padding-right: 3em; }\r\n\
           GetZipCdirComment(zcdir));
   bzero(w, sizeof(w));
   n = GetZipCdirRecords(zcdir);
-  for (zcf = zbase + GetZipCdirOffset(zcdir); n--;
+  for (zcf = zmap + GetZipCdirOffset(zcdir); n--;
        zcf += ZIP_CFILE_HDRSIZE(zcf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zcf));
     path = GetAssetPath(zcf, &pathlen);
@@ -2991,7 +3021,7 @@ td { padding-right: 3em; }\r\n\
     free(path);
   }
   n = GetZipCdirRecords(zcdir);
-  for (zcf = zbase + GetZipCdirOffset(zcdir); n--;
+  for (zcf = zmap + GetZipCdirOffset(zcdir); n--;
        zcf += ZIP_CFILE_HDRSIZE(zcf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zcf));
     path = GetAssetPath(zcf, &pathlen);
@@ -3283,7 +3313,7 @@ static char *HandleFolder(const char *path, size_t pathlen) {
   } else {
     LockInc(&shared->c.forbiddens);
     WARNF("(srvr) directory %`'.*s lacks index page", pathlen, path);
-    return ServeError(403, "Forbidden");
+    return ServeErrorWithPath(403, "Forbidden", path, pathlen);
   }
 }
 
@@ -3306,7 +3336,7 @@ static const char *LuaCheckPath(lua_State *L, int idx, size_t *pathlen) {
     if (!IsReasonablePath(path, *pathlen)) {
       WARNF("(srvr) bad path %`'.*s", *pathlen, path);
       luaL_argerror(L, idx, "bad path");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   return path;
@@ -3322,7 +3352,7 @@ static const char *LuaCheckHost(lua_State *L, int idx, size_t *hostlen) {
     if (!IsAcceptableHost(host, *hostlen)) {
       WARNF("(srvr) bad host %`'.*s", *hostlen, host);
       luaL_argerror(L, idx, "bad host");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   return host;
@@ -3332,7 +3362,7 @@ static void OnlyCallFromInitLua(lua_State *L, const char *api) {
   if (isinitialized) {
     luaL_error(L, "%s() should be called %s", api,
                "from the global scope of .init.lua");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -3340,15 +3370,15 @@ static void OnlyCallFromMainProcess(lua_State *L, const char *api) {
   if (__isworker) {
     luaL_error(L, "%s() should be called %s", api,
                "from .init.lua or the repl");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
 static void OnlyCallDuringConnection(lua_State *L, const char *api) {
   if (!ishandlingconnection) {
-    luaL_error(L, "%s() can only be called ", api,
+    luaL_error(L, "%s() can only be called %s", api,
                "while handling a connection");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -3356,7 +3386,7 @@ static void OnlyCallDuringRequest(lua_State *L, const char *api) {
   if (!ishandlingrequest) {
     luaL_error(L, "%s() can only be called %s", api,
                "while handling a request");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -3407,7 +3437,7 @@ static int LuaServeRedirect(lua_State *L) {
   code = luaL_checkinteger(L, 1);
   if (!(300 <= code && code <= 399)) {
     luaL_argerror(L, 1, "bad status code");
-    unreachable;
+    __builtin_unreachable();
   }
   location = luaL_checklstring(L, 2, &loclen);
   if (cpm.msg.version < 10) {
@@ -3416,7 +3446,7 @@ static int LuaServeRedirect(lua_State *L) {
   } else {
     if (!(eval = EncodeHttpHeaderValue(location, loclen, 0))) {
       luaL_argerror(L, 2, "invalid location");
-      unreachable;
+      __builtin_unreachable();
     }
     VERBOSEF("(rsp) %d redirect to %`'s", code, location);
     cpm.luaheaderp =
@@ -3464,11 +3494,11 @@ static int LuaProgramTrustedIp(lua_State *L) {
   cidr = luaL_optinteger(L, 2, 32);
   if (!(0 <= ip && ip <= 0xffffffff)) {
     luaL_argerror(L, 1, "ip out of range");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!(0 <= cidr && cidr <= 32)) {
     luaL_argerror(L, 2, "cidr should be 0 .. 32");
-    unreachable;
+    __builtin_unreachable();
   }
   ip32 = ip;
   imask = ~(0xffffffffu << (32 - cidr));
@@ -3476,7 +3506,7 @@ static int LuaProgramTrustedIp(lua_State *L) {
     luaL_argerror(L, 1,
                   "ip address isn't the network address; "
                   "it has bits masked by the cidr");
-    unreachable;
+    __builtin_unreachable();
   }
   ProgramTrustedIp(ip, cidr);
   return 0;
@@ -3487,7 +3517,7 @@ static int LuaIsTrusted(lua_State *L) {
   ip = luaL_checkinteger(L, 1);
   if (!(0 <= ip && ip <= 0xffffffff)) {
     luaL_argerror(L, 1, "ip out of range");
-    unreachable;
+    __builtin_unreachable();
   }
   lua_pushboolean(L, IsTrustedIp(ip));
   return 1;
@@ -3502,7 +3532,7 @@ static int LuaRespond(lua_State *L, char *R(unsigned, const char *)) {
   code = luaL_checkinteger(L, 1);
   if (!(100 <= code && code <= 999)) {
     luaL_argerror(L, 1, "bad status code");
-    unreachable;
+    __builtin_unreachable();
   }
   if (lua_isnoneornil(L, 2)) {
     cpm.luaheaderp = R(code, GetHttpReason(code));
@@ -3513,7 +3543,7 @@ static int LuaRespond(lua_State *L, char *R(unsigned, const char *)) {
       free(p);
     } else {
       luaL_argerror(L, 2, "invalid");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   return 0;
@@ -3564,9 +3594,9 @@ static int LuaLoadAsset(lua_State *L) {
   if ((a = GetAsset(path, pathlen))) {
     if (!a->file && !IsCompressed(a)) {
       /* fast path: this avoids extra copy */
-      data = ZIP_LFILE_CONTENT(zbase + a->lf);
-      size = GetZipLfileUncompressedSize(zbase + a->lf);
-      if (Verify(data, size, ZIP_LFILE_CRC32(zbase + a->lf))) {
+      data = ZIP_LFILE_CONTENT(zmap + a->lf);
+      size = GetZipLfileUncompressedSize(zmap + a->lf);
+      if (Verify(data, size, ZIP_LFILE_CRC32(zmap + a->lf))) {
         lua_pushlstring(L, data, size);
         return 1;
       }
@@ -3685,15 +3715,15 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   if (a) {
     // to remove an existing asset,
     // first copy the central directory part before its record
-    v[4].iov_base = zbase + oldcdiroffset;
+    v[4].iov_base = zmap + oldcdiroffset;
     v[4].iov_len = a->cf - oldcdiroffset;
     // and then the rest of the central directory
-    v[5].iov_base = zbase + oldcdiroffset +
-                    (v[4].iov_len + ZIP_CFILE_HDRSIZE(zbase + a->cf));
+    v[5].iov_base =
+        zmap + oldcdiroffset + (v[4].iov_len + ZIP_CFILE_HDRSIZE(zmap + a->cf));
     v[5].iov_len =
-        oldcdirsize - (v[4].iov_len + ZIP_CFILE_HDRSIZE(zbase + a->cf));
+        oldcdirsize - (v[4].iov_len + ZIP_CFILE_HDRSIZE(zmap + a->cf));
   } else {
-    v[4].iov_base = zbase + oldcdiroffset;
+    v[4].iov_base = zmap + oldcdiroffset;
     v[4].iov_len = oldcdirsize;
     v[5].iov_base = 0;
     v[5].iov_len = 0;
@@ -3781,7 +3811,7 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   p = WRITE32LE(p, MIN(cdirsize, 0xffffffff));
   p = WRITE32LE(p, MIN(cdiroffset, 0xffffffff));
   p = WRITE16LE(p, v[12].iov_len);
-  CHECK_NE(-1, lseek(zfd, zbase + zsize - zmap, SEEK_SET));
+  CHECK_NE(-1, lseek(zfd, zmap + zsize - zmap, SEEK_SET));
   CHECK_NE(-1, WritevAll(zfd, v, 13));
   CHECK_NE(-1, fcntl(zfd, F_SETLK, &(struct flock){F_UNLCK}));
   //////////////////////////////////////////////////////////////////////////////
@@ -4209,12 +4239,12 @@ static int LuaSetHeader(lua_State *L) {
   if ((h = GetHttpHeader(key, keylen)) == -1) {
     if (!IsValidHttpToken(key, keylen)) {
       luaL_argerror(L, 1, "invalid");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   if (!(eval = EncodeHttpHeaderValue(val, vallen, &evallen))) {
     luaL_argerror(L, 2, "invalid");
-    unreachable;
+    __builtin_unreachable();
   }
   p = GetLuaResponse();
   while (p - hdrbuf.p + keylen + 2 + evallen + 2 + 512 > hdrbuf.n) {
@@ -4288,11 +4318,11 @@ static int LuaSetCookie(lua_State *L) {
 
   if (!IsValidHttpToken(key, keylen)) {
     luaL_argerror(L, 1, "invalid");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!IsValidCookieValue(val, vallen)) {
     luaL_argerror(L, 2, "invalid");
-    unreachable;
+    __builtin_unreachable();
   }
 
   ishostpref = keylen > strlen(hostpref) &&
@@ -4304,7 +4334,7 @@ static int LuaSetCookie(lua_State *L) {
     luaL_argerror(
         L, 1,
         _gc(xasprintf("%s and %s prefixes require SSL", hostpref, securepref)));
-    unreachable;
+    __builtin_unreachable();
   }
 
   appends(&buf, key);
@@ -4321,7 +4351,7 @@ static int LuaSetCookie(lua_State *L) {
         expires = lua_tostring(L, -1);
         if (!ParseHttpDateTime(expires, -1)) {
           luaL_argerror(L, 3, "invalid data format in Expires");
-          unreachable;
+          __builtin_unreachable();
         }
       }
       appends(&buf, "; Expires=");
@@ -4442,7 +4472,8 @@ static int LuaProgramPort(lua_State *L) {
 
 static int LuaProgramCache(lua_State *L) {
   OnlyCallFromMainProcess(L, "ProgramCache");
-  return LuaProgramInt(L, ProgramCache);
+  ProgramCache(luaL_checkinteger(L, 1), luaL_optstring(L, 2, NULL));
+  return 0;
 }
 
 static int LuaProgramTimeout(lua_State *L) {
@@ -4561,7 +4592,7 @@ static int LuaProgramSslPresharedKey(lua_State *L) {
   p2 = luaL_checklstring(L, 2, &n2);
   if (!n1 || n1 > MBEDTLS_PSK_MAX_LEN || !n2) {
     luaL_argerror(L, 1, "bad preshared key length");
-    unreachable;
+    __builtin_unreachable();
   }
   psk.key = memcpy(malloc(n1), p1, n1);
   psk.key_len = n1;
@@ -4587,7 +4618,7 @@ static int LuaProgramSslCiphersuite(lua_State *L) {
   OnlyCallFromInitLua(L, "ProgramSslCiphersuite");
   if (!(suite = GetCipherSuite(luaL_checkstring(L, 1)))) {
     luaL_argerror(L, 1, "unsupported or unknown ciphersuite");
-    unreachable;
+    __builtin_unreachable();
   }
   suites.p = realloc(suites.p, (++suites.n + 1) * sizeof(*suites.p));
   suites.p[suites.n - 1] = suite->id;
@@ -4691,7 +4722,7 @@ static int LuaGetZipPaths(lua_State *L) {
   lua_newtable(L);
   i = 0;
   n = GetZipCdirRecords(zcdir);
-  for (zcf = zbase + GetZipCdirOffset(zcdir); n--;
+  for (zcf = zmap + GetZipCdirOffset(zcdir); n--;
        zcf += ZIP_CFILE_HDRSIZE(zcf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zcf));
     path = GetAssetPath(zcf, &pathlen);
@@ -4728,7 +4759,7 @@ static int LuaGetAssetLastModifiedTime(lua_State *L) {
     if (a->file) {
       zuluseconds = a->file->st.st_mtim.tv_sec;
     } else {
-      GetZipCfileTimestamps(zbase + a->cf, &lm, 0, 0, gmtoff);
+      GetZipCfileTimestamps(zmap + a->cf, &lm, 0, 0, gmtoff);
       zuluseconds = lm.tv_sec;
     }
     lua_pushinteger(L, zuluseconds);
@@ -4747,7 +4778,7 @@ static int LuaGetAssetSize(lua_State *L) {
     if (a->file) {
       lua_pushinteger(L, a->file->st.st_size);
     } else {
-      lua_pushinteger(L, GetZipLfileUncompressedSize(zbase + a->lf));
+      lua_pushinteger(L, GetZipLfileUncompressedSize(zmap + a->lf));
     }
   } else {
     lua_pushnil(L);
@@ -4787,7 +4818,7 @@ static int LuaBlackhole(lua_State *L) {
   ip = luaL_checkinteger(L, 1);
   if (!(0 <= ip && ip <= 0xffffffff)) {
     luaL_argerror(L, 1, "ip out of range");
-    unreachable;
+    __builtin_unreachable();
   }
   lua_pushboolean(L, Blackhole(ip));
   return 1;
@@ -4819,7 +4850,7 @@ static int LuaAcquireToken(lua_State *L) {
   uint32_t ip;
   if (!tokenbucket.cidr) {
     luaL_error(L, "ProgramTokenBucket() needs to be called first");
-    unreachable;
+    __builtin_unreachable();
   }
   GetClientAddr(&ip, 0);
   lua_pushinteger(L, AcquireToken(tokenbucket.b, luaL_optinteger(L, 1, ip),
@@ -4831,7 +4862,7 @@ static int LuaCountTokens(lua_State *L) {
   uint32_t ip;
   if (!tokenbucket.cidr) {
     luaL_error(L, "ProgramTokenBucket() needs to be called first");
-    unreachable;
+    __builtin_unreachable();
   }
   GetClientAddr(&ip, 0);
   lua_pushinteger(L, CountTokens(tokenbucket.b, luaL_optinteger(L, 1, ip),
@@ -4842,7 +4873,7 @@ static int LuaCountTokens(lua_State *L) {
 static int LuaProgramTokenBucket(lua_State *L) {
   if (tokenbucket.cidr) {
     luaL_error(L, "ProgramTokenBucket() can only be called once");
-    unreachable;
+    __builtin_unreachable();
   }
   lua_Number replenish = luaL_optnumber(L, 1, 1);  // per second
   lua_Integer cidr = luaL_optinteger(L, 2, 24);
@@ -4851,31 +4882,31 @@ static int LuaProgramTokenBucket(lua_State *L) {
   lua_Integer ban = luaL_optinteger(L, 5, MIN(ignore / 10, 1));
   if (!(1 / 3600. <= replenish && replenish <= 1e6)) {
     luaL_argerror(L, 1, "require 1/3600 <= replenish <= 1e6");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!(8 <= cidr && cidr <= 32)) {
     luaL_argerror(L, 2, "require 8 <= cidr <= 32");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!(-1 <= reject && reject <= 126)) {
     luaL_argerror(L, 3, "require -1 <= reject <= 126");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!(-1 <= ignore && ignore <= 126)) {
     luaL_argerror(L, 4, "require -1 <= ignore <= 126");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!(-1 <= ban && ban <= 126)) {
     luaL_argerror(L, 5, "require -1 <= ban <= 126");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!(ignore <= reject)) {
     luaL_argerror(L, 4, "require ignore <= reject");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!(ban <= ignore)) {
     luaL_argerror(L, 5, "require ban <= ignore");
-    unreachable;
+    __builtin_unreachable();
   }
   VERBOSEF("(token) deploying %,ld buckets "
            "(one for every %ld ips) "
@@ -4977,9 +5008,9 @@ static int LuaGetAssetComment(lua_State *L) {
   size_t pathlen, m;
   path = LuaCheckPath(L, 1, &pathlen);
   if ((a = GetAssetZip(path, pathlen)) &&
-      (m = strnlen(ZIP_CFILE_COMMENT(zbase + a->cf),
-                   ZIP_CFILE_COMMENTSIZE(zbase + a->cf)))) {
-    lua_pushlstring(L, ZIP_CFILE_COMMENT(zbase + a->cf), m);
+      (m = strnlen(ZIP_CFILE_COMMENT(zmap + a->cf),
+                   ZIP_CFILE_COMMENTSIZE(zmap + a->cf)))) {
+    lua_pushlstring(L, ZIP_CFILE_COMMENT(zmap + a->cf), m);
   } else {
     lua_pushnil(L);
   }
@@ -5097,10 +5128,12 @@ static const luaL_Reg kLuaFuncs[] = {
     {"Crc32c", LuaCrc32c},                                      //
     {"Decimate", LuaDecimate},                                  //
     {"DecodeBase64", LuaDecodeBase64},                          //
+    {"DecodeHex", LuaDecodeHex},                                //
     {"DecodeJson", LuaDecodeJson},                              //
     {"DecodeLatin1", LuaDecodeLatin1},                          //
     {"Deflate", LuaDeflate},                                    //
     {"EncodeBase64", LuaEncodeBase64},                          //
+    {"EncodeHex", LuaEncodeHex},                                //
     {"EncodeJson", LuaEncodeJson},                              //
     {"EncodeLatin1", LuaEncodeLatin1},                          //
     {"EncodeLua", LuaEncodeLua},                                //
@@ -5136,6 +5169,7 @@ static const luaL_Reg kLuaFuncs[] = {
     {"GetHeader", LuaGetHeader},                                //
     {"GetHeaders", LuaGetHeaders},                              //
     {"GetHost", LuaGetHost},                                    //
+    {"GetHostIsa", LuaGetHostIsa},                              //
     {"GetHostOs", LuaGetHostOs},                                //
     {"GetHttpReason", LuaGetHttpReason},                        //
     {"GetHttpVersion", LuaGetHttpVersion},                      //
@@ -5161,6 +5195,7 @@ static const luaL_Reg kLuaFuncs[] = {
     {"HasControlCodes", LuaHasControlCodes},                    //
     {"HasParam", LuaHasParam},                                  //
     {"HidePath", LuaHidePath},                                  //
+    {"HighwayHash64", LuaHighwayHash64},                        //
     {"IndentLines", LuaIndentLines},                            //
     {"Inflate", LuaInflate},                                    //
     {"IsAcceptableHost", LuaIsAcceptableHost},                  //
@@ -5345,7 +5380,7 @@ static bool ShouldAutocomplete(const char *s) {
   l = 0;
   r = ARRAYLEN(kDontAutoComplete) - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     c = strcmp(kDontAutoComplete[m], s);
     if (c < 0) {
       l = m + 1;
@@ -5426,7 +5461,7 @@ static int LuaInterpreter(lua_State *L) {
   } else {
     lua_repl_blocking = true;
     lua_repl_completions_callback = HandleCompletions;
-    lua_initrepl(GL, "redbean");
+    lua_initrepl(GL);
     EnableRawMode();
     for (;;) {
       status = lua_loadline(L);
@@ -5651,12 +5686,6 @@ static char *HandleHugePayload(void) {
   return ServeFailure(413, "Payload Too Large");
 }
 
-static char *HandlePayloadSlowloris(void) {
-  LockInc(&shared->c.slowloris);
-  LogClose("payload slowloris");
-  return ServeFailure(408, "Request Timeout");
-}
-
 static char *HandleTransferRefused(void) {
   LockInc(&shared->c.transfersrefused);
   return ServeFailure(501, "Not Implemented");
@@ -5715,15 +5744,8 @@ static void HandleForkFailure(void) {
 
 static void HandleFrag(size_t got) {
   LockInc(&shared->c.frags);
-  if (++cpm.frags == 32) {
-    SendTimeout();
-    LogClose("slowloris");
-    LockInc(&shared->c.slowloris);
-    return;
-  } else {
-    DEBUGF("(stat) %s fragged msg added %,ld bytes to %,ld byte buffer",
-           DescribeClient(), amtread, got);
-  }
+  DEBUGF("(stat) %s fragged msg added %,ld bytes to %,ld byte buffer",
+         DescribeClient(), amtread, got);
 }
 
 static void HandleReload(void) {
@@ -5823,7 +5845,6 @@ static char *ReadMore(void) {
   size_t got;
   ssize_t rc;
   LockInc(&shared->c.frags);
-  if (++cpm.frags == 64) return HandlePayloadSlowloris();
   if ((rc = reader(client, inbuf.p + amtread, inbuf.n - amtread)) != -1) {
     if (!(got = rc)) return HandlePayloadDisconnect();
     amtread += got;
@@ -6014,7 +6035,7 @@ static char *Route(const char *host, size_t hostlen, const char *path,
     return ServeStatusz();
   } else {
     LockInc(&shared->c.notfounds);
-    return ServeError(404, "Not Found");
+    return ServeErrorWithPath(404, "Not Found", path, pathlen);
   }
 }
 
@@ -6037,7 +6058,7 @@ static char *RoutePath(const char *path, size_t pathlen) {
     } else {
       LockInc(&shared->c.forbiddens);
       WARNF("(srvr) asset %`'.*s %#o isn't readable", pathlen, path, m);
-      return ServeError(403, "Forbidden");
+      return ServeErrorWithPath(403, "Forbidden", path, pathlen);
     }
   } else if ((r = FindRedirect(path, pathlen)) != -1) {
     return HandleRedirect(redirects.p + r);
@@ -6080,8 +6101,8 @@ static inline bool IsLua(struct Asset *a) {
           ('.' | 'l' << 8 | 'u' << 16 | 'a' << 24)) {
     return true;
   }
-  p = ZIP_CFILE_NAME(zbase + a->cf);
-  n = ZIP_CFILE_NAMESIZE(zbase + a->cf);
+  p = ZIP_CFILE_NAME(zmap + a->cf);
+  n = ZIP_CFILE_NAMESIZE(zmap + a->cf);
   return n > 4 &&
          READ32LE(p + n - 4) == ('.' | 'l' << 8 | 'u' << 16 | 'a' << 24);
 }
@@ -6110,8 +6131,8 @@ static const char *GetContentType(struct Asset *a, const char *path, size_t n) {
   }
   return firstnonnull(
       GetContentTypeExt(path, n),
-      firstnonnull(GetContentTypeExt(ZIP_CFILE_NAME(zbase + a->cf),
-                                     ZIP_CFILE_NAMESIZE(zbase + a->cf)),
+      firstnonnull(GetContentTypeExt(ZIP_CFILE_NAME(zmap + a->cf),
+                                     ZIP_CFILE_NAMESIZE(zmap + a->cf)),
                    a->istext ? "text/plain" : "application/octet-stream"));
 }
 
@@ -6133,8 +6154,8 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
     p = SetStatus(304, "Not Modified");
   } else {
     if (!a->file) {
-      cpm.content = (char *)ZIP_LFILE_CONTENT(zbase + a->lf);
-      cpm.contentlength = GetZipCfileCompressedSize(zbase + a->cf);
+      cpm.content = (char *)ZIP_LFILE_CONTENT(zmap + a->lf);
+      cpm.contentlength = GetZipCfileCompressedSize(zmap + a->cf);
     } else if ((p = OpenAsset(a))) {
       return p;
     }
@@ -6150,7 +6171,7 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
       LockInc(&shared->c.identityresponses);
       DEBUGF("(zip) ServeAssetZipIdentity(%`'s)", ct);
       if (Verify(cpm.content, cpm.contentlength,
-                 ZIP_LFILE_CRC32(zbase + a->lf))) {
+                 ZIP_LFILE_CRC32(zmap + a->lf))) {
         p = SetStatus(200, "OK");
       } else {
         return ServeError(500, "Internal Server Error");
@@ -6173,7 +6194,7 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
   p = AppendHeader(p, "Last-Modified", a->lastmodifiedstr);
   if (cpm.msg.version >= 11) {
     if (!cpm.gotcachecontrol) {
-      p = AppendCache(p, cacheseconds);
+      p = AppendCache(p, cacheseconds, cachedirective);
     }
     if (!IsCompressed(a)) {
       p = stpcpy(p, "Accept-Ranges: bytes\r\n");
@@ -6189,9 +6210,10 @@ static char *SetStatus(unsigned code, const char *reason) {
   }
   cpm.statuscode = code;
   cpm.hascontenttype = false;
-  // reset, as the headers are reset
-  // istext is -1 by default to interpret as true when not set
-  cpm.istext = -1;
+  // reset, as the headers are reset.
+  // istext is `true`, as the default content type
+  // is text/html, which will be set later
+  cpm.istext = true;
   cpm.gotxcontenttypeoptions = 0;
   cpm.gotcachecontrol = 0;
   cpm.referrerpolicy = 0;
@@ -6592,7 +6614,7 @@ static int MemoryMonitor(void *arg, int tid) {
   pthread_spin_lock(&shared->montermlock);
   if (!id) {
     if ((tty = open(monitortty, O_RDWR | O_NOCTTY)) != -1) {
-      ioctl(tty, TCGETS, &oldterm);
+      tcgetattr(tty, &oldterm);
       term = oldterm;
       term.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
       term.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
@@ -6601,7 +6623,7 @@ static int MemoryMonitor(void *arg, int tid) {
       term.c_cflag |= CS8;
       term.c_cc[VMIN] = 1;
       term.c_cc[VTIME] = 0;
-      ioctl(tty, TCSETS, &term);
+      tcsetattr(tty, TCSANOW, &term);
       WRITE(tty, "\e[?25l", 6);
     }
   }
@@ -6620,8 +6642,8 @@ static int MemoryMonitor(void *arg, int tid) {
       intervals = atomic_load_explicit(&_mmi.i, memory_order_relaxed);
       if ((mi2 = realloc(mi, (intervals += 3) * sizeof(*mi)))) {
         mi = mi2;
-        mi[0].x = (intptr_t)_base >> 16;
-        mi[0].size = _etext - _base;
+        mi[0].x = (intptr_t)__executable_start >> 16;
+        mi[0].size = _etext - __executable_start;
         mi[0].flags = 0;
         mi[1].x = (intptr_t)_etext >> 16;
         mi[1].size = _edata - _etext;
@@ -6644,7 +6666,7 @@ static int MemoryMonitor(void *arg, int tid) {
 
         ws.ws_col = 80;
         ws.ws_row = 40;
-        _getttysize(tty, &ws);
+        tcgetwinsize(tty, &ws);
 
         appendr(&b, 0);
         appends(&b, "\e[H\e[1m");
@@ -6704,7 +6726,7 @@ static int MemoryMonitor(void *arg, int tid) {
       appendr(&b, 0);
       appends(&b, "\e[H\e[J\e[?25h");
       WRITE(tty, b, appendz(b).i);
-      ioctl(tty, TCSETS, &oldterm);
+      tcsetattr(tty, TCSANOW, &oldterm);
     }
 
     DEBUGF("(memv) exiting...");
@@ -6891,6 +6913,7 @@ static int HandleConnection(size_t i) {
 }
 
 static void MakeExecutableModifiable(void) {
+#ifdef __x86_64__
   int ft;
   size_t n;
   extern char ape_rom_vaddr[] __attribute__((__weak__));
@@ -6901,7 +6924,7 @@ static void MakeExecutableModifiable(void) {
   if (_endswith(zpath, ".com.dbg")) return;
   close(zfd);
   ft = ftrace_enabled(0);
-  if ((zfd = OpenExecutable()) == -1) {
+  if ((zfd = _OpenExecutable()) == -1) {
     WARNF("(srvr) can't open executable for modification: %m");
   }
   if (ft > 0) {
@@ -6909,6 +6932,9 @@ static void MakeExecutableModifiable(void) {
     ftrace_install();
     ftrace_enabled(ft);
   }
+#else
+  // TODO
+#endif
 }
 
 static int HandleReadline(void) {
@@ -7132,7 +7158,7 @@ static void ReplEventLoop(void) {
   DEBUGF("ReplEventLoop()");
   polls[0].fd = 0;
   lua_repl_completions_callback = HandleCompletions;
-  lua_initrepl(L, "redbean");
+  lua_initrepl(L);
   EnableRawMode();
   EventLoop(100);
   DisableRawMode();
@@ -7147,7 +7173,7 @@ static int WindowsReplThread(void *arg, int tid) {
   DEBUGF("(repl) started windows thread");
   lua_repl_blocking = true;
   lua_repl_completions_callback = HandleCompletions;
-  lua_initrepl(L, "redbean");
+  lua_initrepl(L);
   EnableRawMode();
   while (!terminated) {
     if (HandleReadline() == -1) {
@@ -7168,7 +7194,8 @@ static int WindowsReplThread(void *arg, int tid) {
 
 static void InstallSignalHandler(int sig, void *handler) {
   struct sigaction sa = {.sa_sigaction = handler};
-  CHECK_NE(-1, sigaction(sig, &sa, 0));
+  if (sigaction(sig, &sa, 0) == -1)
+    WARNF("(srvr) failed to set signal handler #%d: %m", sig);
 }
 
 static void SigInit(void) {
@@ -7186,8 +7213,8 @@ static void TlsInit(void) {
   int suite;
   if (unsecure) return;
 
-  if (suiteb && !X86_HAVE(AES)) {
-    WARNF("(srvr) requested suite b crypto, but aes-ni is not present");
+  if (suiteb && !mbedtls_aes_uses_hardware()) {
+    WARNF("(srvr) requested suiteb crypto, but hardware aes not present");
   }
 
   if (!sslinitialized) {
@@ -7264,9 +7291,10 @@ static void TlsDestroy(void) {
 
 static void GetOpts(int argc, char *argv[]) {
   int opt;
+  bool got_e_arg = false;
   bool storeasset = false;
   // only generate ecp cert under blinkenlights (rsa is slow)
-  norsagen = IsGenuineCosmo() || IsGenuineBlink();
+  norsagen = IsGenuineBlink();
   while ((opt = getopt(argc, argv, GETOPTS)) != -1) {
     switch (opt) {
       CASE('S', ++sandboxed);
@@ -7293,13 +7321,17 @@ static void GetOpts(int argc, char *argv[]) {
       CASE('G', ProgramGid(atoi(optarg)));
       CASE('p', ProgramPort(ParseInt(optarg)));
       CASE('R', ProgramRedirectArg(0, optarg));
-      CASE('c', ProgramCache(ParseInt(optarg)));
-      CASE('r', ProgramRedirectArg(307, optarg));
-      CASE('t', ProgramTimeout(ParseInt(optarg)));
-      CASE('h', PrintUsage(1, EXIT_SUCCESS));
-      CASE('M', ProgramMaxPayloadSize(ParseInt(optarg)));
+      case 'c':;  // accept "num" or "num,directive"
+        char *p;
+        long ret = strtol(optarg, &p, 0);
+        ProgramCache(ret, *p ? p + 1 : NULL);  // skip separator, if any
+        break;
+        CASE('r', ProgramRedirectArg(307, optarg));
+        CASE('t', ProgramTimeout(ParseInt(optarg)));
+        CASE('h', PrintUsage(1, EXIT_SUCCESS));
+        CASE('M', ProgramMaxPayloadSize(ParseInt(optarg)));
 #if !IsTiny()
-      CASE('W', monitortty = optarg);
+        CASE('W', monitortty = optarg);
       case 'f':
         funtrace = true;
         if (ftrace_install() == -1) {
@@ -7308,11 +7340,14 @@ static void GetOpts(int argc, char *argv[]) {
         break;
 #endif
 #ifndef STATIC
-        CASE('e', LuaEvalCode(optarg));
         CASE('F', LuaEvalFile(optarg));
         CASE('*', selfmodifiable = true);
         CASE('i', interpretermode = true);
         CASE('E', leakcrashreports = true);
+      case 'e':
+        got_e_arg = true;
+        LuaEvalCode(optarg);
+        break;
       case 'A':
         if (!storeasset) {
           storeasset = true;
@@ -7336,6 +7371,8 @@ static void GetOpts(int argc, char *argv[]) {
   }
   // if storing asset(s) is requested, don't need to continue
   if (storeasset) exit(0);
+  // we don't want to drop into a repl after using -e in -i mode
+  if (interpretermode && got_e_arg) exit(0);
 }
 
 void RedBean(int argc, char *argv[]) {
@@ -7376,12 +7413,12 @@ void RedBean(int argc, char *argv[]) {
   CHECK_NE(-1, fstat(zfd, &zst));
   OpenZip(true);
   SetDefaults();
-  LuaStart();
-  GetOpts(argc, argv);
   // this can fail with EPERM if we're running under pledge()
   if (!interpretermode && !(interfaces = GetHostIps())) {
     WARNF("(srvr) failed to query system network interface addresses: %m");
   }
+  LuaStart();
+  GetOpts(argc, argv);
 #ifndef STATIC
   if (selfmodifiable) {
     MakeExecutableModifiable();
@@ -7461,6 +7498,9 @@ void RedBean(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
+#if !IsTiny() && !defined(__x86_64__)
+  ShowCrashReports();
+#endif
   LoadZipArgs(&argc, &argv);
   RedBean(argc, argv);
 

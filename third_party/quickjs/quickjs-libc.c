@@ -22,10 +22,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "third_party/quickjs/quickjs-libc.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/stat.h"
@@ -46,12 +46,12 @@
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/s.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/time/time.h"
 #include "third_party/quickjs/cutils.h"
 #include "third_party/quickjs/list.h"
-#include "third_party/quickjs/quickjs-libc.h"
 
 asm(".ident\t\"\\n\\n\
 QuickJS (MIT License)\\n\
@@ -1045,7 +1045,7 @@ static JSValue js_std_file_tell(JSContext *ctx, JSValueConst this_val,
     int64_t pos;
     if (!f)
         return JS_EXCEPTION;
-#if defined(__linux__)
+#if defined(__linux__) || defined(__COSMOPOLITAN__)
     pos = ftello(f);
 #else
     pos = ftell(f);
@@ -1068,7 +1068,7 @@ static JSValue js_std_file_seek(JSContext *ctx, JSValueConst this_val,
         return JS_EXCEPTION;
     if (JS_ToInt32(ctx, &whence, argv[1]))
         return JS_EXCEPTION;
-#if defined(__linux__)
+#if defined(__linux__) || defined(__COSMOPOLITAN__)
     ret = fseeko(f, pos, whence);
 #else
     ret = fseek(f, pos, whence);
@@ -1696,7 +1696,7 @@ static JSValue js_os_ttyGetWinSize(JSContext *ctx, JSValueConst this_val,
     
     if (JS_ToInt32(ctx, &fd, argv[0]))
         return JS_EXCEPTION;
-    if (ioctl(fd, TIOCGWINSZ, &ws) == 0 &&
+    if (tcgetwinsize(fd, &ws) == 0 &&
         ws.ws_col >= 4 && ws.ws_row >= 4) {
         obj = JS_NewArray(ctx);
         if (JS_IsException(obj))
@@ -1938,7 +1938,7 @@ static JSValue js_os_signal(JSContext *ctx, JSValueConst this_val,
     return JS_UNDEFINED;
 }
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__COSMOPOLITAN__)
 static int64_t get_time_ms(void)
 {
     struct timespec ts;

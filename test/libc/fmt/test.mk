@@ -26,7 +26,6 @@ TEST_LIBC_FMT_DIRECTDEPS =				\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_TESTLIB					\
 	LIBC_TINYMATH					\
@@ -54,6 +53,9 @@ $(TEST_LIBC_FMT_OBJS): test/libc/fmt/test.mk
 $(TEST_LIBC_FMT_OBJS): private				\
 	DEFAULT_CCFLAGS +=				\
 		-fno-builtin
+
+o/$(MODE)/test/libc/fmt/fprintf_test.com.runs:		\
+	private .UNVEIL += w:/dev/full
 
 .PHONY: o/$(MODE)/test/libc/fmt
 o/$(MODE)/test/libc/fmt:				\

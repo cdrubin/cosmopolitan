@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/likely.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/likely.h"
 #include "libc/str/str.h"
 
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
@@ -60,6 +60,7 @@ noasan bool _isutf8(const void *data, size_t size) {
   p = data;
   e = p + size;
   while (p < e) {
+#ifdef __x86_64__
     if (!((intptr_t)p & 15)) {
       for (;;) {
         if ((m = __builtin_ia32_pmovmskb128(*(xmm_t *)p >= (xmm_t){0}) ^
@@ -75,6 +76,7 @@ noasan bool _isutf8(const void *data, size_t size) {
         return true;
       }
     }
+#endif
     if (LIKELY((c = *p++ & 255) < 0200)) continue;
     if (UNLIKELY(c < 0300)) return false;
     switch (kUtf8Dispatch[c - 0300]) {
@@ -119,7 +121,7 @@ noasan bool _isutf8(const void *data, size_t size) {
           return false;  // missing cont
         }
       default:
-        unreachable;
+        __builtin_unreachable();
     }
   }
   return true;

@@ -6,6 +6,7 @@ PKGS += LIBC_INTRIN
 LIBC_INTRIN_ARTIFACTS += LIBC_INTRIN_A
 LIBC_INTRIN = $(LIBC_INTRIN_A_DEPS) $(LIBC_INTRIN_A)
 LIBC_INTRIN_A = o/$(MODE)/libc/intrin/intrin.a
+LIBC_INTRIN_A_FILES := $(wildcard libc/intrin/*)
 LIBC_INTRIN_A_HDRS = $(filter %.h,$(LIBC_INTRIN_A_FILES))
 LIBC_INTRIN_A_INCS = $(filter %.inc,$(LIBC_INTRIN_A_FILES))
 LIBC_INTRIN_A_SRCS_S = $(filter %.S,$(LIBC_INTRIN_A_FILES))
@@ -13,8 +14,10 @@ LIBC_INTRIN_A_SRCS_C = $(filter %.c,$(LIBC_INTRIN_A_FILES))
 LIBC_INTRIN_A_SRCS = $(LIBC_INTRIN_A_SRCS_S) $(LIBC_INTRIN_A_SRCS_C)
 LIBC_INTRIN_A_CHECKS = $(LIBC_INTRIN_A).pkg
 
-LIBC_INTRIN_A_FILES :=					\
-	$(wildcard libc/intrin/*)
+ifeq ($(ARCH), aarch64)
+LIBC_INTRIN_A_SRCS_S += $(wildcard libc/intrin/aarch64/*.S)
+LIBC_INTRIN_A_HDRS += libc/intrin/aarch64/asmdefs.internal.h
+endif
 
 LIBC_INTRIN_A_OBJS =					\
 	$(LIBC_INTRIN_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
@@ -25,12 +28,11 @@ LIBC_INTRIN_A_CHECKS =					\
 	$(LIBC_INTRIN_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_INTRIN_A_DIRECTDEPS =				\
-	LIBC_STUBS					\
-	LIBC_SYSV					\
-	LIBC_SYSV_CALLS					\
 	LIBC_NEXGEN32E					\
 	LIBC_NT_KERNEL32				\
-	LIBC_NT_WS2_32
+	LIBC_NT_WS2_32					\
+	LIBC_SYSV					\
+	LIBC_SYSV_CALLS
 
 LIBC_INTRIN_A_DEPS :=					\
 	$(call uniq,$(foreach x,$(LIBC_INTRIN_A_DIRECTDEPS),$($(x))))
@@ -47,36 +49,44 @@ $(LIBC_INTRIN_A).pkg:					\
 # we can't use asan because:
 #   __strace_init() calls this before asan is initialized
 o/$(MODE)/libc/intrin/strace_enabled.o: private		\
-		OVERRIDE_COPTS +=			\
+		COPTS +=				\
 			-fno-sanitize=address
 
 # we can't use asan because:
 #   asan guard pages haven't been allocated yet
 o/$(MODE)/libc/intrin/directmap.o			\
 o/$(MODE)/libc/intrin/directmap-nt.o: private		\
-		OVERRIDE_COPTS +=			\
+		COPTS +=				\
 			-ffreestanding			\
 			-fno-sanitize=address
 
 # we want small code size because:
 #   to keep .text.head under 4096 bytes
 o/$(MODE)/libc/intrin/mman.greg.o: private		\
-		OVERRIDE_COPTS +=			\
+		COPTS +=				\
 			-Os
 
 # we can't use asan and ubsan because:
 #   this is asan and ubsan
 o/$(MODE)/libc/intrin/asan.o				\
 o/$(MODE)/libc/intrin/ubsan.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
+			-ffreestanding			\
 			-fno-sanitize=all		\
 			-fno-stack-protector
 
 o/$(MODE)/libc/intrin/asan.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-O2				\
 			-finline			\
 			-finline-functions
+
+o/$(MODE)/libc/intrin/asanthunk.o: private		\
+		CFLAGS +=				\
+			-x-no-pg			\
+			-ffreestanding			\
+			-fno-sanitize=all		\
+			-fno-stack-protector
 
 # we can't use compiler magic because:
 #   kprintf() is mission critical to error reporting
@@ -85,11 +95,10 @@ o/$(MODE)/libc/intrin/strerrno.greg.o			\
 o/$(MODE)/libc/intrin/strerrdoc.greg.o			\
 o/$(MODE)/libc/intrin/strerror_wr.greg.o		\
 o/$(MODE)/libc/intrin/kprintf.greg.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fpie				\
 			-fwrapv				\
 			-x-no-pg			\
-			-mno-fentry			\
 			-ffreestanding			\
 			-fno-sanitize=all		\
 			-fno-stack-protector
@@ -99,13 +108,11 @@ o/$(MODE)/libc/intrin/kprintf.greg.o: private		\
 o/$(MODE)/libc/intrin/futex_wait.o			\
 o/$(MODE)/libc/intrin/futex_wake.o			\
 o/$(MODE)/libc/intrin/gettid.greg.o			\
-o/$(MODE)/libc/intrin/sys_gettid.greg.o			\
 o/$(MODE)/libc/intrin/_trylock_debug_4.o		\
 o/$(MODE)/libc/intrin/_spinlock_debug_4.o: private	\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fwrapv				\
 			-x-no-pg			\
-			-mno-fentry			\
 			-ffreestanding			\
 			-fno-sanitize=all		\
 			-mgeneral-regs-only		\
@@ -115,8 +122,16 @@ o/$(MODE)/libc/intrin/_spinlock_debug_4.o: private	\
 #   global gone could be raised
 o/$(MODE)/libc/intrin/exit.o				\
 o/$(MODE)/libc/intrin/restorewintty.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fno-sanitize=all
+
+# we can't use -ftrapv because:
+#   this file implements it
+o/$(MODE)/libc/intrin/ftrapv.o: private			\
+		CFLAGS +=				\
+			-ffunction-sections		\
+			-ffreestanding			\
+			-fwrapv
 
 # we can't use asan because:
 #   sys_mmap() calls these which sets up shadow memory
@@ -124,7 +139,7 @@ o/$(MODE)/libc/intrin/describeflags.o			\
 o/$(MODE)/libc/intrin/describeframe.o			\
 o/$(MODE)/libc/intrin/describemapflags.o		\
 o/$(MODE)/libc/intrin/describeprotflags.o: private	\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fno-sanitize=address
 
 o/$(MODE)/libc/intrin/exit1.greg.o			\
@@ -162,29 +177,76 @@ o/$(MODE)/libc/intrin/createfilemappingnuma.o		\
 o/$(MODE)/libc/intrin/waitformultipleobjects.o		\
 o/$(MODE)/libc/intrin/generateconsolectrlevent.o	\
 o/$(MODE)/libc/intrin/wsawaitformultipleevents.o: private\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-Os				\
 			-fwrapv				\
 			-ffreestanding			\
 			-fno-stack-protector		\
 			-fno-sanitize=all
 
+# privileged functions
+o/$(MODE)/libc/intrin/dos2errno.o			\
+o/$(MODE)/libc/intrin/have_fsgsbase.o			\
+o/$(MODE)/libc/intrin/getmagnumstr.o			\
+o/$(MODE)/libc/intrin/formatint32.o			\
+o/$(MODE)/libc/intrin/strsignal_r.o			\
+o/$(MODE)/libc/intrin/strerror_wr.o: private		\
+		CFLAGS +=				\
+			-ffreestanding			\
+			-fno-sanitize=all
+
 o//libc/intrin/memmove.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fno-toplevel-reorder
 
 o//libc/intrin/bzero.o					\
 o//libc/intrin/memcmp.o					\
 o//libc/intrin/memset.o					\
 o//libc/intrin/memmove.o: private			\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-O2 -finline
 
 o/$(MODE)/libc/intrin/bzero.o				\
 o/$(MODE)/libc/intrin/memcmp.o				\
 o/$(MODE)/libc/intrin/memmove.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fpie
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/intrin/aarch64/%.o: libc/intrin/aarch64/%.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/fenv.o: libc/intrin/fenv.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/gcov.o: libc/intrin/gcov.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/futex.o: libc/intrin/futex.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/typeinfo.o: libc/intrin/typeinfo.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/kclocknames.o: libc/intrin/kclocknames.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/kdos2errno.o: libc/intrin/kdos2errno.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/kerrnodocs.o: libc/intrin/kerrnodocs.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/kipoptnames.o: libc/intrin/kipoptnames.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/kerrnonames.o: libc/intrin/kerrnonames.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/kfcntlcmds.o: libc/intrin/kfcntlcmds.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/kopenflags.o: libc/intrin/kopenflags.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/krlimitnames.o: libc/intrin/krlimitnames.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/ksignalnames.o: libc/intrin/ksignalnames.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/ksockoptnames.o: libc/intrin/ksockoptnames.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/ktcpoptnames.o: libc/intrin/ktcpoptnames.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/intrin/sched_yield.o: libc/intrin/sched_yield.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 LIBC_INTRIN_LIBS = $(foreach x,$(LIBC_INTRIN_ARTIFACTS),$($(x)))
 LIBC_INTRIN_HDRS = $(foreach x,$(LIBC_INTRIN_ARTIFACTS),$($(x)_HDRS))

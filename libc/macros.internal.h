@@ -13,20 +13,20 @@
 #define TRUE  1
 #define FALSE 0
 
-#define IS2POW(X)           (!((X) & ((X)-1)))
-#define ROUNDUP(X, K)       (((X) + (K)-1) & -(K))
-#define ROUNDDOWN(X, K)     ((X) & -(K))
+#define IS2POW(X)       (!((X) & ((X)-1)))
+#define ROUNDUP(X, K)   (((X) + (K)-1) & -(K))
+#define ROUNDDOWN(X, K) ((X) & -(K))
 #ifndef __ASSEMBLER__
-#define ABS(X)              ((X) >= 0 ? (X) : -(X))
-#define MIN(X, Y)           ((Y) > (X) ? (X) : (Y))
-#define MAX(X, Y)           ((Y) < (X) ? (X) : (Y))
+#define ABS(X)    ((X) >= 0 ? (X) : -(X))
+#define MIN(X, Y) ((Y) > (X) ? (X) : (Y))
+#define MAX(X, Y) ((Y) < (X) ? (X) : (Y))
 #else
 // The GNU assembler does not grok the ?: ternary operator; furthermore,
 // boolean expressions yield -1 and 0 for "true" and "false", not 1 and 0.
-#define __MAPBOOL(P)        (!!(P) / (!!(P) + !(P)))
-#define __IFELSE(P, X, Y)   (__MAPBOOL(P) * (X) + __MAPBOOL(!(P)) * (Y))
-#define MIN(X, Y)           (__IFELSE((Y) > (X), (X), (Y)))
-#define MAX(X, Y)           (__IFELSE((Y) < (X), (X), (Y)))
+#define __MAPBOOL(P)      (!!(P) / (!!(P) + !(P)))
+#define __IFELSE(P, X, Y) (__MAPBOOL(P) * (X) + __MAPBOOL(!(P)) * (Y))
+#define MIN(X, Y)         (__IFELSE((Y) > (X), (X), (Y)))
+#define MAX(X, Y)         (__IFELSE((Y) < (X), (X), (Y)))
 #endif
 #define PASTE(A, B)         __PASTE(A, B)
 #define STRINGIFY(A)        __STRINGIFY(A)
@@ -43,9 +43,31 @@
 #ifdef __ASSEMBLER__
 // clang-format off
 
-#if __MNO_VZEROUPPER__ + 0
-#define vzeroupper
-#endif
+//	Ends function definition.
+//	@cost	saves 1-3 lines of code
+.macro	.endfn	name:req bnd vis
+ .size	"\name",.-"\name"
+ .type	"\name",@function
+ .ifnb	\bnd
+  .\bnd	"\name"
+ .endif
+ .ifnb	\vis
+  .\vis	"\name"
+ .endif
+.endm
+
+//	Ends variable definition.
+//	@cost	saves 1-3 lines of code
+.macro	.endobj	name:req bnd vis
+ .size	"\name",.-"\name"
+ .type	"\name",@object
+ .ifnb	\bnd
+  .\bnd	"\name"
+ .endif
+ .ifnb	\vis
+  .\vis	"\name"
+ .endif
+.endm
 
 //	Shorthand notation for widely-acknowledged sections.
 .macro	.rodata
@@ -77,7 +99,7 @@
 .endm
 .macro	.text.modernity
 	.section .text.modernity,"ax",@progbits
-	.align	16
+	.balign	16
 .endm
 .macro	.text.antiquity
 	.section .text.antiquity,"ax",@progbits
@@ -95,40 +117,6 @@
 	.section .text.windows,"ax",@progbits
 .endm
 
-//	Mergeable numeric constant sections.
-//
-//	@note	linker de-dupes item/values across whole compile
-//	@note	therefore item/values are reordered w.r.t. link order
-//	@note	therefore no section relative addressing
-.macro	.rodata.cst4
-	.section .rodata.cst4,"aM",@progbits,4
-	.align	4
-.endm
-.macro	.rodata.cst8
-	.section .rodata.cst8,"aM",@progbits,8
-	.align	8
-.endm
-.macro	.rodata.cst16
-	.section .rodata.cst16,"aM",@progbits,16
-	.align	16
-.endm
-.macro	.rodata.cst32
-	.section .rodata.cst32,"aM",@progbits,32
-	.align	32
-.endm
-.macro	.rodata.cst64
-	.section .rodata.cst64,"aM",@progbits,64
-	.align	64
-.endm
-.macro	.tdata
-	.section .tdata,"awT",@progbits
-	.align	4
-.endm
-.macro	.tbss
-	.section .tdata,"awT",@nobits
-	.align	4
-.endm
-
 //	Mergeable NUL-terminated UTF-8 string constant section.
 //
 //	@note	linker de-dupes C strings here across whole compile
@@ -136,7 +124,7 @@
 //	@note	therefore no section relative addressing
 .macro	.rodata.str1.1
 	.section .rodata.str1.1,"aMS",@progbits,1
-	.align	1
+	.balign	1
 .endm
 
 //	Locates unreferenced code invulnerable to --gc-sections.
@@ -152,6 +140,147 @@
 //	Makes code runnable while code morphing.
 .macro	.privileged
 	.section .privileged,"ax",@progbits
+.endm
+
+//	Declares alternative implementation of function.
+//	@param	implement e.g. tinymath_pow
+//	@param	canonical e.g. pow
+.macro	.alias	implement:req canonical:req
+	.equ	\canonical,\implement
+	.weak	\canonical
+.endm
+
+#ifdef __aarch64__
+.macro	jmp	dest:req
+	b	\dest
+.endm
+#endif
+
+//	Pulls unrelated module into linkage.
+//
+//	In order for this technique to work with --gc-sections, another
+//	module somewhere might want to weakly reference whats yoinked.
+.macro	.yoink	symbol:req
+	.section .yoink
+#ifdef __x86_64__
+	nopl	"\symbol"(%rip)
+#elif defined(__aarch64__)
+	b	"\symbol"
+#endif
+	.previous
+.endm
+
+//	Begins definition of frameless function that calls no functions.
+.macro	.leafprologue
+#if !(defined(TINY) && !defined(__PG__))
+#ifdef __x86_64__
+	push	%rbp
+	mov	%rsp,%rbp
+#elif defined(__aarch64__)
+	stp	x29,x30,[sp,#-16]!
+	mov	x29,sp
+#endif
+#endif
+.endm
+
+//	Ends definition of frameless function that calls no functions.
+.macro	.leafepilogue
+#if !(defined(TINY) && !defined(__PG__))
+#ifdef __x86_64__
+	pop	%rbp
+#elif defined(__aarch64__)
+	ldp	x29,x30,[sp],#16
+#endif
+#endif
+	ret
+.endm
+
+//	Documents unreachable assembly code.
+.macro	.unreachable
+#if !defined(NDEBUG) && defined(__x86_64__)
+	ud2		// crash if contract is broken
+#elif !defined(NDEBUG) && defined(__aarch64__)
+	brk	#1000
+#elif defined(__FNO_OMIT_FRAME_POINTER__) && defined(__x86_64__)
+	nop		// avoid noreturn tail call backtrace ambiguity
+#endif
+.endm
+
+//	Embeds Fixed-Width Zero-Padded String.
+//	@note	.fxstr is better
+.macro	.ascin str:req fieldsize:req
+1347:	.ascii	"\str"
+ .org	1347b+\fieldsize,0x00
+.endm
+
+//	Inserts --ftrace pre-prologue.
+//	This goes immediately before the function symbol.
+//	@see	.ftrace2
+.macro	.ftrace1
+#ifdef FTRACE
+#ifdef __x86_64__
+	.rept	9
+	nop
+	.endr
+#elif defined(__aarch64__)
+	.rept	6
+	nop
+	.endr
+#endif /* __x86_64__ */
+#endif /* FTRACE */
+.endm
+
+//	Inserts --ftrace prologue.
+//	This goes immediately after the function symbol.
+//	@see	.ftrace1
+.macro	.ftrace2
+#ifdef FTRACE
+#ifdef __x86_64__
+	xchg	%ax,%ax
+#elif defined(__aarch64__)
+	nop
+#endif /* __x86_64__ */
+#endif /* FTRACE */
+.endm
+
+#ifdef __x86_64__
+
+#if __MNO_VZEROUPPER__ + 0
+#define vzeroupper
+#endif
+
+//	Mergeable numeric constant sections.
+//
+//	@note	linker de-dupes item/values across whole compile
+//	@note	therefore item/values are reordered w.r.t. link order
+//	@note	therefore no section relative addressing
+.macro	.rodata.cst4
+	.section .rodata.cst4,"aM",@progbits,4
+	.balign	4
+.endm
+.macro	.rodata.cst8
+	.section .rodata.cst8,"aM",@progbits,8
+	.balign	8
+.endm
+.macro	.rodata.cst16
+	.section .rodata.cst16,"aM",@progbits,16
+	.balign	16
+.endm
+.macro	.rodata.cst32
+	.section .rodata.cst32,"aM",@progbits,32
+	.balign	32
+.endm
+.macro	.rodata.cst64
+	.section .rodata.cst64,"aM",@progbits,64
+	.balign	64
+.endm
+.macro	.tdata
+	.section .tdata,"awT",@progbits
+	.balign	4
+.endm
+.macro	.tbss
+	.section .tdata,"awT",@nobits
+	.balign	4
 .endm
 
 //	Loads address of errno into %rcx
@@ -174,11 +303,11 @@
 //	@see	libc/runtime/_init.S
 .macro	.initro number:req name:req
 	.section ".initro.\number\().\name","a",@progbits
-	.align	8
+	.balign	8
 .endm
 .macro	.initbss number:req name:req
 	.section ".piro.bss.init.2.\number\().\name","aw",@nobits
-	.align	8
+	.balign	8
 .endm
 .macro	.init.start number:req name:req
 	.section ".init.\number\().\name","ax",@progbits
@@ -187,40 +316,6 @@
 .macro	.init.end number:req name:req bnd=globl vis
 	.endfn	"\name",\bnd,\vis
 	.previous
-.endm
-
-//	Declares alternative implementation of function.
-//	@param	implement e.g. tinymath_pow
-//	@param	canonical e.g. pow
-.macro	.alias	implement:req canonical:req
-	.equ	\canonical,\implement
-	.weak	\canonical
-.endm
-
-//	Ends function definition.
-//	@cost	saves 1-3 lines of code
-.macro	.endfn	name:req bnd vis
- .size	"\name",.-"\name"
- .type	"\name",@function
- .ifnb	\bnd
-  .\bnd	"\name"
- .endif
- .ifnb	\vis
-  .\vis	"\name"
- .endif
-.endm
-
-//	Ends variable definition.
-//	@cost	saves 1-3 lines of code
-.macro	.endobj	name:req bnd vis
- .size	"\name",.-"\name"
- .type	"\name",@object
- .ifnb	\bnd
-  .\bnd	"\name"
- .endif
- .ifnb	\vis
-  .\vis	"\name"
- .endif
 .endm
 
 //	LOOP Instruction Replacement.
@@ -270,13 +365,6 @@
  .endif
 .endm
 
-//	Embeds Fixed-Width Zero-Padded String.
-//	@note	.fxstr is better
-.macro	.ascin str:req fieldsize:req
-1347:	.ascii	"\str"
- .org	1347b+\fieldsize,0x00
-.endm
-
 //	Marks symbols as object en-masse.
 //	@note	zero-padded ≠ nul-terminated
 .macro	.object	symbol rest:vararg
@@ -288,7 +376,7 @@
 
 //	Pads function prologue unconditionally for runtime hooking.
 //	@cost	≥0.3 cycles, 5 bytes
-//	@see	.profilable
+//	@see	.ftrace1
 .macro	.hookable
 	.byte	0x0f
 	.byte	0x1f
@@ -341,16 +429,6 @@
  .byte	0x0f,0x1f,0x40,0x00
 .endm
 
-//	Pulls unrelated module into linkage.
-//
-//	In order for this technique to work with --gc-sections, another
-//	module somewhere might want to weakly reference whats yoinked.
-.macro	.yoink	symbol:req
-	.section .yoink
-	nopl	"\symbol"(%rip)
-	.previous
-.endm
-
 //	Calls Windows function.
 //
 //	@param	cx,dx,r8,r9,stack
@@ -365,22 +443,6 @@
 //	Custom emulator instruction for bottom stack frame.
 .macro	bofram	endfunc:req
 	.byte	0x0f,0x1f,0105,\endfunc-.	# nopl disp8(%rbp)
-.endm
-
-//	Begins definition of frameless function that calls no functions.
-.macro	.leafprologue
-#if !(defined(TINY) && !defined(__PG__))
-	push	%rbp
-	mov	%rsp,%rbp
-#endif
-.endm
-
-//	Ends definition of frameless function that calls no functions.
-.macro	.leafepilogue
-#if !(defined(TINY) && !defined(__PG__))
-	pop	%rbp
-#endif
-	ret
 .endm
 
 //	Good alignment for functions where alignment actually helps.
@@ -438,40 +500,6 @@
 	call	*\symbol\()@gotpcrel(%rip)
 #else
 	call	\symbol\()@plt
-#endif
-.endm
-
-//	Documents unreachable assembly code.
-.macro	.unreachable
-#ifndef NDEBUG
-	ud2		# crash if contract is broken
-#elif defined(__FNO_OMIT_FRAME_POINTER__)
-	nop		# avoid noreturn tail call backtrace ambiguity
-#endif
-.endm
-
-//	Inserts profiling hook in prologue if cc wants it.
-//
-//	Cosmopolitan does this in a slightly different way from normal
-//	GNU toolchains. We always use the -mnop-mcount behavior, since
-//	the runtime is able to morph the binary at runtime. It is good
-//	since we can put hooks for profiling and function tracing into
-//	most builds, without any impact on performance.
-//
-//	@cost	≥0.3 cycles, 5 bytes
-//	@see	build/compile
-.macro	.profilable
-#ifdef __PG__
-1382:
-#if defined(__MFENTRY__)
-	call	__fentry__
-#elif defined(__PIC__) || defined(__PIE__)
-//	nopw 0x00(%rax,%rax,1)
-	.byte	0x66,0x0f,0x1f,0x44,0x00,0x00
-#else
-//	nopl 0x00(%rax,%rax,1)
-	.byte	0x0f,0x1f,0x44,0x00,0x00
-#endif
 #endif
 .endm
 
@@ -542,6 +570,14 @@
 #endif
 .endm
 
+#else
+
+.macro	.underrun
+.endm
+.macro	.overrun
+.endm
+
 // clang-format on
+#endif /* __x86_64__ */
 #endif /* __ASSEMBLER__ */
 #endif /* COSMOPOLITAN_LIBC_MACROS_H_ */

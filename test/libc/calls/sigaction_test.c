@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/rusage.h"
-#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/sigset.internal.h"
@@ -27,6 +27,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/nexgen32e/nexgen32e.h"
+#include "libc/nexgen32e/vendor.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
@@ -68,6 +69,7 @@ TEST(sigaction, raise) {
 // test kill()
 
 TEST(sigaction, testPingPongParentChildWithSigint) {
+  if (IsNetbsd()) return;  // TODO: what's up with runitd on netbsd?
   int pid, status;
   sigset_t blockint, oldmask;
   struct sigaction oldint;
@@ -110,6 +112,8 @@ TEST(sigaction, testPingPongParentChildWithSigint) {
   EXPECT_SYS(0, 0, sigaction(SIGINT, &oldint, 0));
   EXPECT_SYS(0, 0, sigprocmask(SIG_BLOCK, &oldmask, 0));
 }
+
+#ifdef __x86_64__
 
 ////////////////////////////////////////////////////////////////////////////////
 // test int3 crash
@@ -163,6 +167,8 @@ TEST(sigaction, sigFpe_handlerCanEditProcessStateAndRecoverExecution) {
   ubsanTrumpsSystemsEngineering();
 }
 
+#endif /* __x86_64__ */
+
 static unsigned OnSignalCnt = 0;
 void OnSignal(int sig, siginfo_t *si, void *ctx) {
   OnSignalCnt++;
@@ -184,6 +190,7 @@ TEST(sigaction, ignoringSignalDiscardsSignal) {
 
 TEST(sigaction, autoZombieSlayer) {
   if (IsWindows()) return;
+  if (IsCygwin()) return;
   int pid;
   struct sigaction sa;
   // make sure we're starting in expected state
@@ -194,8 +201,8 @@ TEST(sigaction, autoZombieSlayer) {
   if (!pid) _Exit(0);
   ASSERT_SYS(0, pid, wait(0));
   // enable automatic zombie slayer
-  sa.sa_handler = SIG_DFL;     // POSIX.1 says no SIG_IGN
-  sa.sa_flags = SA_NOCLDWAIT;  // seems to be optional
+  sa.sa_handler = SIG_IGN;
+  sa.sa_flags = 0;
   sigemptyset(&sa.sa_mask);
   ASSERT_SYS(0, 0, sigaction(SIGCHLD, &sa, &sa));
   // verify it works

@@ -52,11 +52,15 @@
 //	@returnstwice
 //	@threadsafe
 //	@vforksafe
+	.ftrace1
 vfork:
+	.ftrace2
+
+#ifdef __x86_64__
+
 #if !IsTiny()
 	push	%rbp
 	mov	%rsp,%rbp
-	.profilable
 	call	__require_tls
 #ifdef SYSDEBUG
 	ezlea	.Llog,di
@@ -64,13 +68,13 @@ vfork:
 #endif
 	pop	%rbp
 #endif
-	mov	%fs:0,%r9		# get thread information block
+	mov	%fs:0,%r9		// get thread information block
 #if SupportsWindows()
 	testb	IsWindows()
-	jnz	6f			# and we're lucky to have that
+	jnz	6f			// and we're lucky to have that
 #endif
 #ifdef __SANITIZE_ADDRESS__
-	jmp	5f			# TODO: asan and vfork don't mix?
+	jmp	5f			// TODO: asan and vfork don't mix?
 #endif
 #if SupportsXnu()
 	testb	IsXnu()
@@ -78,10 +82,10 @@ vfork:
 #endif
 #if SupportsOpenbsd()
 	testb	IsOpenbsd()
-	jnz	5f			# fake vfork plus msyscall issues
+	jnz	5f			// fake vfork plus msyscall issues
 #endif
-	mov	0x3c(%r9),%r8d		# avoid question of @vforksafe errno
-	pop	%rsi			# saves return address in a register
+	mov	0x3c(%r9),%r8d		// avoid question of @vforksafe errno
+	pop	%rsi			// saves return address in a register
 	mov	__NR_vfork(%rip),%eax
 #if SupportsBsd()
 	clc
@@ -92,10 +96,10 @@ vfork:
 	neg	%rax
 0:
 #endif
-	push	%rsi			# note it happens twice in same page
+	push	%rsi			// note it happens twice in same page
 	cmp	$-4095,%eax
 	jae	systemfive_error
-	mov	%r8d,0x3c(%r9)		# restore errno
+	mov	%r8d,0x3c(%r9)		// restore errno
 1:	test	%eax,%eax
 	jnz	.Lpar
 .Lchi:	orb	$TIB_FLAG_VFORKED,0x40(%r9)
@@ -118,12 +122,45 @@ vfork:
 	mov	%rsp,%rbp
 	push	%r9
 	push	%r9
-	xor	%edi,%edi		# dwCreationFlags
+	xor	%edi,%edi		// dwCreationFlags
 	call	sys_fork_nt
 	pop	%r9
 	pop	%r9
 	pop	%rbp
 	jmp	1b
+#endif
+
+#elif defined(__aarch64__)
+
+	adrp	x0,__hostos
+	ldr	w0,[x0,#:lo12:__hostos]
+	tbz	x0,3,1f			// bit 3 is xnu
+	b	fork			// which doesn't support vfork()
+1:	mov	x8,#220			// __NR_clone
+	mov	x0,#0x4111		// SIGCHLD | CLONE_VM | CLONE_VFORK
+	mov	x1,#0
+	svc	0
+
+//	if (!rc) {
+//	  __get_tls()->tib_flags |= TIB_FLAG_VFORKED;
+//	} else {
+//	  __get_tls()->tib_flags &= ~TIB_FLAG_VFORKED;
+//	}
+	sub	x1,x28,#1152
+	ldr	x2,[x1,0x40]
+	cbnz	x0,2f
+	orr	x2,x2,#TIB_FLAG_VFORKED
+1:	str	x2,[x1,0x40]
+	b	3f
+2:	and	x2,x2,#~TIB_FLAG_VFORKED
+	b	1b
+
+//	if (rc < 0) errno = -rc, rc = -1;
+3:	.hidden	_sysret
+	b	_sysret
+
+#else
+#error "architecture unsupported"
 #endif
 	.endfn	vfork,globl
 

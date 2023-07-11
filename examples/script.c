@@ -51,7 +51,7 @@
 #include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/time/time.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 // clang-format off
 
 /**
@@ -176,7 +176,7 @@ main(int argc, char *argv[])
 		playback(fscript);
 
 	if (tcgetattr(STDIN_FILENO, &tt) == -1 ||
-	    ioctl(STDIN_FILENO, TIOCGWINSZ, &win) == -1) {
+	    tcgetwinsize(STDIN_FILENO, &win) == -1) {
 		if (errno != ENOTTY) /* For debugger. */
 			err(1, "tcgetattr/ioctl");
 		if (openpty(&master, &slave, NULL, NULL, NULL) == -1)

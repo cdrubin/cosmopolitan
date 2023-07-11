@@ -17,7 +17,8 @@ COSMOPOLITAN_C_START_
 int abs(int) libcesque pureconst;
 long labs(long) libcesque pureconst;
 long long llabs(long long) libcesque pureconst;
-intmax_t imaxabs(intmax_t) libcesque pureconst;
+intmax_t imaxabs(intmax_t)
+libcesque pureconst;
 int atoi(const char *) paramsnonnull() libcesque;
 long atol(const char *) paramsnonnull() libcesque;
 long long atoll(const char *) paramsnonnull() libcesque;
@@ -39,17 +40,29 @@ unsigned long long wcstoull(const wchar_t *, wchar_t **, int);
 int wcscoll(const wchar_t *, const wchar_t *);
 size_t wcsxfrm(wchar_t *, const wchar_t *, size_t);
 
+double atof(const char *);
+float strtof(const char *, char **);
+double strtod(const char *, char **);
+long double strtold(const char *, char **);
+float wcstof(const wchar_t *, wchar_t **);
+double wcstod(const wchar_t *, wchar_t **);
+long double wcstold(const wchar_t *, wchar_t **);
+
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § conversion » time                                         ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
 int64_t DosDateTimeToUnix(unsigned, unsigned) libcesque nosideeffect;
-struct timeval WindowsTimeToTimeVal(int64_t) libcesque nosideeffect;
-struct timespec WindowsTimeToTimeSpec(int64_t) libcesque nosideeffect;
+struct timeval WindowsTimeToTimeVal(int64_t)
+libcesque nosideeffect;
+struct timespec WindowsTimeToTimeSpec(int64_t)
+libcesque nosideeffect;
 int64_t TimeSpecToWindowsTime(struct timespec) libcesque nosideeffect;
 int64_t TimeValToWindowsTime(struct timeval) libcesque nosideeffect;
-struct timeval WindowsDurationToTimeVal(int64_t) libcesque nosideeffect;
-struct timespec WindowsDurationToTimeSpec(int64_t) libcesque nosideeffect;
+struct timeval WindowsDurationToTimeVal(int64_t)
+libcesque nosideeffect;
+struct timespec WindowsDurationToTimeSpec(int64_t)
+libcesque nosideeffect;
 
 #define MakeFileTime(x)                                        \
   ({                                                           \
@@ -73,10 +86,10 @@ struct timespec WindowsDurationToTimeSpec(int64_t) libcesque nosideeffect;
 │ cosmopolitan § conversion » manipulation                                 ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
-char *dirname(char *);
-char *basename(char *);
+#ifdef COSMO
 char *stripext(char *);
 char *stripexts(char *);
+#endif
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § conversion » computation                                  ─╬─│┼
@@ -119,7 +132,8 @@ imaxdiv_t imaxdiv(intmax_t, intmax_t) pureconst;
 
 #if (__GNUC__ * 100 + __GNUC_MINOR__ >= 406 || defined(__llvm__)) && \
     !defined(__STRICT_ANSI__)
-int128_t i128abs(int128_t) libcesque pureconst;
+int128_t i128abs(int128_t)
+libcesque pureconst;
 int128_t strtoi128(const char *, char **, int) paramsnonnull((1));
 uint128_t strtou128(const char *, char **, int) paramsnonnull((1));
 int128_t wcstoi128(const wchar_t *, wchar_t **, int);

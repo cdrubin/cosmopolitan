@@ -39,7 +39,6 @@ TEST_LIBC_MEM_DIRECTDEPS =					\
 	LIBC_SOCK						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\
@@ -60,20 +59,17 @@ o/$(MODE)/test/libc/mem/%.com.dbg:				\
 		$(TEST_LIBC_MEM_DEPS)				\
 		o/$(MODE)/test/libc/mem/%.o			\
 		o/$(MODE)/test/libc/mem/mem.pkg			\
-		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o	\
-		o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o	\
 		$(LIBC_TESTMAIN)				\
 		$(CRT)						\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/test/libc/mem/prog/sock.o:					\
+o/$(MODE)/test/libc/mem/prog/sock.o:				\
 		test/libc/mem/prog/sock.c			\
 		libc/errno.h					\
 		libc/sock/sock.h				\
 		libc/intrin/bswap.h				\
 		libc/sysv/consts/af.h				\
-		libc/runtime/symbolic.h				\
 		libc/sysv/consts/sock.h
 
 ################################################################################
@@ -87,13 +83,15 @@ o/$(MODE)/test/libc/mem/prog/life.com.dbg:			\
 
 o/$(MODE)/test/libc/mem/prog/life.elf:				\
 		o/$(MODE)/tool/build/assimilate.com		\
-		o/$(MODE)/test/libc/mem/prog/life.com
+		o/$(MODE)/test/libc/mem/prog/life.com		\
+		$(VM)
 	@$(COMPILE) -wACP -T$@					\
 		build/bootstrap/cp.com				\
 		o/$(MODE)/test/libc/mem/prog/life.com		\
 		o/$(MODE)/test/libc/mem/prog/life.elf
 	@$(COMPILE) -wAASSIMILATE -T$@				\
-		o/$(MODE)/tool/build/assimilate.com		\
+		$(VM)						\
+		o/$(MODE)/tool/build/assimilate.com -f		\
 		o/$(MODE)/test/libc/mem/prog/life.elf
 
 o/$(MODE)/test/libc/mem/prog/life.elf.zip.o: private		\
@@ -112,13 +110,15 @@ o/$(MODE)/test/libc/mem/prog/sock.com.dbg:			\
 
 o/$(MODE)/test/libc/mem/prog/sock.elf:				\
 		o/$(MODE)/tool/build/assimilate.com		\
-		o/$(MODE)/test/libc/mem/prog/sock.com
+		o/$(MODE)/test/libc/mem/prog/sock.com		\
+		$(VM)
 	@$(COMPILE) -wACP -T$@					\
 		build/bootstrap/cp.com				\
 		o/$(MODE)/test/libc/mem/prog/sock.com		\
 		o/$(MODE)/test/libc/mem/prog/sock.elf
 	@$(COMPILE) -wAASSIMILATE -T$@				\
-		o/$(MODE)/tool/build/assimilate.com		\
+		$(VM)						\
+		o/$(MODE)/tool/build/assimilate.com -f		\
 		o/$(MODE)/test/libc/mem/prog/sock.elf
 
 o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o: private		\

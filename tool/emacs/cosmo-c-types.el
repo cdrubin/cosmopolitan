@@ -80,6 +80,7 @@
            "uint_least8_t"
            "uintptr_t"
            "ssize_t"
+           "time_t"
            "long long int"
            "unsigned long long"
            "int8_t"
@@ -180,7 +181,9 @@
            "i32"
            "u32"
            "i64"
-           "u64"))
+           "u64"
+           "off_t"
+           "rlim_t"))
 
         (x86intrin
          '("__v8hu"

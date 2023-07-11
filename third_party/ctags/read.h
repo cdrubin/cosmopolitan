@@ -24,10 +24,9 @@
 #include "third_party/ctags/general.h"  /* must always come first */
 
 #include "libc/calls/calls.h"
-#include "libc/calls/dprintf.h"
+#include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/fmt/fmt.h"
-#include "libc/mem/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/stdio/temp.h"
 #include "third_party/musl/tempnam.h"

@@ -39,7 +39,6 @@ TEST_TOOL_NET_DIRECTDEPS =					\
 	LIBC_SOCK						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_TESTLIB						\
 	LIBC_THREAD						\
@@ -85,7 +84,8 @@ o/$(MODE)/test/tool/net/redbean-tester.com:			\
 		o/$(MODE)/test/tool/net/redbean-tester.com.dbg	\
 		o/$(MODE)/third_party/zip/zip.com		\
 		o/$(MODE)/tool/build/symtab.com			\
-		$(TOOL_NET_REDBEAN_STANDARD_ASSETS)
+		$(TOOL_NET_REDBEAN_STANDARD_ASSETS)		\
+		$(VM)
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)

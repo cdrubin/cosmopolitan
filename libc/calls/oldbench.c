@@ -21,7 +21,6 @@
 #include "libc/calls/struct/timespec.h"
 #include "libc/dce.h"
 #include "libc/intrin/bits.h"
-#include "libc/intrin/initializer.internal.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/macros.internal.h"
@@ -31,6 +30,8 @@
 #include "libc/sysv/consts/clock.h"
 #include "libc/thread/tls.h"
 #include "libc/time/time.h"
+
+// TODO(jart): DELETE
 
 static struct Now {
   bool once;
@@ -77,7 +78,7 @@ static void Refresh(void) {
   memcpy(&g_now, &now, sizeof(now));
 }
 
-long double ConvertTicksToNanos(uint64_t ticks) {
+long double ConvertTicksToNanos(double ticks) {
   if (!g_now.once) Refresh();
   return ticks * g_now.cpn; /* pico scale */
 }

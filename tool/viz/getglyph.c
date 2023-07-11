@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/sigaction.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/tpenc.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
@@ -29,7 +28,7 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_truetype.h"
 
 #define SQR(x) ((x) * (x))

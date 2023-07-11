@@ -16,6 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/struct/sigaction.h"
+#include "ape/sections.internal.h"
 #include "libc/assert.h"
 #include "libc/calls/blocksigs.internal.h"
 #include "libc/calls/calls.h"
@@ -50,6 +52,12 @@
 
 #ifdef SYSDEBUG
 STATIC_YOINK("strsignal");  // for kprintf()
+#endif
+
+#if SupportsWindows()
+STATIC_YOINK("_init_onntconsoleevent");
+STATIC_YOINK("_check_sigwinch");
+STATIC_YOINK("_init_wincrash");
 #endif
 
 #define SA_RESTORER 0x04000000
@@ -168,9 +176,11 @@ static int __sigaction(int sig, const struct sigaction *act,
     rva = (int32_t)(intptr_t)SIG_DFL;
   } else if ((intptr_t)act->sa_handler < kSigactionMinRva) {
     rva = (int)(intptr_t)act->sa_handler;
-  } else if ((intptr_t)act->sa_handler >= (intptr_t)&_base + kSigactionMinRva &&
-             (intptr_t)act->sa_handler < (intptr_t)&_base + INT_MAX) {
-    rva = (int)((uintptr_t)act->sa_handler - (uintptr_t)&_base);
+  } else if ((intptr_t)act->sa_handler >=
+                 (intptr_t)&__executable_start + kSigactionMinRva &&
+             (intptr_t)act->sa_handler <
+                 (intptr_t)&__executable_start + INT_MAX) {
+    rva = (int)((uintptr_t)act->sa_handler - (uintptr_t)&__executable_start);
   } else {
     return efault();
   }
@@ -248,13 +258,17 @@ static int __sigaction(int sig, const struct sigaction *act,
   if (rc != -1 && !__vforked) {
     if (oldact) {
       oldrva = __sighandrvas[sig];
-      oldact->sa_sigaction = (sigaction_f)(
-          oldrva < kSigactionMinRva ? oldrva : (intptr_t)&_base + oldrva);
+      oldact->sa_sigaction =
+          (sigaction_f)(oldrva < kSigactionMinRva
+                            ? oldrva
+                            : (intptr_t)&__executable_start + oldrva);
     }
     if (act) {
       __sighandrvas[sig] = rva;
       __sighandflags[sig] = act->sa_flags;
-      __sig_check_ignore(sig, rva);
+      if (IsWindows()) {
+        __sig_check_ignore(sig, rva);
+      }
     }
   }
   return rc;
@@ -460,6 +474,13 @@ static int __sigaction(int sig, const struct sigaction *act,
  *   spawned your process, happened to call `setrlimit()`. Doing this is
  *   a wonderful idea.
  *
+ * Using signals might make your C runtime slower. Upon successfully
+ * installing its first signal handling function, sigaction() will set
+ * the global variable `__interruptible` to true, to let everything else
+ * know that signals are in play. That way code which would otherwise be
+ * frequently calling sigprocmask() out of an abundance of caution, will
+ * no longer need to pay its outrageous cost.
+ *
  * @return 0 on success or -1 w/ errno
  * @see xsigaction() for a much better api
  * @asyncsignalsafe
@@ -471,6 +492,13 @@ int sigaction(int sig, const struct sigaction *act, struct sigaction *oldact) {
     rc = einval();
   } else {
     rc = __sigaction(sig, act, oldact);
+    if (!rc && act && (uintptr_t)act->sa_handler >= kSigactionMinRva) {
+      static bool once;
+      if (!once) {
+        __interruptible = true;
+        once = true;
+      }
+    }
   }
   STRACE("sigaction(%G, %s, [%s]) → %d% m", sig, DescribeSigaction(0, act),
          DescribeSigaction(rc, oldact), rc);

@@ -17,7 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/dce.h"
+#include "libc/elf/def.h"
 #include "libc/elf/scalar.h"
 #include "libc/elf/struct/ehdr.h"
 #include "libc/elf/struct/phdr.h"
@@ -26,10 +27,13 @@
 #include "libc/elf/struct/verdaux.h"
 #include "libc/elf/struct/verdef.h"
 #include "libc/intrin/bits.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/auxv.h"
 
-static inline int CompareStrings(const char *l, const char *r) {
+// needed to avoid asan restrictions on strcmp
+static int StrCmp(const char *l, const char *r) {
   size_t i = 0;
   while (l[i] == r[i] && r[i]) ++i;
   return (l[i] & 255) - (r[i] & 255);
@@ -42,7 +46,7 @@ static inline int CheckDsoSymbolVersion(Elf64_Verdef *vd, int sym,
     if (!(vd->vd_flags & VER_FLG_BASE) &&
         (vd->vd_ndx & 0x7fff) == (sym & 0x7fff)) {
       aux = (Elf64_Verdaux *)((char *)vd + vd->vd_aux);
-      return !CompareStrings(name, strtab + aux->vda_name);
+      return !StrCmp(name, strtab + aux->vda_name);
     }
     if (!vd->vd_next) {
       return 0;
@@ -138,7 +142,7 @@ void *__vdsosym(const char *version, const char *name) {
     if (!symtab[i].st_shndx) {
       continue;
     }
-    if (CompareStrings(name, strtab + symtab[i].st_name)) {
+    if (StrCmp(name, strtab + symtab[i].st_name)) {
       continue;
     }
     if (versym && !CheckDsoSymbolVersion(verdef, versym[i], version, strtab)) {

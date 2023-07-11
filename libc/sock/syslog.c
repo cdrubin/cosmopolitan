@@ -16,9 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sock/syslog.h"
 #include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/dprintf.h"
+#include "libc/stdio/dprintf.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
@@ -31,7 +32,6 @@
 #include "libc/nt/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/sockaddr.h"
-#include "libc/sock/syslog.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"

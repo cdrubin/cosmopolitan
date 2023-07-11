@@ -25,6 +25,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "third_party/make/debug.h"
 #include "libc/assert.h"
 #include "libc/sysv/consts/clock.h"
+#include "libc/runtime/runtime.h"
 #include "third_party/make/hash.h"
 
 
@@ -130,7 +131,7 @@ enter_file (const char *name)
       return f;
     }
 
-  new = xcalloc (sizeof (struct file));
+  new = xcalloc (1, sizeof (struct file));
   new->name = new->hname = name;
   new->update_status = us_none;
 

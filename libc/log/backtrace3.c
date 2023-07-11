@@ -45,9 +45,8 @@
  * @param st is open symbol table for current executable
  * @return -1 w/ errno if error happened
  */
-noinstrument noasan int PrintBacktraceUsingSymbols(int fd,
-                                                   const struct StackFrame *bp,
-                                                   struct SymbolTable *st) {
+dontinstrument noasan int PrintBacktraceUsingSymbols(
+    int fd, const struct StackFrame *bp, struct SymbolTable *st) {
   bool ok;
   size_t gi;
   intptr_t addr;
@@ -67,24 +66,35 @@ noinstrument noasan int PrintBacktraceUsingSymbols(int fd,
       break;
     }
     addr = frame->addr;
-    if (addr == _weakaddr("__gc")) {
+#ifdef __x86_64__
+    if (addr == (intptr_t)_weaken(__gc)) {
       do {
         --gi;
-      } while ((addr = garbage->p[gi].ret) == _weakaddr("__gc"));
+      } while ((addr = garbage->p[gi].ret) == (intptr_t)_weaken(__gc));
     }
-    /*
-     * we subtract one to handle the case of noreturn functions with a
-     * call instruction at the end, since %rip in such cases will point
-     * to the start of the next function. generally %rip always points
-     * to the byte after the instruction. one exception is in case like
-     * __restore_rt where the kernel creates a stack frame that points
-     * to the beginning of the function.
-     */
-    if ((symbol = __get_symbol(st, addr - 1)) != -1 ||
-        (symbol = __get_symbol(st, addr - 0)) != -1) {
-      addend = addr - st->addr_base;
-      addend -= st->symbols[symbol].x;
+#endif
+    if (addr) {
+      if (
+#ifdef __x86_64__
+          /*
+           * we subtract one to handle the case of noreturn functions
+           * with a call instruction at the end, since %rip in such
+           * cases will point to the start of the next function.
+           * generally %rip always points to the byte after the
+           * instruction. one exception is in case like __restore_rt
+           * where the kernel creates a stack frame that points to the
+           * beginning of the function.
+           */
+          (symbol = __get_symbol(st, addr - 1)) != -1 ||
+#endif
+          (symbol = __get_symbol(st, addr)) != -1) {
+        addend = addr - st->addr_base;
+        addend -= st->symbols[symbol].x;
+      } else {
+        addend = 0;
+      }
     } else {
+      symbol = 0;
       addend = 0;
     }
     kprintf("%012lx %lx %s%+d\n", frame, addr, __get_symbol_name(st, symbol),

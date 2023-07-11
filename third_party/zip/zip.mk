@@ -88,11 +88,11 @@ THIRD_PARTY_ZIP_DIRECTDEPS =			\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_TIME				\
 	LIBC_X					\
-	THIRD_PARTY_BZIP2
+	THIRD_PARTY_BZIP2			\
+	THIRD_PARTY_ZLIB
 
 THIRD_PARTY_ZIP_DEPS :=				\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_ZIP_DIRECTDEPS),$($(x))))
@@ -151,7 +151,7 @@ o/$(MODE)/third_party/zip/zipfile_.o		\
 o/$(MODE)/third_party/zip/zipnote.o		\
 o/$(MODE)/third_party/zip/zipsplit.o		\
 o/$(MODE)/third_party/zip/zipup.o: private	\
-	OVERRIDE_CPPFLAGS +=			\
+	CPPFLAGS +=				\
 		-DUNIX				\
 		-DMMAP				\
 		-DUNICODE_SUPPORT		\

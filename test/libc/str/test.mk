@@ -41,17 +41,18 @@ TEST_LIBC_STR_DIRECTDEPS =						\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
 	LIBC_TESTLIB							\
 	LIBC_X								\
 	LIBC_ZIPOS							\
+	THIRD_PARTY_COMPILER_RT						\
 	THIRD_PARTY_MBEDTLS						\
 	THIRD_PARTY_REGEX						\
 	THIRD_PARTY_ZLIB						\
 	THIRD_PARTY_LIBCXX						\
-	THIRD_PARTY_SMALLZ4
+	THIRD_PARTY_SMALLZ4						\
+	THIRD_PARTY_VQSORT
 
 TEST_LIBC_STR_DEPS :=							\
 	$(call uniq,$(foreach x,$(TEST_LIBC_STR_DIRECTDEPS),$($(x))))
@@ -61,7 +62,7 @@ o/$(MODE)/test/libc/str/str.pkg:					\
 		$(foreach x,$(TEST_LIBC_STR_DIRECTDEPS),$($(x)_A).pkg)
 
 o/$(MODE)/test/libc/str/tpenc_test.o: private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			$(TRADITIONAL)
 
 o/$(MODE)/test/libc/str/%.com.dbg:					\
@@ -78,7 +79,7 @@ $(TEST_LIBC_STR_OBJS): private						\
 			-fno-builtin
 
 o/$(MODE)/test/libc/str/memmove_test.o: private				\
-		OVERRIDE_CFLAGS +=					\
+		CFLAGS +=						\
 			-O2 -D_FORTIFY_SOURCE=2
 
 .PHONY: o/$(MODE)/test/libc/str

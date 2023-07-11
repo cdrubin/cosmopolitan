@@ -36,12 +36,12 @@ TOOL_VIZ_LIB_A_DIRECTDEPS =				\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_TESTLIB					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
 	LIBC_X						\
+	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_DLMALLOC				\
 	THIRD_PARTY_GDTOA
 
@@ -49,7 +49,7 @@ TOOL_VIZ_LIB_A_DEPS :=					\
 	$(call uniq,$(foreach x,$(TOOL_VIZ_LIB_A_DIRECTDEPS),$($(x))))
 
 o/$(MODE)/tool/viz/lib/pmaddubsw.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			-fvect-cost-model=unlimited
 
 o/$(MODE)/tool/viz/lib/scale.o				\
@@ -61,20 +61,18 @@ o/$(MODE)/tool/viz/lib/doublechrominance.o		\
 o/$(MODE)/tool/viz/lib/doublechrominance.o		\
 o/$(MODE)/tool/viz/lib/interlace.o			\
 o/$(MODE)/tool/viz/lib/bilinearscale.o			\
-o/$(MODE)/tool/viz/lib/oldbilinearscale.o		\
 o/$(MODE)/tool/viz/lib/boxblur.o			\
 o/$(MODE)/tool/viz/lib/dither.o				\
 o/$(MODE)/tool/viz/lib/emboss.o				\
 o/$(MODE)/tool/viz/lib/getxtermcodes.o			\
 o/$(MODE)/tool/viz/lib/lingamma.o			\
-o/$(MODE)/tool/viz/lib/perlin3.o			\
-o/$(MODE)/tool/viz/lib/resizegraphic.o: private		\
-		OVERRIDE_CFLAGS +=			\
+o/$(MODE)/tool/viz/lib/perlin3.o: private		\
+		CFLAGS +=				\
 			-DSTACK_FRAME_UNLIMITED		\
 			$(MATHEMATICAL)
 
 o/$(MODE)/tool/viz/lib/printmatrix.o: private		\
-		OVERRIDE_CFLAGS +=			\
+		CFLAGS +=				\
 			$(IEEE_MATH)
 
 $(TOOL_VIZ_LIB_A):					\

@@ -9,16 +9,8 @@ THIRD_PARTY_DLMALLOC_A = o/$(MODE)/third_party/dlmalloc/dlmalloc.a
 THIRD_PARTY_DLMALLOC_A_FILES := $(wildcard third_party/dlmalloc/*)
 THIRD_PARTY_DLMALLOC_A_HDRS = $(filter %.h,$(THIRD_PARTY_DLMALLOC_A_FILES))
 THIRD_PARTY_DLMALLOC_A_INCS = $(filter %.inc,$(THIRD_PARTY_DLMALLOC_A_FILES))
-THIRD_PARTY_DLMALLOC_A_SRCS_S = $(filter %.S,$(THIRD_PARTY_DLMALLOC_A_FILES))
-THIRD_PARTY_DLMALLOC_A_SRCS_C = $(filter %.c,$(THIRD_PARTY_DLMALLOC_A_FILES))
-
-THIRD_PARTY_DLMALLOC_A_SRCS =					\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_S)			\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_C)
-
-THIRD_PARTY_DLMALLOC_A_OBJS =					\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_C:%.c=o/$(MODE)/%.o)
+THIRD_PARTY_DLMALLOC_A_SRCS = $(filter %.c,$(THIRD_PARTY_DLMALLOC_A_FILES))
+THIRD_PARTY_DLMALLOC_A_OBJS = $(THIRD_PARTY_DLMALLOC_A_SRCS:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_DLMALLOC_A_CHECKS =					\
 	$(THIRD_PARTY_DLMALLOC_A).pkg				\
@@ -31,7 +23,6 @@ THIRD_PARTY_DLMALLOC_A_DIRECTDEPS =				\
 	LIBC_NEXGEN32E						\
 	LIBC_RUNTIME						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	THIRD_PARTY_COMPILER_RT					\
@@ -54,7 +45,7 @@ ifneq ($(MODE),tinylinux)
 # README file recommends -O3
 # It does double performance in default mode
 o/$(MODE)/third_party/dlmalloc/dlmalloc.o: private		\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-O3
 endif
 endif
@@ -62,14 +53,14 @@ endif
 # we can't use address sanitizer because:
 #   address sanitizer depends on dlmalloc
 o/$(MODE)/third_party/dlmalloc/dlmalloc.o: private		\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-ffreestanding				\
 			-fno-sanitize=address
 
 # we must segregate codegen because:
 #   file contains multiple independently linkable apis
 o/$(MODE)/third_party/dlmalloc/dlmalloc.o: private		\
-		OVERRIDE_CFLAGS +=				\
+		CFLAGS +=					\
 			-ffunction-sections			\
 			-fdata-sections
 

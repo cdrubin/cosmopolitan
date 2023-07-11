@@ -16,8 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "tool/plinko/lib/plinko.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/errno.h"
 #include "libc/intrin/likely.h"
 #include "libc/intrin/strace.internal.h"
@@ -31,19 +33,19 @@
 #include "libc/runtime/symbols.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/arch.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/time/clockstonanos.internal.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "tool/build/lib/case.h"
 #include "tool/plinko/lib/char.h"
 #include "tool/plinko/lib/error.h"
 #include "tool/plinko/lib/gc.h"
 #include "tool/plinko/lib/histo.h"
 #include "tool/plinko/lib/index.h"
-#include "tool/plinko/lib/plinko.h"
 #include "tool/plinko/lib/print.h"
 #include "tool/plinko/lib/printf.h"
 #include "tool/plinko/lib/stack.h"
@@ -935,8 +937,8 @@ int Plinko(int argc, char *argv[]) {
     }
   }
 
-  if (arch_prctl(ARCH_SET_FS, 0x200000000000) == -1 ||
-      arch_prctl(ARCH_SET_GS, (intptr_t)DispatchPlan) == -1) {
+  if (sys_arch_prctl(ARCH_SET_FS, 0x200000000000) == -1 ||
+      sys_arch_prctl(ARCH_SET_GS, (intptr_t)DispatchPlan) == -1) {
     fputs("error: ", stderr);
     fputs(strerror(errno), stderr);
     fputs("\nyour operating system doesn't allow you change both "

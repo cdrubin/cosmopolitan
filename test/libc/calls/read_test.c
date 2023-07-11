@@ -16,11 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
 #include "libc/sock/internal.h"
 #include "libc/sysv/consts/nr.h"
 #include "libc/sysv/consts/o.h"
@@ -43,15 +45,6 @@ TEST(read, eof) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static long Read(long fd, void *buf, unsigned long size) {
-  long ax, di, si, dx;
-  asm volatile("syscall"
-               : "=a"(ax), "=D"(di), "=S"(si), "=d"(dx)
-               : "0"(__NR_read), "1"(fd), "2"(buf), "3"(size)
-               : "rcx", "r8", "r9", "r10", "r11", "memory", "cc");
-  return ax;
-}
-
 BENCH(read, bench) {
   char buf[16];
   ASSERT_SYS(0, 3, open("/dev/zero", O_RDONLY));
@@ -65,7 +58,5 @@ BENCH(read, bench) {
            preadv(3, (struct iovec[]){{buf, 1}, {buf + 1, 4}}, 2, 0));
   EZBENCH2("sys_read", donothing, sys_read(3, buf, 5));
   EZBENCH2("sys_readv", donothing, sys_readv(3, &(struct iovec){buf, 5}, 1));
-  EZBENCH2("Read", donothing, Read(3, buf, 5));
-  EZBENCH2("Read", donothing, Read(3, buf, 5));
   ASSERT_SYS(0, 0, close(3));
 }

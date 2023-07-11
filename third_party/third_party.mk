@@ -13,6 +13,8 @@ o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/finger		\
 	o/$(MODE)/third_party/gdtoa		\
 	o/$(MODE)/third_party/getopt		\
+	o/$(MODE)/third_party/ggml		\
+	o/$(MODE)/third_party/radpajama		\
 	o/$(MODE)/third_party/hiredis		\
 	o/$(MODE)/third_party/libcxx		\
 	o/$(MODE)/third_party/linenoise		\
@@ -21,8 +23,10 @@ o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/make		\
 	o/$(MODE)/third_party/maxmind		\
 	o/$(MODE)/third_party/mbedtls		\
+	o/$(MODE)/third_party/xxhash		\
 	o/$(MODE)/third_party/musl		\
 	o/$(MODE)/third_party/nsync		\
+	o/$(MODE)/third_party/puff		\
 	o/$(MODE)/third_party/python		\
 	o/$(MODE)/third_party/quickjs		\
 	o/$(MODE)/third_party/regex		\
@@ -33,6 +37,8 @@ o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/tidy		\
 	o/$(MODE)/third_party/tr		\
 	o/$(MODE)/third_party/unzip		\
+	o/$(MODE)/third_party/vqsort		\
 	o/$(MODE)/third_party/xed		\
 	o/$(MODE)/third_party/zip		\
+	o/$(MODE)/third_party/zstd		\
 	o/$(MODE)/third_party/zlib

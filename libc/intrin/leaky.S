@@ -19,20 +19,20 @@
 #include "libc/macros.internal.h"
 
 //	Decentralized section for leaky functions.
-	.section .piro.relo.sort.leaky.1,"aw",@nobits
+	.section .piro.relo.sort.leaky.1,"aw",@progbits
 	.type	_leaky_start,@object
 	.type	_leaky_end,@object
 	.globl	_leaky_start,_leaky_end
 	.hidden	_leaky_start,_leaky_end
 	.byte	0
-	.align	__SIZEOF_POINTER__
+	.balign	__SIZEOF_POINTER__
 	.underrun
 _leaky_start:
 	.previous/*
 	...
 	decentralized content
 	...
-	*/.section .piro.relo.sort.leaky.3,"aw",@nobits
+	*/.section .piro.relo.sort.leaky.3,"aw",@progbits
 _leaky_end:
 	.quad	0
 	.overrun

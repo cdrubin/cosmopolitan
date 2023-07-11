@@ -20,6 +20,7 @@
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/sysv/consts/nr.h"
 
 /**
  * Sets file mode creation mask.

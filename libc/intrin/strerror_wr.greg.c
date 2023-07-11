@@ -16,10 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#define ShouldUseMsabiAttribute() 1
 #include "libc/dce.h"
 #include "libc/fmt/fmt.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/enum/formatmessageflags.h"
 #include "libc/nt/enum/lang.h"
@@ -32,15 +33,21 @@
  * @param err is error number or zero if unknown
  * @return 0 on success, or error code
  */
-privileged int strerror_wr(int err, uint32_t winerr, char *buf, size_t size) {
+int strerror_wr(int err, uint32_t winerr, char *buf, size_t size) {
   /* kprintf() weakly depends on this function */
   int c, n;
   bool wanting;
   char16_t winmsg[256];
   const char *sym, *msg;
   wanting = false;
-  sym = firstnonnull(_strerrno(err), (wanting = true, "EUNKNOWN"));
-  msg = firstnonnull(_strerdoc(err), (wanting = true, "No error information"));
+  if (!(sym = _strerrno(err))) {
+    sym = "EUNKNOWN";
+    wanting = true;
+  }
+  if (!(msg = _strerdoc(err))) {
+    msg = "No error information";
+    wanting = true;
+  }
   if (IsTiny()) {
     if (!sym) sym = "EUNKNOWN";
     for (; (c = *sym++); --size)
@@ -49,7 +56,7 @@ privileged int strerror_wr(int err, uint32_t winerr, char *buf, size_t size) {
   } else if (!IsWindows() || ((err == winerr || !winerr) && !wanting)) {
     ksnprintf(buf, size, "%s/%d/%s", sym, err, msg);
   } else {
-    if ((n = FormatMessage(
+    if ((n = __imp_FormatMessageW(
              kNtFormatMessageFromSystem | kNtFormatMessageIgnoreInserts, 0,
              winerr, MAKELANGID(kNtLangNeutral, kNtSublangDefault), winmsg,
              ARRAYLEN(winmsg), 0))) {

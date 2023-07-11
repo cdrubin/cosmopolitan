@@ -16,13 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/errno.h"
 #include "libc/thread/tls2.h"
+
+extern errno_t __errno;
 
 /**
  * Returns address of errno variable.
  */
-privileged nocallersavedregisters errno_t *(__errno_location)(void) {
+nocallersavedregisters errno_t *(__errno_location)(void) {
   if (!__tls_enabled) return &__errno;
   return &__get_tls_privileged()->tib_errno;
 }

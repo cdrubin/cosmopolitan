@@ -30,6 +30,8 @@
 #include "libc/str/str.h"
 #include "libc/vga/vga.internal.h"
 
+#ifdef __x86_64__
+
 /*
  * @fileoverview Instantiation of routines for emergency or system console
  * output in graphical video modes.
@@ -37,7 +39,9 @@
  * @see libc/vga/tty-graph.inc
  */
 
+#ifndef __llvm__
 #pragma GCC optimize("s")
+#endif
 
 #define KLOGTTY
 #define MAYUNROLLLOOPS /* do not unroll loops; keep the code small! */
@@ -88,10 +92,12 @@
 
 static unsigned short klog_y = 0, klog_x = 0;
 
-privileged void _klog_vga(const char *b, size_t n) {
+void _klog_vga(const char *b, size_t n) {
   struct Tty tty;
   _vga_reinit(&tty, klog_y, klog_x, kTtyKlog);
   _TtyWrite(&tty, b, n);
   klog_y = _TtyGetY(&tty);
   klog_x = _TtyGetX(&tty);
 }
+
+#endif /* __x86_64__ */

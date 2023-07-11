@@ -25,6 +25,8 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"
 
+#ifdef __x86_64__
+
 #define GROWSDOWN 0x00000100
 #define ANONYMOUS 0x00000020
 
@@ -44,3 +46,5 @@ bool IsWsl1(void) {
   res = 2 | tmp;
   return tmp;
 }
+
+#endif /* __x86_64__ */
