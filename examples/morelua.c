@@ -10,8 +10,9 @@
 #include "third_party/lua/lauxlib.h"
 #include "third_party/lua/lualib.h"
 
-
 /* Desirable bits of LuaFileSystem added BELOW */
+
+#include "libc/calls/struct/stat.h"
 
 #define LFS_EXPORT
 #define LFS_MAXPATHLEN 260
@@ -40,6 +41,10 @@ typedef struct dir_data {
 #include "libc/time/struct/utimbuf.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/calls/struct/stat.macros.h"
+#include "libc/errno.h"
+#include "libc/str/str.h" 
+#include "libc/mem/mem.h"
+#include "libc/sysv/consts/s.h"
 
 
 /*

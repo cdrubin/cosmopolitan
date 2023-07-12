@@ -18,6 +18,8 @@
 #define LFS_LIBNAME "lfs"
 #define LFS_VERSION "1.8.0"
 
+#include "libc/calls/struct/stat.h"
+
 #define STAT_STRUCT struct stat
 #define STAT_FUNC stat
 #define LSTAT_FUNC lstat
@@ -45,15 +47,18 @@ typedef struct dir_data {
 // for the socket fuctions
 #include "libc/isystem/stdlib.h"
 #include "libc/isystem/errno.h"
-#include "libc/isystem/arpa/inet.h"
+//#include "libc/isystem/arpa/inet.h"
+#include "libc/sock/struct/sockaddr.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/so.h"
 #include "libc/sysv/consts/sol.h"
 #include "libc/sysv/consts/inaddr.h"
-#include "libc/isystem/sys/types.h"
-#include "libc/isystem/sys/socket.h"
-#include "libc/sysv/consts/sock.h"
+#include "libc/sysv/consts/s.h"
 
+//#include "libc/isystem/sys/types.h"
+//#include "libc/isystem/sys/socket.h"
+#include "libc/sysv/consts/sock.h"
+#include "libc/sock/sock.h"
 
 /*
 ** Utility functions
