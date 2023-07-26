@@ -1,7 +1,7 @@
-/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
+│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,14 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/nt/struct/overlapped.h"
-#include "libc/str/str.h"
+#include "libc/macros.internal.h"
 
-textwindows struct NtOverlapped *_offset2overlap(int64_t handle,
-                                                 int64_t opt_offset,
-                                                 struct NtOverlapped *mem) {
-  if (opt_offset == -1) return NULL;
-  bzero(mem, sizeof(struct NtOverlapped));
-  mem->Pointer = (void *)(uintptr_t)opt_offset;
-  return mem;
-}
+//	Invokes system call.
+//
+//	This function has eight parameters. The first seven are for
+//	arguments passed along to the system call. The eight is for
+//	the magic number that indicates which system call is called
+//
+//	The return value follows the Linux kernel convention, where
+//	errors are returned as `-errno`. BSD systems are normalized
+//	to follow this convention automatically.
+SystemCall:
+	mov	%rcx,%r10
+	mov	16(%rsp),%eax
+	clc
+	syscall
+	jnc	1f
+	neg	%rax
+1:	ret
+	.endfn	SystemCall,globl

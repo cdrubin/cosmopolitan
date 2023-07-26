@@ -18,42 +18,20 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define ShouldUseMsabiAttribute() 1
 #include "ape/sections.internal.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/struct/sigset.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asmflag.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/nt/enum/pageflags.h"
 #include "libc/nt/memory.h"
-#include "libc/nt/runtime.h"
 #include "libc/nt/thunk/msabi.h"
-#include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/nr.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/sysv/consts/sig.h"
 
 __msabi extern typeof(VirtualProtect) *const __imp_VirtualProtect;
 
-#ifdef __aarch64__
-static privileged void __aarch64_sigprocmask(int how, const sigset_t *set,
-                                             sigset_t *oldset) {
-  register int r0 asm("x0") = how;
-  register long r1 asm("x1") = (long)set;
-  register long r2 asm("x2") = (long)oldset;
-  register long r3 asm("x3") = 8;
-  register long r8 asm("x8") = __NR_sigprocmask;
-  register long r16 asm("x16") = __NR_sigprocmask;
-  asm volatile("svc\t0"
-               : "+r"(r0)
-               : "r"(r1), "r"(r2), "r"(r3), "r"(r8), "r"(r16)
-               : "memory");
-}
-#endif
-
-static privileged void __morph_mprotect(void *addr, size_t size, int prot,
-                                        int ntprot) {
+__funline void __morph_mprotect(void *addr, size_t size, int prot, int ntprot) {
 #ifdef __x86_64__
   bool cf;
   int ax, dx;
@@ -69,8 +47,11 @@ static privileged void __morph_mprotect(void *addr, size_t size, int prot,
     if (ax == -EPERM) {
       kprintf("error: need pledge(prot_exec) permission to code morph\n");
     }
+    if (ax < 0) {
+      kprintf("error: __morph_mprotect(%p, %#zx, %d) failed: errno=%d\n", addr,
+              size, prot, -ax);
+    }
 #endif
-    if (ax) notpossible;
   } else {
     __imp_VirtualProtect(addr, size, ntprot, &op);
   }
@@ -90,65 +71,37 @@ static privileged void __morph_mprotect(void *addr, size_t size, int prot,
 /**
  * Begins code morphing executable.
  *
- * @return 0 on success, or -1 w/ errno
+ * The following example
+ *
+ *     #include <cosmo.h>
+ *     #include <stdlib.h>
+ *
+ *     privileged int main() {  // privileged code is unmodifiable
+ *       ShowCrashReports();    // print report if trapped
+ *       __morph_begin(0);      // make executable code R+W
+ *       *(char *)exit = 0xCC;  // turn exit() into an INT3 trap
+ *       __morph_end();         // make executable code R+X
+ *       exit(0);               // won't actually exit
+ *     }
+ *
+ * shows how the exit() function can be recompiled at runtime to become
+ * an int3 (x86-64) debugger trap. What makes it tricky is Cosmopolitan
+ * maintains a R^X invariant, in order to support OpenBSD. So when code
+ * wants to modify some part of the executable image in memory the vast
+ * majority of the code stops being executable during that time, unless
+ * it's been linked into a special privileged section of the binary. It
+ * is only possible to code morph from privileged functions. Privileged
+ * functions are also only allowed to call other privileged functions.
  */
-privileged void __morph_begin(sigset_t *save) {
-  int ax;
-  bool cf;
-  intptr_t dx;
-  sigset_t ss = {{-1, -1}};
-#ifdef __x86_64__
-  if (IsOpenbsd()) {
-    asm volatile(CFLAG_ASM("syscall")
-                 : CFLAG_CONSTRAINT(cf), "=a"(ax), "=d"(dx)
-                 : "1"(__NR_sigprocmask), "D"(SIG_BLOCK), "S"(-1u)
-                 : "rcx", "r8", "r9", "r10", "r11", "memory");
-    save->__bits[0] = ax & 0xffffffff;
-    if (cf) notpossible;
-  } else if (!IsWindows() && !IsMetal()) {
-    asm volatile("mov\t$8,%%r10d\n\t"
-                 "syscall"
-                 : "=a"(ax), "=d"(dx)
-                 : "0"(__NR_sigprocmask), "D"(SIG_BLOCK), "S"(&ss), "1"(save)
-                 : "rcx", "r8", "r9", "r10", "r11", "memory", "cc");
-    if (ax) notpossible;
-  }
-#elif defined(__aarch64__)
-  __aarch64_sigprocmask(SIG_BLOCK, &ss, save);
-#else
-#error "unsupported architecture"
-#endif
+privileged void __morph_begin(void) {
   __morph_mprotect(__executable_start, __privileged_start - __executable_start,
                    PROT_READ | PROT_WRITE, kNtPageWritecopy);
 }
 
 /**
- * Begins code morphing executable.
+ * Finishes code morphing executable.
  */
-privileged void __morph_end(sigset_t *save) {
-  int ax;
-  long dx;
-  bool cf;
+privileged void __morph_end(void) {
   __morph_mprotect(__executable_start, __privileged_start - __executable_start,
                    PROT_READ | PROT_EXEC, kNtPageExecuteRead);
-#ifdef __x86_64__
-  if (IsOpenbsd()) {
-    asm volatile(CFLAG_ASM("syscall")
-                 : CFLAG_CONSTRAINT(cf), "=a"(ax), "=d"(dx)
-                 : "1"(__NR_sigprocmask), "D"(SIG_SETMASK), "S"(save->__bits[0])
-                 : "rcx", "r8", "r9", "r10", "r11", "memory");
-    if (cf) notpossible;
-  } else if (!IsWindows() && !IsMetal()) {
-    asm volatile("mov\t$8,%%r10d\n\t"
-                 "syscall"
-                 : "=a"(ax), "=d"(dx)
-                 : "0"(__NR_sigprocmask), "D"(SIG_SETMASK), "S"(save), "1"(0L)
-                 : "rcx", "r8", "r9", "r10", "r11", "memory", "cc");
-    if (ax) notpossible;
-  }
-#elif defined(__aarch64__)
-  __aarch64_sigprocmask(SIG_SETMASK, save, 0);
-#else
-#error "unsupported architecture"
-#endif
 }

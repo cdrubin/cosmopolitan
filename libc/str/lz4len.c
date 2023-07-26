@@ -16,21 +16,42 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/dce.h"
-#include "libc/sock/internal.h"
-#include "libc/sock/struct/sockaddr.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/pushpop.internal.h"
+#include "libc/nexgen32e/kompressor.h"
+#include "libc/str/str.h"
 
-int sys_getpeername(int fd, void *out_addr, uint32_t *out_addrsize) {
-  int rc;
-  uint32_t size;
-  union sockaddr_storage_bsd bsd;
-  if (!IsBsd()) {
-    rc = __sys_getpeername(fd, out_addr, out_addrsize);
-  } else {
-    size = sizeof(bsd);
-    if ((rc = __sys_getpeername(fd, &bsd, &size)) != -1) {
-      sockaddr2linux(&bsd, size, out_addr, out_addrsize);
+/**
+ * Returns the uncompressed content size for a compressed LZ4 block, without
+ * actually decompressing it.
+ *
+ * @see lz4cpy()
+ */
+size_t lz4len(const void *blockdata, size_t blocksize) {
+  unsigned char *ip, *ipe;
+  unsigned token, length, fifteen, offset, matchlen;
+  size_t unpacklen = 0;
+  for (ip = blockdata, ipe = ip + blocksize;;) {
+    token = *ip++;
+    length = token >> 4;
+    fifteen = pushpop(15);
+    if (length == fifteen) {
+      do {
+        length += *ip;
+      } while (*ip++ == 255);
     }
+    ip += length;
+    unpacklen += length;
+    if (ip >= ipe) break;
+    offset = READ16LE(ip);
+    matchlen = token & fifteen;
+    ip += 2;
+    if (matchlen == fifteen) {
+      do {
+        matchlen += *ip;
+      } while (*ip++ == 255);
+    }
+    unpacklen += matchlen + 4;
   }
-  return rc;
+  return unpacklen;
 }

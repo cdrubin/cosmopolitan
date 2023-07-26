@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,14 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/thread/tls2.h"
+#include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/intrin/describentoverlapped.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/nt/struct/overlapped.h"
+#include "libc/nt/thread.h"
+#include "libc/nt/thunk/msabi.h"
 
-extern errno_t __errno;
+__msabi extern typeof(CancelIoEx) *const __imp_CancelIoEx;
 
 /**
- * Returns address of errno variable.
+ * Cancels Windows i/o operation.
  */
-nocallersavedregisters errno_t *(__errno_location)(void) {
-  if (!__tls_enabled) return &__errno;
-  return &__get_tls_privileged()->tib_errno;
+bool32 CancelIoEx(int64_t hFile, struct NtOverlapped *opt_lpOverlapped) {
+  bool32 ok;
+  ok = __imp_CancelIoEx(hFile, opt_lpOverlapped);
+  if (!ok) __winerr();
+  NTTRACE("CancelIoEx(%ld, %s) → %hhhd% m", hFile,
+          DescribeNtOverlapped(opt_lpOverlapped), ok);
+  return ok;
 }

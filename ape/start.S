@@ -1,7 +1,7 @@
-/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
+│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,18 +16,46 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/struct/fd.internal.h"
-#include "libc/nt/winsock.h"
-#include "libc/sock/internal.h"
-#include "libc/sock/syscall_fd.internal.h"
+#include "libc/dce.h"
+#include "libc/macros.internal.h"
 
-textwindows int sys_getsockname_nt(struct Fd *fd, void *out_addr,
-                                   uint32_t *out_addrsize) {
-  _npassert(fd->kind == kFdSocket);
-  if (__sys_getsockname_nt(fd->handle, out_addr, out_addrsize) != -1) {
-    return 0;
-  } else {
-    return __winsockerr();
-  }
-}
+XnuEntrypoint:
+	mov	$_HOSTXNU,%dl			// xnu's not unix!
+ElfEntrypoint:
+	mov	%rsp,%rsi			// save real stack
+	sub	$1024*1024,%rsp			// room for allocs
+	call	ApeLoader
+	.endfn	ElfEntrypoint,globl
+	.endfn	XnuEntrypoint,globl
+
+	.section .note,"a",@progbits
+	.balign	4
+openbsd.ident:
+	.long	2f-1f
+	.long	4f-3f
+	.long	1
+1:	.asciz	"OpenBSD"
+2:	.balign	4
+3:	.long	0
+4:	.size	openbsd.ident,.-openbsd.ident
+	.type	openbsd.ident,@object
+	.balign	4
+netbsd.ident:
+	.long	2f-1f
+	.long	4f-3f
+	.long	1
+1:	.asciz	"NetBSD"
+2:	.balign	4
+3:	.long	901000000
+4:	.size	netbsd.ident,.-netbsd.ident
+	.type	netbsd.ident,@object
+	.balign	4
+ape.ident:
+	.long	2f-1f
+	.long	4f-3f
+	.long	1
+1:	.asciz	"APE"
+2:	.balign	4
+3:	.long	104000000
+4:	.size	ape.ident,.-ape.ident
+	.type	ape.ident,@object
