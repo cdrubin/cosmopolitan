@@ -573,7 +573,7 @@ int main(int argc, char *argv[]) {
   lua_setglobal( L, "arg" );
   
     
-  if (luaL_dofile(L, "zip:main.lua") != LUA_OK) {
+  if (luaL_dofile(L, "/zip/main.lua") != LUA_OK) {
     fprintf( stderr, "%s", lua_tostring(L,-1) );
   }
   
