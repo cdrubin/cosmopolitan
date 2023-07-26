@@ -86,8 +86,13 @@ o/$(MODE):			\
 	o/$(MODE)/examples	\
 	o/$(MODE)/third_party
 
+ifneq ($(LANDLOCKMAKE_VERSION),)
+ifeq ($(wildcard /usr/bin/ape),)
+$(error please run ape/apeinstall.sh if you intend to use landlock make)
+endif
 ifeq ($(USE_SYSTEM_TOOLCHAIN),)
 .STRICT = 1
+endif
 endif
 
 .PLEDGE = stdio rpath wpath cpath fattr proc
@@ -269,7 +274,7 @@ CHECKS	 = $(foreach x,$(PKGS),$($(x)_CHECKS))
 
 bins:	$(BINS)
 check:	$(CHECKS)
-test:	$(TESTS) aarch64
+test:	$(TESTS)
 depend:	o/$(MODE)/depend
 tags:	TAGS HTAGS
 

@@ -390,7 +390,7 @@ SECTIONS {
   } :Tls :Rom
 /*END: Read Only Data */
 
-  . = DATA_SEGMENT_ALIGN(CONSTANT(MAXPAGESIZE), CONSTANT(COMMONPAGESIZE));
+  . = DATA_SEGMENT_ALIGN(CONSTANT(COMMONPAGESIZE), CONSTANT(COMMONPAGESIZE));
   . = DATA_SEGMENT_RELRO_END(0, .);
 
 /* this only tells the linker about the layout of uninitialized */
@@ -461,7 +461,7 @@ SECTIONS {
 
     KEEP(*(.bssepilogue))
 
-    . = ALIGN(64);
+    . = ALIGN(CONSTANT(COMMONPAGESIZE));
 
 /*END: NT FORK COPYING */
     _end = .;
@@ -532,6 +532,11 @@ SECTIONS {
   }
 }
 
+ape_pe_filealignment = 512;
+ape_pe_sectionalignment = 4096;
+ape_pe_sizeofheaders = SIZEOF(.head);
+ape_pe_sizeofimage = ROUNDUP(_end - __executable_start, ape_pe_sectionalignment);
+
 PFSTUB8(ape_elf_entry, _start);
 PFSTUB8(ape_elf_phoff, RVA(ape_phdrs));
 PFSTUB8(ape_elf_shoff, 0);
@@ -581,11 +586,8 @@ ape_stack_memsz2 = ape_stack_memsz * 2;
 ape_stack_align = 16;
 
 ape_note_offset = ape_cod_offset + (ape_note - ape_cod_vaddr);
-ape_note_vaddr = ape_note;
-ape_note_paddr = ape_cod_paddr + ape_note_offset;
 ape_note_filesz = ape_note_end - ape_note;
 ape_note_memsz = ape_note_filesz;
-ape_note_align = __SIZEOF_POINTER__;
 
 ape_text_offset = ape_cod_offset + LOADADDR(.text) - ape_cod_paddr;
 ape_text_paddr = LOADADDR(.text);
@@ -665,13 +667,10 @@ CHURN(ape_elf_shoff);
 CHURN(ape_elf_shstrndx);
 CHURN(ape_macho_end);
 CHURN(ape_note);
-CHURN(ape_note_align);
 CHURN(ape_note_end);
 CHURN(ape_note_filesz);
 CHURN(ape_note_memsz);
 CHURN(ape_note_offset);
-CHURN(ape_note_paddr);
-CHURN(ape_note_vaddr);
 CHURN(ape_ram_align);
 CHURN(ape_ram_filesz);
 CHURN(ape_ram_memsz);
@@ -726,9 +725,10 @@ CHURN(WinMain);
 #define LINK_WINDOWS (SupportsWindows() && !DEFINED(EfiMain))
 PFSTUB4(ape_pe_offset, ape_pe - ape_mz);
 ape_pe_optsz = ape_pe_sections - (ape_pe + 24);
+ASSERT(ape_pe_optsz % 8 == 0, "SizeOfOptionalHeader must be multiple of 8");
 ape_pe_shnum = (ape_pe_sections_end - ape_pe_sections) / 40;
 ape_pe_base = IMAGE_BASE_VIRTUAL;
-ape_idata = LINK_WINDOWS ? RVA(ape_idata_iat) : 0;
+ape_idataz = LINK_WINDOWS ? RVA(ape_idata_iat) : 0;
 ape_idata_iatsize = LINK_WINDOWS ? ape_idata_iatend - ape_idata_iat : 0;
 ape_idata = LINK_WINDOWS ? RVA(ape_idata_idt) : 0;
 ape_idata_idtsize = LINK_WINDOWS ? ape_idata_idtend - ape_idata_idt : 0;

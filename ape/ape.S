@@ -224,7 +224,7 @@ stub:	mov	$0x40,%dl		// *literally* dos
 3:	.byte	0xbd,0,0		// a.k.a. mov imm,%bp
 	jmp	pc			// real mode, is real
 	jmp	_start			// surprise it's unix
-	.endfn	stub
+	.endfn	stub,globl
 
 /*─────────────────────────────────────────────────────────────────────────────╗
 │ αcτµαlly pδrταblε εxεcµταblε § ibm personal computer                         │
@@ -610,7 +610,7 @@ apesh:	.ascii	"\n@\n#'\"\n"			// sixth edition shebang
 //	extract the loader into a temp folder, and use it to
 //	load the APE without modifying it.
 	.ascii	  "[ x\"$1\" != x--assimilate ] && {\n"
-	.ascii	    "t=\"${TMPDIR:-${HOME:-.}}/.ape-1.1\"\n"
+	.ascii	    "t=\"${TMPDIR:-${HOME:-.}}/.ape-1.4\"\n"
 	.ascii	    "[ -x \"$t\" ] || {\n"
 	.ascii	      "mkdir -p \"${t%/*}\" &&\n"
 	.ascii	      "dd if=\"$o\" of=\"$t.$$\" skip="
@@ -622,8 +622,8 @@ apesh:	.ascii	"\n@\n#'\"\n"			// sixth edition shebang
 	.ascii	      "[ -d /Applications ] && "
 	.ascii	        "dd if=\"$t.$$\""
 	.ascii	          " of=\"$t.$$\""
-	.ascii	          " skip=6"
-	.ascii	          " count=6"
+	.ascii	          " skip=5"
+	.ascii	          " count=8"
 	.ascii	          " bs=64"
 	.ascii	          " conv=notrunc"
 	.ascii	          " 2>/dev/null\n"
@@ -801,17 +801,31 @@ ape_loader_end:
 	.long	PT_NOTE
 	.long	PF_R
 	.stub	ape_note_offset,quad
-	.stub	ape_note_vaddr,quad
-	.stub	ape_note_paddr,quad
+	.quad	0
+	.quad	0
 	.stub	ape_note_filesz,quad
 	.stub	ape_note_memsz,quad
-	.stub	ape_note_align,quad
+	.quad	4
 #endif
 	.previous
 #endif /* SupportsSystemv() || SupportsMetal() */
 
+	.section .note.ape.ident,"a",@progbits
+	.balign	4
+ape.ident:
+	.long	2f-1f
+	.long	4f-3f
+	.long	1
+1:	.asciz	"APE"
+2:	.balign	4
+3:	.long	104000000
+4:	.size	ape.ident,.-ape.ident
+	.type	ape.ident,@object
+	.previous
+
 #if SupportsOpenbsd()
 	.section .note.openbsd.ident,"a",@progbits
+	.balign	4
 openbsd.ident:
 	.long	2f-1f
 	.long	4f-3f
@@ -826,6 +840,7 @@ openbsd.ident:
 
 #if SupportsNetbsd()
 	.section .note.netbsd.ident,"a",@progbits
+	.balign	4
 netbsd.ident:
 	.long	2f-1f
 	.long	4f-3f
@@ -1052,8 +1067,8 @@ ape_pe:	.ascin	"PE",4
 	.long	RVA(ape_pe_entry)	// EntryPoint
 	.long	0			// BaseOfCode
 	.quad	ape_pe_base		// ImageBase
-	.long	4096			// SectionAlignment
-	.long	4096			// FileAlignment
+	.long	ape_pe_sectionalignment	// SectionAlignment
+	.long	ape_pe_filealignment	// FileAlignment
 	.short	v_ntversion		// MajorOperatingSystemVersion
 	.short	0			// MinorOperatingSystemVersion
 	.short	0			// MajorImageVersion
@@ -1062,7 +1077,7 @@ ape_pe:	.ascin	"PE",4
 	.short	0			// MinorSubsystemVersion
 	.long	0			// Win32VersionValue
 	.long	RVA(_end)		// SizeOfImage
-	.long	RVA(_ehead)		// SizeOfHeaders
+	.long	ape_pe_sizeofheaders	// SizeOfHeaders
 	.long	0			// Checksum
 	.short	v_ntsubsystem		// Subsystem: 0=Neutral,2=GUI,3=Console
 	.stub	v_ntdllchar,short	// DllCharacteristics
@@ -1071,25 +1086,10 @@ ape_pe:	.ascin	"PE",4
 	.quad	0			// HeapReserve
 	.quad	0			// HeapCommit
 	.long	0			// LoaderFlags
-	.long	16			// NumberOfDirectoryEntries
+	.long	2			// NumberOfDirectoryEntries
 	.long	0,0			// ExportsDirectory
 	.stub	ape_idata,long		// ImportsDirectory
 	.stub	ape_idata_idtsize,long	// ImportsDirectorySize
-	.long	0,0			// ResourcesDirectory
-	.long	0,0			// ExceptionsDirectory
-	.long	0,0			// SecurityDirectory
-	.long	0,0			// BaseRelocationTable
-	.long	0,0			// DebugDirectory
-	.long	0,0			// DescriptionString
-	.long	0,0			// MachineSpecific
-	.long	0,0			// ThreadLocalStorage
-	.long	0,0			// LoadConfigurationDirectory
-	.long	0,0			// BoundImportDirectory
-	.stub	ape_idata,long		// ImportAddressDirectory
-	.stub	ape_idata_iatsize,long	// ImportAddressDirectorySize
-	.long	0,0			// DelayImportDescriptor
-	.long	0,0			// ComPlusRuntimeHeader
-	.long	0,0			// Reserved
 	.endobj	ape_pe,globl
 	.previous
 

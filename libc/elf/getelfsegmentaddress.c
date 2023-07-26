@@ -16,26 +16,33 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/weaken.h"
-#include "libc/log/log.h"
-#include "libc/mem/mem.h"
-#include "libc/runtime/runtime.h"
-#include "libc/sock/sock.h"
+#include "libc/elf/def.h"
+#include "libc/elf/elf.h"
+#include "libc/elf/scalar.h"
+#include "libc/elf/struct/phdr.h"
+#include "libc/stdckdint.h"
 
 /**
- * Formats internet address to string, or dies.
+ * Returns pointer to ELF segment file content.
  *
- * @param af can be AF_INET, e.g. addr->sin_family
- * @param src is the binary-encoded address, e.g. &addr->sin_addr
- * @return allocated IP address string, which must be free()'d
+ * This function computes `elf + p_offset` with safety checks.
+ *
+ * @param elf points to the start of the executable image data
+ * @param mapsize is the number of bytes of `elf` we can access
+ * @param phdr is from GetElfProgramHeaderAddress(), or null
+ * @return pointer to segment data within image, or null if
+ *     1. `phdr` was null, or
+ *     2. `p_filesz` was zero, or
+ *     3. content wasn't contained within `[elf,elf+mapsize)`, or
+ *     4. an arithmetic overflow occurred
  */
-char *sys_xinet_ntop(int af, const void *src) {
-  char *res, ip[16];
-  if (inet_ntop(af, src, ip, sizeof(ip)) && (res = strdup(ip))) {
-    return res;
-  } else {
-    if (_weaken(__die)) _weaken(__die)();
-    abort();
-    __builtin_unreachable();
-  }
+void *GetElfSegmentAddress(const Elf64_Ehdr *elf,     // validated
+                           size_t mapsize,            // validated
+                           const Elf64_Phdr *phdr) {  // foreign
+  Elf64_Off last;
+  if (!phdr) return 0;
+  if (phdr->p_filesz <= 0) return 0;
+  if (ckd_add(&last, phdr->p_offset, phdr->p_filesz)) return 0;
+  if (last > mapsize) return 0;
+  return (char *)elf + phdr->p_offset;
 }
