@@ -21,6 +21,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/metastat.internal.h"
+#include "libc/calls/struct/stat.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/mem/gc.internal.h"
@@ -32,14 +33,11 @@
 #include "libc/sysv/consts/nr.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
-#include "libc/x/x.h"
 
-STATIC_YOINK("zipos");
-
-char testlib_enable_tmp_setup_teardown;
+__static_yoink("zipos");
 
 void SetUpOnce(void) {
-  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+  testlib_enable_tmp_setup_teardown();
 }
 
 TEST(stat_010, testEmptyFile_sizeIsZero) {
@@ -51,13 +49,40 @@ TEST(stat_010, testEmptyFile_sizeIsZero) {
 }
 
 TEST(stat, enoent) {
-  ASSERT_SYS(ENOENT, -1, stat("hi", 0));
-  ASSERT_SYS(ENOENT, -1, stat("o/doesnotexist", 0));
+  struct stat st;
+  ASSERT_SYS(ENOENT, -1, stat("hi", &st));
+  ASSERT_SYS(ENOENT, -1, stat("o/doesnotexist", &st));
 }
 
 TEST(stat, enotdir) {
+  struct stat st;
   ASSERT_SYS(0, 0, close(creat("yo", 0644)));
-  ASSERT_SYS(ENOTDIR, -1, stat("yo/there", 0));
+  ASSERT_SYS(ENOTDIR, -1, stat("yo/there", &st));
+}
+
+TEST(stat, textFileIsntExecutable) {
+  struct stat st;
+  ASSERT_SYS(0, 0, touch("foo.txt", 0644));
+  ASSERT_SYS(0, 0, stat("foo.txt", &st));
+  ASSERT_FALSE(st.st_mode & 0111);
+}
+
+TEST(stat, shebangIsExecutable) {
+  struct stat st;
+  ASSERT_SYS(0, 3, creat("foo.sh", 0777));
+  ASSERT_SYS(0, 2, write(3, "#!", 2));
+  ASSERT_SYS(0, 0, close(3));
+  ASSERT_SYS(0, 0, stat("foo.sh", &st));
+  ASSERT_TRUE(!!(st.st_mode & 0111));
+}
+
+TEST(stat, portableExecutableIsExecutable) {
+  struct stat st;
+  ASSERT_SYS(0, 3, creat("foo.exe", 0777));
+  ASSERT_SYS(0, 2, write(3, "MZ", 2));
+  ASSERT_SYS(0, 0, close(3));
+  ASSERT_SYS(0, 0, stat("foo.exe", &st));
+  ASSERT_TRUE(!!(st.st_mode & 0111));
 }
 
 TEST(stat, zipos) {
@@ -72,32 +97,6 @@ TEST(stat, zipos) {
   EXPECT_SYS(0, 0, stat("/zip/.python/", &st));
 }
 
-static long Fstatat(const char *path, struct stat *st) {
-#ifdef __x86_64__
-  long ax, di, si, dx;
-  register long r10 asm("r10") = 0;
-  asm volatile("syscall"
-               : "=a"(ax), "=D"(di), "=S"(si), "=d"(dx), "+r"(r10)
-               : "0"(__NR_fstatat), "1"(AT_FDCWD), "2"(path), "3"(st)
-               : "rcx", "r8", "r9", "r11", "memory", "cc");
-  return ax;
-#elif defined(__aarch64__)
-  register long r0 asm("x0") = (long)AT_FDCWD;
-  register long r1 asm("x1") = (long)path;
-  register long r2 asm("x2") = (long)st;
-  register long r3 asm("x3") = (long)0;
-  register long r8 asm("x8") = (long)__NR_fstatat;
-  register long res_x0 asm("x0");
-  asm volatile("svc\t0"
-               : "=r"(res_x0)
-               : "r"(r0), "r"(r1), "r"(r2), "r"(r3), "r"(r8)
-               : "memory");
-  return res_x0;
-#else
-#error "unsupported architecture"
-#endif
-}
-
 BENCH(stat, bench) {
   struct stat st;
   union metastat ms;
@@ -107,12 +106,6 @@ BENCH(stat, bench) {
              touch(".python/test/"
                    "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",
                    0644));
-  if (!IsWindows() && !IsFreebsd()) {
-    EZBENCH2("fstatat syscall", donothing,
-             Fstatat(".python/test/"
-                     "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",
-                     &st));
-  }
   EZBENCH2("stat() fs", donothing,
            stat(".python/test/"
                 "tokenize_tests-latin1-coding-cookie-and-utf8-bom-sig.txt",

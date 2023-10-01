@@ -26,65 +26,27 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
-#include "libc/thread/spawn.h"
+#include "libc/thread/thread.h"
 
-////////////////////////////////////////////////////////////////////////////////
-// SIGTRAP
-
-TEST(raise, trap_sysv) {
-  if (IsWindows()) return;
+TEST(raise, trap) {
   signal(SIGTRAP, SIG_DFL);
   SPAWN(fork);
   raise(SIGTRAP);
   TERMS(SIGTRAP);
 }
 
-TEST(raise, trap_windows) {
-  if (!IsWindows()) return;
-  signal(SIGTRAP, SIG_DFL);
-  SPAWN(fork);
-  raise(SIGTRAP);
-  EXITS(128 + SIGTRAP);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// SIGFPE
-
-TEST(raise, fpe_sysv) {
-  if (IsWindows()) return;
+TEST(raise, fpe) {
   signal(SIGFPE, SIG_DFL);
   SPAWN(fork);
   raise(SIGFPE);
   TERMS(SIGFPE);
 }
 
-TEST(raise, fpe_windows) {
-  if (!IsWindows()) return;
-  signal(SIGFPE, SIG_DFL);
-  SPAWN(fork);
-  raise(SIGFPE);
-  EXITS(128 + SIGFPE);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// SIGUSR1
-
-TEST(raise, usr1_sysv) {
-  if (IsWindows()) return;
+TEST(raise, usr1) {
   SPAWN(fork);
   raise(SIGUSR1);
   TERMS(SIGUSR1);
 }
-
-TEST(raise, usr1_windows) {
-  if (!IsWindows()) return;
-  SPAWN(fork);
-  raise(SIGUSR1);
-  EXITS(128 + SIGUSR1);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// THREADS
 
 int threadid;
 
@@ -96,17 +58,17 @@ void WorkerQuit(int sig, siginfo_t *si, void *ctx) {
   ASSERT_EQ(threadid, gettid());
 }
 
-int Worker(void *arg, int tid) {
+void *Worker(void *arg) {
   struct sigaction sa = {.sa_sigaction = WorkerQuit, .sa_flags = SA_SIGINFO};
   ASSERT_EQ(0, sigaction(SIGILL, &sa, 0));
-  threadid = tid;
+  threadid = gettid();
   ASSERT_EQ(0, raise(SIGILL));
   return 0;
 }
 
 TEST(raise, threaded) {
   signal(SIGILL, SIG_DFL);
-  struct spawn worker;
-  ASSERT_SYS(0, 0, _spawn(Worker, 0, &worker));
-  ASSERT_SYS(0, 0, _join(&worker));
+  pthread_t worker;
+  ASSERT_EQ(0, pthread_create(&worker, 0, Worker, 0));
+  ASSERT_EQ(0, pthread_join(worker, 0));
 }

@@ -62,7 +62,7 @@ void Process(const char *p, const char *pe, const char *path, bool isheader) {
   int level;
   bool noformat;
   const char *p2, *dq, *name;
-  for (noformat = level = 0; p < pe; p = p2) {
+  for (noformat = false, level = 0; p < pe; p = p2) {
     p2 = memchr(p, '\n', pe - p);
     p2 = p2 ? p2 + 1 : pe;
     if (LOOKINGAT(p, pe, "#if")) {
@@ -97,13 +97,13 @@ void Visit(const char *path) {
   char *map;
   size_t size;
   bool isheader;
-  if (!_endswith(path, ".h") && !_endswith(path, ".inc")) return;
-  if (_endswith(path, ".internal.h")) return;
-  if (_endswith(path, "/internal.h")) return;
-  if (_endswith(path, ".internal.inc")) return;
-  if (_endswith(path, "/internal.inc")) return;
-  if (_startswith(path, "libc/isystem/")) return;
-  isheader = _endswith(path, ".h");
+  if (!endswith(path, ".h") && !endswith(path, ".inc")) return;
+  if (endswith(path, ".internal.h")) return;
+  if (endswith(path, "/internal.h")) return;
+  if (endswith(path, ".internal.inc")) return;
+  if (endswith(path, "/internal.inc")) return;
+  if (startswith(path, "libc/isystem/")) return;
+  isheader = endswith(path, ".h");
   if (isheader && isinterned(visited, path)) return;
   appends(&output, "\n\f\n/*!BEGIN ");
   appends(&output, path);
@@ -146,12 +146,6 @@ int main(int argc, char *argv[]) {
   visited = newinterner();
   appends(&output, "#ifndef COSMOPOLITAN_H_\n");
   appends(&output, "#define COSMOPOLITAN_H_\n");
-  /* appends(&output, "#define IMAGE_BASE_VIRTUAL "); */
-  /* appendf(&output, "%p", IMAGE_BASE_VIRTUAL); */
-  /* appends(&output, "\n"); */
-  /* appends(&output, "#define IMAGE_BASE_PHYSICAL "); */
-  /* appendf(&output, "%p", IMAGE_BASE_PHYSICAL); */
-  /* appends(&output, "\n"); */
   getargs_init(&ga, argv + 1);
   while ((src = getargs_next(&ga))) {
     Visit(src);

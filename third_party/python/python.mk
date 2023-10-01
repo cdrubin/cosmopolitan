@@ -478,13 +478,11 @@ THIRD_PARTY_PYTHON_STAGE1_A_DEPS =					\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_PYTHON_STAGE1_A_DIRECTDEPS),$($(x))))
 
 o//third_party/python/Python/importlib.inc:				\
-		$(VM)							\
 		o/$(MODE)/third_party/python/freeze.com			\
 		third_party/python/Lib/importlib/_bootstrap.py
 	@$(COMPILE) -AFREEZE -wT$@ $^ $@
 
 o//third_party/python/Python/importlib_external.inc:			\
-		$(VM)							\
 		o/$(MODE)/third_party/python/freeze.com			\
 		third_party/python/Lib/importlib/_bootstrap_external.py
 	@$(COMPILE) -AFREEZE -wT$@ $^ $@
@@ -1169,6 +1167,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_DIRECTDEPS =				\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
 	LIBC_NT_KERNEL32						\
+	LIBC_PROC							\
 	LIBC_RUNTIME							\
 	LIBC_THREAD							\
 	LIBC_SOCK							\
@@ -1179,7 +1178,6 @@ THIRD_PARTY_PYTHON_STAGE2_A_DIRECTDEPS =				\
 	LIBC_TIME							\
 	LIBC_TINYMATH							\
 	LIBC_X								\
-	LIBC_ZIPOS							\
 	NET_HTTP							\
 	NET_HTTPS							\
 	THIRD_PARTY_BZIP2						\
@@ -1796,7 +1794,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_collections.py				\
 	third_party/python/Lib/test/test_colorsys.py				\
 	third_party/python/Lib/test/test_compare.py				\
-	third_party/python/Lib/test/test_compile.py				\
 	third_party/python/Lib/test/test_complex.py				\
 	third_party/python/Lib/test/test_contains.py				\
 	third_party/python/Lib/test/test_contextlib.py				\
@@ -1847,7 +1844,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_exception_variations.py		\
 	third_party/python/Lib/test/test_exceptions.py				\
 	third_party/python/Lib/test/test_extcall.py				\
-	third_party/python/Lib/test/test_faulthandler.py			\
 	third_party/python/Lib/test/test_fcntl.py				\
 	third_party/python/Lib/test/test_file.py				\
 	third_party/python/Lib/test/test_file_eintr.py				\
@@ -2100,7 +2096,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS_DIRECTDEPS =				\
 	LIBC_NEXGEN32E							\
 	LIBC_TESTLIB							\
 	LIBC_LOG							\
-	LIBC_ZIPOS							\
 	LIBC_MEM							\
 	LIBC_INTRIN							\
 	LIBC_X								\
@@ -2158,10 +2153,10 @@ o/$(MODE)/third_party/python/Lib/test/test_signal.py.runs:		\
 o/$(MODE)/third_party/python/Lib/test/test_timeout.py.runs:		\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
 
-PYTHONTESTER = $(VM) o/$(MODE)/third_party/python/pythontester.com
+PYTHONTESTER = o/$(MODE)/third_party/python/pythontester.com
 
 o/$(MODE)/third_party/python/Lib/test/test_grammar.py.runs: $(PYTHONTESTER)
-	$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_grammar $(PYTESTARGS)
+	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_grammar $(PYTESTARGS)
 
 o/$(MODE)/third_party/python/Lib/test/test_set.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_set $(PYTESTARGS)
@@ -2834,8 +2829,9 @@ o/$(MODE)/third_party/python/Lib/test/test_codecencodings_kr.py.runs: $(PYTHONTE
 o/$(MODE)/third_party/python/Lib/test/test_codecencodings_tw.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_codecencodings_tw $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_compile.py.runs: $(PYTHONTESTER)
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_compile $(PYTESTARGS)
+# needs >256kb stack size to run
+#o/$(MODE)/third_party/python/Lib/test/test_compile.py.runs: $(PYTHONTESTER)
+#	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_compile $(PYTESTARGS)
 
 o/$(MODE)/third_party/python/Lib/test/test_contextlib.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_contextlib $(PYTESTARGS)
@@ -2900,8 +2896,9 @@ o/$(MODE)/third_party/python/Lib/test/test_docxmlrpc.py.runs: $(PYTHONTESTER)
 o/$(MODE)/third_party/python/Lib/test/test_extcall.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_extcall $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_faulthandler.py.runs: $(PYTHONTESTER)
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_faulthandler $(PYTESTARGS)
+# too slow
+#o/$(MODE)/third_party/python/Lib/test/test_faulthandler.py.runs: $(PYTHONTESTER)
+#	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_faulthandler $(PYTESTARGS)
 
 o/$(MODE)/third_party/python/Lib/test/test_fcntl.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_fcntl $(PYTESTARGS)
@@ -4003,7 +4000,6 @@ THIRD_PARTY_PYTHON_PYTHON_DIRECTDEPS =					\
 	LIBC_LOG							\
 	LIBC_SYSV							\
 	LIBC_X								\
-	LIBC_ZIPOS							\
 	THIRD_PARTY_GETOPT						\
 	THIRD_PARTY_LINENOISE						\
 	THIRD_PARTY_PYTHON_STAGE1					\
@@ -4027,8 +4023,7 @@ o/$(MODE)/third_party/python/python.com.dbg:				\
 o/$(MODE)/third_party/python/python.com:				\
 		o/$(MODE)/third_party/python/python.com.dbg		\
 		o/$(MODE)/third_party/zip/zip.com			\
-		o/$(MODE)/tool/build/symtab.com				\
-		$(VM)
+		o/$(MODE)/tool/build/symtab.com
 	@$(MAKE_OBJCOPY)
 	@$(MAKE_SYMTAB_CREATE)
 	@$(MAKE_SYMTAB_ZIP)

@@ -18,7 +18,7 @@ int utimensat(int, const char *, const struct timespec[2], int);
 int timespec_getres(struct timespec *, int);
 int timespec_get(struct timespec *, int);
 
-#ifdef COSMO
+#ifdef _COSMO_SOURCE
 /* cosmopolitan libc's non-posix timespec library
    removed by default due to emacs codebase clash */
 #define timespec_zero ((struct timespec){0})
@@ -38,13 +38,16 @@ int timespec_sleep_until(struct timespec);
 struct timespec timespec_sub(struct timespec, struct timespec) pureconst;
 struct timespec timespec_subz(struct timespec, struct timespec) pureconst;
 int sys_futex(int *, int, int, const struct timespec *, int *);
+static inline struct timespec timespec_fromseconds(int64_t __x) {
+  return (struct timespec){__x};
+}
 static inline bool timespec_iszero(struct timespec __ts) {
   return !(__ts.tv_sec | __ts.tv_nsec);
 }
 static inline bool timespec_isvalid(struct timespec __ts) {
-  return __ts.tv_sec >= 0 && __ts.tv_nsec < 1000000000ull;
+  return __ts.tv_sec >= 0 && __ts.tv_nsec + 0ull < 1000000000ull;
 }
-#endif /* COSMO */
+#endif /* _COSMO_SOURCE */
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

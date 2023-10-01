@@ -15,7 +15,7 @@
 				"alignas(x)",
 				"alignof(x)",
 				"artificial=",
-				"dontdiscard=",
+				"__wur=",
 				"mayalias=",
 				"forceinline=",
 				"forcealign(x)=",
@@ -35,14 +35,13 @@
 				"returnstwice=",
 				"textwindows=",
 				"privileged=",
-				"compatfn=",
 				"dontinstrument=",
 				"nodebuginfo=",
 				"interruptfn=",
 				"optimizespeed=",
 				"forcealignargpointer=",
-				"noasan=",
-				"noubsan=",
+				"dontasan=",
+				"dontubsan=",
 				"donothing=",
 				"nosideeffect=",
 				"unreachable=",,
@@ -102,8 +101,7 @@
 			],
 			"defines": [
 				"COSMO",
-				"MODE=",
-				"IMAGE_BASE_VIRTUAL=0x400000"
+				"MODE="
 			]
 		}
 	],

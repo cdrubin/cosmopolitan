@@ -16,7 +16,6 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 
 /**
@@ -24,7 +23,10 @@
  *
  * This function is similar to getline() except it'll truncate lines
  * exceeding size. The line ending marker is included and may be removed
- * using _chomp().
+ * using chomp().
+ *
+ * When reading from the console on Windows in `ICANON` mode, the
+ * returned line will end with `\r\n` rather than `\n`.
  *
  * @param s is output buffer
  * @param size is capacity of s

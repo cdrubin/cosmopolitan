@@ -21,6 +21,7 @@
 #include "libc/errno.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
+#include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/struct/sockaddr.h"
@@ -29,6 +30,8 @@
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/sock.h"
+
+__msabi extern typeof(__sys_closesocket_nt) *const __imp_closesocket;
 
 union AcceptExAddr {
   struct sockaddr_storage addr;
@@ -43,7 +46,7 @@ struct AcceptExBuffer {
 textwindows int sys_accept_nt(struct Fd *fd, struct sockaddr_storage *addr,
                               int accept4_flags) {
   int64_t handle;
-  int rc, client, oflags;
+  int client, oflags;
   uint32_t bytes_received;
   uint32_t completion_flags;
   struct AcceptExBuffer buffer;
@@ -67,10 +70,10 @@ textwindows int sys_accept_nt(struct Fd *fd, struct sockaddr_storage *addr,
   if (!AcceptEx(fd->handle, handle, &buffer, 0, sizeof(buffer.local),
                 sizeof(buffer.remote), &bytes_received, &overlapped)) {
     sockfd = (struct SockFd *)fd->extra;
-    if (__wsablock(fd, &overlapped, &completion_flags, true,
+    if (__wsablock(fd, &overlapped, &completion_flags, kSigOpRestartable,
                    sockfd->rcvtimeo) == -1) {
       WSACloseEvent(overlapped.hEvent);
-      __sys_closesocket_nt(handle);
+      __imp_closesocket(handle);
       free(sockfd2);
       return -1;
     }

@@ -45,7 +45,7 @@
 #include "third_party/libcxx/sstream"
 #include "third_party/libcxx/string"
 
-STATIC_YOINK("zipos");
+__static_yoink("zipos");
 
 asm(".ident\t\"\\n\\n\
 llama.cpp (MIT License)\\n\
@@ -88,7 +88,7 @@ static bool append_file_to_prompt(const char *path, gpt_params & params) {
 }
 
 bool gpt_params_parse(int argc, char ** argv, gpt_params & params) {
-    params.n_threads = std::min(20, std::max(1, _getcpucount() >> 1));
+    params.n_threads = std::min(20., (unsigned)__get_cpu_count() * .75);
 
     bool invalid_param = false;
     std::string arg;

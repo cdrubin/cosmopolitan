@@ -29,8 +29,8 @@ typedef wchar_t xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
  * @return number of wide characters (excluding NUL)
  * @asyncsignalsafe
  */
-noasan size_t wcslen(const wchar_t *s) {
-#ifdef __x86_64__
+size_t wcslen(const wchar_t *s) {
+#if defined(__x86_64__) && !defined(__chibicc__)
   size_t n;
   xmm_t z = {0};
   unsigned m, k = (uintptr_t)s & 15;

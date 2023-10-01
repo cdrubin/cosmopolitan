@@ -18,7 +18,9 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
@@ -29,12 +31,17 @@
 #include "libc/macros.internal.h"
 #include "libc/mem/alloca.h"
 #include "libc/mem/mem.h"
+#include "libc/nt/console.h"
+#include "libc/nt/enum/filetype.h"
 #include "libc/nt/errors.h"
+#include "libc/nt/files.h"
+#include "libc/nt/ipc.h"
 #include "libc/nt/iphlpapi.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/ipadapteraddresses.h"
 #include "libc/nt/winsock.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/struct/ifconf.h"
 #include "libc/sock/struct/ifreq.h"
@@ -61,14 +68,9 @@ static struct HostAdapterInfoNode {
   short flags;
 } * __hostInfo;
 
-static int ioctl_default(int fd, unsigned long request, ...) {
+static int ioctl_default(int fd, unsigned long request, void *arg) {
   int rc;
-  void *arg;
-  va_list va;
   int64_t handle;
-  va_start(va, request);
-  arg = va_arg(va, void *);
-  va_end(va);
   if (!IsWindows()) {
     return sys_ioctl(fd, request, arg);
   } else if (__isfdopen(fd)) {
@@ -79,6 +81,41 @@ static int ioctl_default(int fd, unsigned long request, ...) {
       } else {
         return _weaken(__winsockerr)();
       }
+    } else {
+      return eopnotsupp();
+    }
+  } else {
+    return ebadf();
+  }
+}
+
+static int ioctl_fionread(int fd, uint32_t *arg) {
+  int rc;
+  uint32_t cm;
+  int64_t handle;
+  if (!IsWindows()) {
+    return sys_ioctl(fd, FIONREAD, arg);
+  } else if (__isfdopen(fd)) {
+    handle = g_fds.p[fd].handle;
+    if (g_fds.p[fd].kind == kFdSocket) {
+      if ((rc = _weaken(__sys_ioctlsocket_nt)(handle, FIONREAD, arg)) != -1) {
+        return rc;
+      } else {
+        return _weaken(__winsockerr)();
+      }
+    } else if (GetFileType(handle) == kNtFileTypePipe) {
+      uint32_t avail;
+      if (PeekNamedPipe(handle, 0, 0, 0, &avail, 0)) {
+        *arg = avail;
+        return 0;
+      } else if (GetLastError() == kNtErrorBrokenPipe) {
+        return 0;
+      } else {
+        return __winerr();
+      }
+    } else if (GetConsoleMode(handle, &cm)) {
+      int bytes = CountConsoleInputBytes(handle);
+      return MAX(0, bytes);
     } else {
       return eopnotsupp();
     }
@@ -288,10 +325,9 @@ static textwindows int createHostInfo(
   struct NtIpAdapterPrefix *ap;
   struct HostAdapterInfoNode *node = NULL;
   char baseName[IFNAMSIZ];
-  char name[IFNAMSIZ];
   int count, i;
   /* __hostInfo must be empty */
-  _unassert(__hostInfo == NULL);
+  unassert(__hostInfo == NULL);
   for (aa = firstAdapter; aa; aa = aa->Next) {
     /* Skip all the interfaces with no address and the ones that are not AF_INET
      */
@@ -381,7 +417,6 @@ err:
 
 static textwindows int ioctl_siocgifconf_nt(int fd, struct ifconf *ifc) {
   struct ifreq *ptr;
-  struct NtIpAdapterAddresses *aa;
   struct HostAdapterInfoNode *node;
   if (__hostInfo) {
     freeHostInfo();
@@ -445,17 +480,21 @@ static int ioctl_siocgifconf_sysv(int fd, struct ifconf *ifc) {
    * BSD ABIs mainly differ by having sockaddr::sa_len
    * XNU uses a 32-bit length in a struct that's packed!
    */
-  int i, rc, fam;
+  int rc, fam;
+  size_t bufMax;
   char *b, *p, *e;
   char ifcBsd[16];
   struct ifreq *req;
   uint32_t bufLen, ip;
-  size_t numReq, bufMax;
   if (IsLinux()) {
     return sys_ioctl(fd, SIOCGIFCONF, ifc);
   }
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Walloca-larger-than="
   bufMax = 15000; /* conservative guesstimate */
   b = alloca(bufMax);
+  CheckLargeStackAllocation(b, bufMax);
+#pragma GCC pop_options
   memcpy(ifcBsd, &bufMax, 8);                /* ifc_len */
   memcpy(ifcBsd + (IsXnu() ? 4 : 8), &b, 8); /* ifc_buf */
   if ((rc = sys_ioctl(fd, SIOCGIFCONF, &ifcBsd)) != -1) {
@@ -561,69 +600,69 @@ static int ioctl_siocgifflags(int fd, void *arg) {
 /**
  * Performs special i/o operation on file descriptor.
  *
- * @param request can be any of:
+ * The following i/o requests are available.
  *
- *     - `FIONREAD` takes an `int *` and returns how many bytes of input
- *       are available on a terminal or socket, waiting to be read. On
- *       Windows this currently won't work for console file descriptors.
+ * - `FIONREAD` takes an `int *` and returns how many bytes of input are
+ *   available on a terminal/socket/pipe, waiting to be read. Be sure to
+ *   only use it on the reading end of a pipe.
  *
- *     - `TIOCGWINSZ` populates `struct winsize *` with the dimensions
- *       of your teletypewriter. It's an alias for tcgetwinsize().
+ * - `TIOCGWINSZ` populates `struct winsize *` with the dimensions of
+ *   your teletypewriter. It's an alias for tcgetwinsize().
  *
- *     - `TIOCSWINSZ` with the dimensions of your teletypewriter to
- *       `struct winsize *`. It's an alias for tcsetwinsize().
+ * - `TIOCSWINSZ` with the dimensions of your teletypewriter to `struct
+ *   winsize *`. It's an alias for tcsetwinsize().
  *
- *     - `TIOCOUTQ` takes an `int *` and returns the number of bytes in
- *       the terminal's output buffer. Only available on UNIX.
+ * - `TIOCOUTQ` takes an `int *` and returns the number of bytes in the
+ *   terminal's output buffer. Only available on UNIX.
  *
- *     - `TIOCSTI` takes a `const char *` and may be used to fake input
- *       to a tty. This API isn't available on OpenBSD. Only available
- *       on UNIX.
+ * - `TIOCSTI` takes a `const char *` and may be used to fake input to a
+ *   tty. This API isn't available on OpenBSD. Only available on UNIX.
  *
- *     - `TIOCNOTTY` takes an `int tty_fd` arg and makes it the
- *       controlling terminal of the calling process, which should have
- *       called setsid() beforehand.
+ * - `TIOCNOTTY` takes an `int tty_fd` arg and makes it the controlling
+ *   terminal of the calling process, which should have called setsid()
+ *   beforehand.
  *
- *     - `TIOCNOTTY` to give up the controlling terminal. Only available
- *       on UNIX.
+ * - `TIOCNOTTY` to give up the controlling terminal. Only available on
+ *   UNIX.
  *
- *     - `TIOCNXCL` to give up exclusive mode on terminal. Only
- *       available on UNIX.
+ * - `TIOCNXCL` to give up exclusive mode on terminal. Only available on
+ *   UNIX.
  *
- *     - `SIOCGIFCONF` takes an struct ifconf object of a given size,
- *       whose arg is `struct ifconf *`. It implements the Linux style
- *       and modifies the following:
- *       - ifc_len: set it to the number of valid ifreq structures
- *         representingthe interfaces
- *       - ifc_ifcu.ifcu_req: sets the name of the interface for each
- *         interface
- *       The ifc_len is an input/output parameter: set it to the total
- *       size of the ifcu_buf (ifcu_req) buffer on input.
+ * - `SIOCGIFCONF` takes an struct ifconf object of a given size,
+ *   whose arg is `struct ifconf *`. It implements the Linux style
+ *   and modifies the following:
+ *   - ifc_len: set it to the number of valid ifreq structures
+ *     representingthe interfaces
+ *   - ifc_ifcu.ifcu_req: sets the name of the interface for each
+ *     interface
+ *   The ifc_len is an input/output parameter: set it to the total
+ *   size of the ifcu_buf (ifcu_req) buffer on input.
  *
- *     - `SIOCGIFNETMASK` populates a `struct ifconf *` record with the
- *       network interface mask. This data structure should be obtained
- *       by calling `SIOCGIFCONF`.
+ * - `SIOCGIFNETMASK` populates a `struct ifconf *` record with the
+ *   network interface mask. This data structure should be obtained by
+ *   calling `SIOCGIFCONF`.
  *
- *     - `SIOCGIFBRDADDR` populates a `struct ifconf *` record with the
- *       network broadcast addr. This data structure should be obtained
- *       by calling `SIOCGIFCONF`.
+ * - `SIOCGIFBRDADDR` populates a `struct ifconf *` record with the
+ *   network broadcast addr. This data structure should be obtained by
+ *   calling `SIOCGIFCONF`.
  *
- *     - `FIONBIO` isn't polyfilled; use `fcntl(F_SETFL, O_NONBLOCK)`
- *     - `FIOCLEX` isn't polyfilled; use `fcntl(F_SETFD, FD_CLOEXEC)`
- *     - `FIONCLEX` isn't polyfilled; use `fcntl(F_SETFD, 0)`
- *     - `TCGETS` isn't polyfilled; use tcgetattr()
- *     - `TCSETS` isn't polyfilled; use tcsetattr()
- *     - `TCSETSW` isn't polyfilled; use tcsetattr()
- *     - `TCSETSF` isn't polyfilled; use tcsetattr()
- *     - `TCXONC` isn't polyfilled; use tcflow()
- *     - `TCSBRK` isn't polyfilled; use tcdrain()
- *     - `TCFLSH` isn't polyfilled; use tcflush()
- *     - `TIOCGPTN` isn't polyfilled; use ptsname()
- *     - `TIOCGSID` isn't polyfilled; use tcgetsid()
- *     - `TCSBRK` isn't polyfilled; use tcsendbreak()
- *     - `TCSBRK` isn't polyfilled; use tcsendbreak()
- *     - `TIOCSPGRP` isn't polyfilled; use tcsetpgrp()
- *     - `TIOCSPTLCK` isn't polyfilled; use unlockpt()
+ * - `FIONBIO` isn't polyfilled; use `fcntl(F_SETFL, O_NONBLOCK)`
+ * - `FIOCLEX` isn't polyfilled; use `fcntl(F_SETFD, FD_CLOEXEC)`
+ * - `FIONCLEX` isn't polyfilled; use `fcntl(F_SETFD, 0)`
+ * - `TIOCSCTTY` isn't polyfilled; use `login_tty()`
+ * - `TCGETS` isn't polyfilled; use tcgetattr()
+ * - `TCSETS` isn't polyfilled; use tcsetattr()
+ * - `TCSETSW` isn't polyfilled; use tcsetattr()
+ * - `TCSETSF` isn't polyfilled; use tcsetattr()
+ * - `TCXONC` isn't polyfilled; use tcflow()
+ * - `TCSBRK` isn't polyfilled; use tcdrain()
+ * - `TCFLSH` isn't polyfilled; use tcflush()
+ * - `TIOCGPTN` isn't polyfilled; use ptsname()
+ * - `TIOCGSID` isn't polyfilled; use tcgetsid()
+ * - `TCSBRK` isn't polyfilled; use tcsendbreak()
+ * - `TCSBRK` isn't polyfilled; use tcsendbreak()
+ * - `TIOCSPGRP` isn't polyfilled; use tcsetpgrp()
+ * - `TIOCSPTLCK` isn't polyfilled; use unlockpt()
  *
  * @restartable
  * @vforksafe
@@ -635,12 +674,12 @@ int ioctl(int fd, unsigned long request, ...) {
   va_start(va, request);
   arg = va_arg(va, void *);
   va_end(va);
-  if (request == FIONBIO) {
-    rc = ioctl_default(fd, request, arg);
+  if (request == FIONREAD) {
+    rc = ioctl_fionread(fd, arg);
   } else if (request == TIOCGWINSZ) {
-    rc = tcgetwinsize(fd, arg);
+    return tcgetwinsize(fd, arg);
   } else if (request == TIOCSWINSZ) {
-    rc = tcsetwinsize(fd, arg);
+    return tcsetwinsize(fd, arg);
   } else if (request == SIOCGIFCONF) {
     rc = ioctl_siocgifconf(fd, arg);
   } else if (request == SIOCGIFADDR) {

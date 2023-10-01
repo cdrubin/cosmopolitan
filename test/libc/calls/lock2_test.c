@@ -28,10 +28,11 @@
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
 
-char testlib_enable_tmp_setup_teardown;
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 TEST(lock, wholeFile) {
-  char buf[512];
   ASSERT_SYS(0, 3, open("db", O_RDWR | O_CREAT | O_EXCL, 0644));
   ASSERT_SYS(0, 0, fcntl(3, F_SETLK, &(struct flock){.l_type = F_RDLCK}));
   ASSERT_SYS(0, 0, fcntl(3, F_SETLK, &(struct flock){.l_type = F_UNLCK}));
@@ -39,7 +40,6 @@ TEST(lock, wholeFile) {
 }
 
 TEST(lock, testUpgradeFromReadToWriteLock) {
-  char buf[512];
   ASSERT_SYS(0, 3, open("db", O_RDWR | O_CREAT | O_EXCL, 0644));
   ASSERT_SYS(0, 0,
              fcntl(3, F_SETLK,
@@ -59,7 +59,6 @@ TEST(lock, testUpgradeFromReadToWriteLock) {
 }
 
 TEST(lock, testUpgradeWriteToWriteLock) {
-  char buf[512];
   ASSERT_SYS(0, 3, open("db", O_RDWR | O_CREAT | O_EXCL, 0644));
   ASSERT_SYS(0, 0,
              fcntl(3, F_SETLK,

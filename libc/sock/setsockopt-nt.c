@@ -20,6 +20,7 @@
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/struct/linger.h"
+#include "libc/nt/thunk/msabi.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/struct/linger.h"
 #include "libc/sock/syscall_fd.internal.h"
@@ -28,12 +29,14 @@
 #include "libc/sysv/consts/sol.h"
 #include "libc/sysv/errfuns.h"
 
+__msabi extern typeof(__sys_setsockopt_nt) *const __imp_setsockopt;
+
 textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
                                   const void *optval, uint32_t optlen) {
   int64_t ms, micros;
-  struct timeval *tv;
-  struct linger *linger;
   struct SockFd *sockfd;
+  const struct timeval *tv;
+  const struct linger *linger;
   union {
     uint32_t millis;
     struct linger_nt linger;
@@ -70,7 +73,7 @@ textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
     }
   }
 
-  if (__sys_setsockopt_nt(fd->handle, level, optname, optval, optlen) != -1) {
+  if (__imp_setsockopt(fd->handle, level, optname, optval, optlen) != -1) {
     return 0;
   } else {
     return __winsockerr();

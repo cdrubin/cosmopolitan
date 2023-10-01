@@ -7,6 +7,7 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
+#include "libc/errno.h"
 #include "libc/log/log.h"
 #include "libc/mem/gc.internal.h"
 #include "libc/runtime/runtime.h"
@@ -34,8 +35,7 @@ void PrintUsage(int rc, FILE *f) {
 
 void PrintUri(const char *path) {
   size_t n;
-  void *img, *src, *mime;
-  int opt, i;
+  void *img;
   if (!(img = gc(xslurp(path, &n)))) exit(2);
   fputs("data:", stdout);
   fputs(FindContentType(path, -1), stdout);

@@ -84,7 +84,7 @@ static char *Raster(int yn, int xn, unsigned char Y[yn][xn], int *dw) {
           bs = s;
         }
       }
-      appendw(&r, _tpenc(kBlocks[bi].c));
+      appendw(&r, tpenc(kBlocks[bi].c));
       ++w;
     }
     if (w > *dw) *dw = w;
@@ -104,7 +104,6 @@ int main(int argc, char *argv[]) {
   char **rasters;
   char **fasters;
   size_t ttfsize;
-  const char *dir;
   bool isdifferent;
   unsigned char **ttf;
   stbtt_fontinfo *font;

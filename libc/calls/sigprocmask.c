@@ -50,9 +50,8 @@
  * @vforksafe
  */
 int sigprocmask(int how, const sigset_t *opt_set, sigset_t *opt_out_oldset) {
-  int res, rc, arg1;
+  int rc;
   sigset_t old = {0};
-  const sigset_t *arg2;
   if (IsAsan() &&
       ((opt_set && !__asan_is_valid(opt_set, sizeof(*opt_set))) ||
        (opt_out_oldset &&
@@ -61,7 +60,7 @@ int sigprocmask(int how, const sigset_t *opt_set, sigset_t *opt_out_oldset) {
   } else if (IsMetal() || IsWindows()) {
     rc = __sig_mask(how, opt_set, &old);
     if (_weaken(__sig_check)) {
-      _weaken(__sig_check)(true);
+      _weaken(__sig_check)();
     }
   } else {
     rc = sys_sigprocmask(how, opt_set, opt_out_oldset ? &old : 0);

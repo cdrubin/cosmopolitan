@@ -244,15 +244,15 @@ static int __fmt_ntoa2(int out(const char *, void *, size_t), void *arg,
   unsigned len, count, digit;
   char buf[BUFFER_SIZE];
   len = 0;
-  /* we check for log2base != 3 because otherwise we'll print nothing for a
-   * value of 0 with precision 0 when # mandates that one be printed */
+  // we check for log2base!=3, since otherwise we'll print nothing for
+  // a value of 0 with precision 0 when # mandates that one be printed
   if (!value && log2base != 3) flags &= ~FLAGS_HASH;
   if (value || !(flags & FLAGS_PRECISION)) {
     count = 0;
     do {
       if (!log2base) {
         if (value <= UINT64_MAX) {
-          value = DivMod10(value, &digit);
+          value = __divmod10(value, &digit);
         } else {
           value = __udivmodti4(value, 10, &remainder);
           digit = remainder;
@@ -270,7 +270,7 @@ static int __fmt_ntoa2(int out(const char *, void *, size_t), void *arg,
       }
       buf[len++] = alphabet[digit];
     } while (value);
-    _npassert(count <= BUFFER_SIZE);
+    npassert(count <= BUFFER_SIZE);
   }
   return __fmt_ntoa_format(out, arg, buf, len, neg, log2base, prec, width,
                            flags, alphabet);
@@ -358,14 +358,14 @@ static int __fmt_stoa_byte(out_f out, void *a, uint64_t c) {
 
 static int __fmt_stoa_wide(out_f out, void *a, uint64_t w) {
   char buf[8];
-  if (!isascii(w)) w = _tpenc(w);
+  if (!isascii(w)) w = tpenc(w);
   WRITE64LE(buf, w);
   return out(buf, a, w ? (_bsr(w) >> 3) + 1 : 1);
 }
 
 static int __fmt_stoa_bing(out_f out, void *a, uint64_t w) {
   char buf[8];
-  w = _tpenc(kCp437[w & 0xFF]);
+  w = tpenc(kCp437[w & 0xFF]);
   WRITE64LE(buf, w);
   return out(buf, a, w ? (_bsr(w) >> 3) + 1 : 1);
 }
@@ -375,7 +375,7 @@ static int __fmt_stoa_quoted(out_f out, void *a, uint64_t w) {
   if (isascii(w)) {
     w = __fmt_cescapec(w);
   } else {
-    w = _tpenc(w);
+    w = tpenc(w);
   }
   WRITE64LE(buf, w);
   return out(buf, a, w ? (_bsr(w) >> 3) + 1 : 1);
@@ -398,7 +398,7 @@ static int __fmt_stoa(int out(const char *, void *, size_t), void *arg,
   unsigned n;
   emit_f emit;
   char *p, buf[1];
-  unsigned w, c, pad;
+  unsigned w, pad;
   bool justdobytes, ignorenul;
 
   p = data;
@@ -604,7 +604,7 @@ static void __fmt_ldfpbits(union U *u, struct FPBits *b) {
 
 // returns number of hex digits minus 1, or 0 for zero
 static int __fmt_fpiprec(struct FPBits *b) {
-  FPI *fpi;
+  const FPI *fpi;
   int i, j, k, m;
   uint32_t *bits;
   if (b->kind == STRTOG_Zero) return (b->ex = 0);
@@ -705,6 +705,10 @@ haveinc:
   return prec;
 }
 
+static int __fmt_noop(const char *, void *, size_t) {
+  return 0;
+}
+
 /**
  * Implements {,v}{,s{,n},{,{,x}as},f,d}printf domain-specific language.
  *
@@ -790,14 +794,14 @@ int __fmt(void *fn, void *arg, const char *format, va_list va) {
   wchar_t charbuf[1];
   const char *alphabet;
   unsigned char signbit, log2base;
+  int c, k, i1, bw, rc, bex, prec1, decpt;
   int (*out)(const char *, void *, size_t);
   char *se, *s0, *s, *q, qchar, special[8];
   int d, w, n, sign, prec, flags, width, lasterr;
-  int c, k, i1, ui, bw, rc, bex, sgn, prec1, decpt;
 
   x = 0;
   lasterr = errno;
-  out = fn ? fn : (void *)_missingno;
+  out = fn ? fn : __fmt_noop;
 
   while (*format) {
     if (*format != '%') {
@@ -848,7 +852,7 @@ int __fmt(void *fn, void *arg, const char *format, va_list va) {
         continue;
       } else if (format[1] == '.' && format[2] == '*' && format[3] == 's') {
         n = va_arg(va, unsigned);  // FAST PATH: PRECISION STRING
-        s = va_arg(va, const char *);
+        const char *s = va_arg(va, const char *);
         if (s) {
           n = strnlen(s, n);
         } else {
@@ -1023,6 +1027,14 @@ int __fmt(void *fn, void *arg, const char *format, va_list va) {
           qchar = '\'';
           flags |= FLAGS_PRECISION;
           prec = 1;
+          goto FormatString;
+        } else if (flags & (FLAGS_QUOTE | FLAGS_REPR)) {
+          p = "'\\0'";
+          flags &= ~(FLAGS_QUOTE | FLAGS_REPR | FLAGS_HASH);
+          goto FormatString;
+        } else if (flags & FLAGS_HASH) {
+          flags &= ~FLAGS_HASH;
+          p = " ";
           goto FormatString;
         } else {
           __FMT_PUT('\0');

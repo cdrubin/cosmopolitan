@@ -33,14 +33,14 @@
 /**
  * Returns true if host platform is WSL 1.0.
  */
-bool IsWsl1(void) {
+bool __iswsl1(void) {
   static char res;
   if (res) return res & 1;
   if (!IsLinux()) return res = 2, false;
   int e = errno;
-  _unassert(__sys_mmap((void *)1, 4096, PROT_READ | PROT_WRITE,
-                       MAP_FIXED | MAP_PRIVATE | ANONYMOUS | GROWSDOWN, -1, 0,
-                       0) == MAP_FAILED);
+  unassert(__sys_mmap((void *)1, 4096, PROT_READ | PROT_WRITE,
+                      MAP_FIXED | MAP_PRIVATE | ANONYMOUS | GROWSDOWN, -1, 0,
+                      0) == MAP_FAILED);
   bool tmp = errno == ENOTSUP;
   errno = e;
   res = 2 | tmp;

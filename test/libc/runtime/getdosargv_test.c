@@ -16,9 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/calls.h"
+#include "libc/errno.h"
+#include "libc/limits.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/testlib/testlib.h"
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 TEST(GetDosArgv, empty) {
   size_t max = 4;

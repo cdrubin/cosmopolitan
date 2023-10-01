@@ -43,7 +43,7 @@
 #include "tool/decode/lib/idname.h"
 #if defined(__x86_64__) && SupportsWindows()
 
-char *GetString(struct NtUnicodeString *s) {
+char *GetString(const struct NtUnicodeString *s) {
   static char buf[1024];
   unsigned len = min(sizeof(buf) - 1, s->Length);
   for (unsigned i = 0; i < len; ++i) {
@@ -82,7 +82,7 @@ const struct IdName kNtStartfFlagNames[] = {
     {0, 0},
 };
 
-noasan void PrintStartupInfo(void) {
+dontasan void PrintStartupInfo(void) {
 #if 0
   printf("\n\
 ╔──────────────────────────────────────────────────────────────────────────────╗\n\
@@ -161,7 +161,7 @@ void PrintStdioInfo(void) {
          ft2str(GetFileType(g_fds.p[2].handle)));
 }
 
-noasan void PrintTeb(void) {
+dontasan void PrintTeb(void) {
   GetCurrentProcessId();
   SetLastError(0x1234);
   printf("\n\

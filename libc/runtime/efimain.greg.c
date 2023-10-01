@@ -41,8 +41,8 @@ struct EfiArgs {
   char ArgBlock[0xC00];
 };
 
-static const EFI_GUID kEfiLoadedImageProtocol = LOADED_IMAGE_PROTOCOL;
-static const EFI_GUID kEfiGraphicsOutputProtocol = GRAPHICS_OUTPUT_PROTOCOL;
+static EFI_GUID kEfiLoadedImageProtocol = LOADED_IMAGE_PROTOCOL;
+static EFI_GUID kEfiGraphicsOutputProtocol = GRAPHICS_OUTPUT_PROTOCOL;
 
 extern const char vga_console[];
 extern void _EfiPostboot(struct mman *, uint64_t *, uintptr_t, char **);
@@ -125,7 +125,7 @@ static void EfiInitVga(struct mman *mm, EFI_SYSTEM_TABLE *SystemTable) {
  * So if you want to trade away Windows so that you can use
  * UEFI instead of the normal BIOS boot process, do this:
  *
- *     STATIC_YOINK("EfiMain");
+ *     __static_yoink("EfiMain");
  *     int main() { ... }
  *
  * You can use QEMU to test this, but please note that UEFI
@@ -141,9 +141,8 @@ static void EfiInitVga(struct mman *mm, EFI_SYSTEM_TABLE *SystemTable) {
  *
  * @see libc/dce.h
  */
-__msabi noasan EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
-                                  EFI_SYSTEM_TABLE *SystemTable) {
-  int type, x87cw = 0x037f;
+__msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
+                                    EFI_SYSTEM_TABLE *SystemTable) {
   struct mman *mm;
   uint32_t DescVersion;
   uintptr_t i, j, MapSize;
@@ -152,7 +151,10 @@ __msabi noasan EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
   EFI_MEMORY_DESCRIPTOR *Map, *Desc;
   uint64_t Address;
   uintptr_t Args, MapKey, DescSize;
-  uint64_t p, pe, cr4, *m, *pd, *sp, *pml4t, *pdt1, *pdt2, *pdpt1, *pdpt2;
+  uint64_t *pd, *pml4t, *pdt1, *pdt2, *pdpt1, *pdpt2;
+
+  extern char os asm("__hostos");
+  os = _HOSTMETAL;
 
   /*
    * Allocates and clears PC-compatible memory and copies image.  Marks the

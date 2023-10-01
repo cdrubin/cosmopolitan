@@ -87,6 +87,7 @@ THIRD_PARTY_ZIP_DIRECTDEPS =			\
 	LIBC_NEXGEN32E				\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
+	LIBC_PROC				\
 	LIBC_STR				\
 	LIBC_SYSV				\
 	LIBC_TIME				\
@@ -152,6 +153,7 @@ o/$(MODE)/third_party/zip/zipnote.o		\
 o/$(MODE)/third_party/zip/zipsplit.o		\
 o/$(MODE)/third_party/zip/zipup.o: private	\
 	CPPFLAGS +=				\
+		-w				\
 		-DUNIX				\
 		-DMMAP				\
 		-DUNICODE_SUPPORT		\

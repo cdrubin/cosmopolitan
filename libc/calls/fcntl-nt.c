@@ -25,11 +25,15 @@
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/wincrash.internal.h"
 #include "libc/errno.h"
-#include "libc/intrin/kmalloc.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/leaky.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/mem.h"
+#include "libc/nt/createfile.h"
+#include "libc/nt/enum/fileflagandattributes.h"
 #include "libc/nt/enum/filelockflags.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/files.h"
@@ -69,13 +73,15 @@ static textwindows struct FileLock *NewFileLock(void) {
     fl = g_locks.free;
     g_locks.free = fl->next;
   } else {
-    fl = kmalloc(sizeof(*fl));
+    unassert((fl = _weaken(malloc)(sizeof(*fl))));
   }
   bzero(fl, sizeof(*fl));
   fl->next = g_locks.list;
   g_locks.list = fl;
   return fl;
 }
+
+IGNORE_LEAKS(NewFileLock)
 
 static textwindows void FreeFileLock(struct FileLock *fl) {
   fl->next = g_locks.free;
@@ -121,11 +127,14 @@ textwindows void sys_fcntl_nt_lock_cleanup(int fd) {
 
 static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
                                          uintptr_t arg) {
-  int e;
+  uint32_t flags;
   struct flock *l;
-  uint32_t flags, err;
+  int64_t pos, off, len, end;
   struct FileLock *fl, *ft, **flp;
-  int64_t pos, off, len, end, size;
+
+  if (!_weaken(malloc)) {
+    return enomem();
+  }
 
   l = (struct flock *)arg;
   len = l->l_len;
@@ -158,8 +167,7 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
   }
 
   bool32 ok;
-  struct NtOverlapped ov = {.hEvent = f->handle,
-                            .Pointer = (void *)(uintptr_t)off};
+  struct NtOverlapped ov = {.hEvent = f->handle, .Pointer = off};
 
   if (l->l_type == F_RDLCK || l->l_type == F_WRLCK) {
 
@@ -168,7 +176,7 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
       for (flp = &g_locks.list, fl = *flp; fl;) {
         if (fl->fd == fd) {
           if (EqualsFileLock(fl, off, len)) {
-            if (fl->exc == l->l_type == F_WRLCK) {
+            if (fl->exc == (l->l_type == F_WRLCK)) {
               // we already have this lock
               return 0;
             } else {
@@ -202,7 +210,7 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
           l->l_whence = SEEK_SET;
           l->l_start = fl->off;
           l->l_len = fl->len;
-          l->l_type == fl->exc ? F_WRLCK : F_RDLCK;
+          l->l_type = fl->exc ? F_WRLCK : F_RDLCK;
           l->l_pid = getpid();
           return 0;
         }
@@ -245,8 +253,7 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
     // allow a big range to unlock many small ranges
     for (flp = &g_locks.list, fl = *flp; fl;) {
       if (fl->fd == fd && EncompassesFileLock(fl, off, len)) {
-        struct NtOverlapped ov = {.hEvent = f->handle,
-                                  .Pointer = (void *)(uintptr_t)fl->off};
+        struct NtOverlapped ov = {.hEvent = f->handle, .Pointer = fl->off};
         if (UnlockFileEx(f->handle, 0, fl->len, fl->len >> 32, &ov)) {
           *flp = fl->next;
           ft = fl->next;
@@ -278,14 +285,13 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
             off + len >= fl->off &&  //
             off + len < fl->off + fl->len) {
           // cleave left side of lock
-          struct NtOverlapped ov = {.hEvent = f->handle,
-                                    .Pointer = (void *)(uintptr_t)fl->off};
+          struct NtOverlapped ov = {.hEvent = f->handle, .Pointer = fl->off};
           if (!UnlockFileEx(f->handle, 0, fl->len, fl->len >> 32, &ov)) {
             return -1;
           }
           fl->len = (fl->off + fl->len) - (off + len);
           fl->off = off + len;
-          ov.Pointer = (void *)(uintptr_t)fl->off;
+          ov.Pointer = fl->off;
           if (!LockFileEx(f->handle, kNtLockfileExclusiveLock, 0, fl->len,
                           fl->len >> 32, &ov)) {
             return -1;
@@ -310,49 +316,62 @@ static textwindows int sys_fcntl_nt_dupfd(int fd, int cmd, int start) {
   return sys_dup_nt(fd, -1, (cmd == F_DUPFD_CLOEXEC ? O_CLOEXEC : 0), start);
 }
 
-static textwindows int sys_fcntl_nt_setfl(int fd, unsigned *flags, unsigned arg,
-                                          unsigned supported) {
-  unsigned old, neu, changed, other, allowed;
-  old = *flags & supported;
-  other = *flags & ~supported;
-  neu = arg & supported;
-  changed = old ^ neu;
-  // you may change the following access mode flags:
+static textwindows int sys_fcntl_nt_setfl(int fd, unsigned *flags,
+                                          unsigned mode, unsigned arg,
+                                          intptr_t *handle) {
+
+  // you may change the following:
   //
   // - O_NONBLOCK     make read() raise EAGAIN
-  // - O_NDELAY       same thing as O_NONBLOCK
+  // - O_APPEND       for toggling append mode
+  // - O_RANDOM       alt. for posix_fadvise()
+  // - O_SEQUENTIAL   alt. for posix_fadvise()
+  // - O_DIRECT       works but haven't tested
   //
-  allowed = O_NONBLOCK;
-  if (changed & ~allowed) {
-    // the following access mode flags are supported, but it's currently
-    // not possible to change them on windows.
-    //
-    // - O_APPEND     tried to support but failed
-    // - O_RANDOM     use posix_fadvise() instead
-    // - O_SEQUENTIAL use posix_fadvise() instead
-    // - O_DIRECT     possibly in future?
-    // - O_DSYNC      possibly in future?
-    // - O_RSYNC      possibly in future?
-    // - O_SYNC       possibly in future?
-    //
-    return enotsup();
+  // the other bits are ignored.
+  unsigned allowed = O_APPEND | O_SEQUENTIAL | O_RANDOM | O_DIRECT | O_NONBLOCK;
+  unsigned needreo = O_APPEND | O_SEQUENTIAL | O_RANDOM | O_DIRECT;
+  unsigned newflag = (*flags & ~allowed) | (arg & allowed);
+
+  if ((*flags & needreo) ^ (arg & needreo)) {
+    unsigned perm, share, attr;
+    if (GetNtOpenFlags(newflag, mode, &perm, &share, 0, &attr) == -1) {
+      return -1;
+    }
+    // MSDN says only these are allowed, otherwise it returns EINVAL.
+    attr &= kNtFileFlagBackupSemantics | kNtFileFlagDeleteOnClose |
+            kNtFileFlagNoBuffering | kNtFileFlagOpenNoRecall |
+            kNtFileFlagOpenReparsePoint | kNtFileFlagOverlapped |
+            kNtFileFlagPosixSemantics | kNtFileFlagRandomAccess |
+            kNtFileFlagSequentialScan | kNtFileFlagWriteThrough;
+    intptr_t hand;
+    if ((hand = ReOpenFile(*handle, perm, share, attr)) != -1) {
+      if (hand != *handle) {
+        CloseHandle(*handle);
+        *handle = hand;
+      }
+    } else {
+      return __winerr();
+    }
   }
+
   // 1. ignore flags that aren't access mode flags
   // 2. return zero if nothing's changed
-  *flags = other | neu;
+  *flags = newflag;
   return 0;
 }
 
 textwindows int sys_fcntl_nt(int fd, int cmd, uintptr_t arg) {
   int rc;
-  uint32_t flags;
-  int access_mode_flags = O_ACCMODE | O_APPEND | O_ASYNC | O_DIRECT |
-                          O_NOATIME | O_NONBLOCK | O_RANDOM | O_SEQUENTIAL;
-  if (__isfdkind(fd, kFdFile) || __isfdkind(fd, kFdSocket)) {
+  if (__isfdkind(fd, kFdFile) ||    //
+      __isfdkind(fd, kFdSocket) ||  //
+      __isfdkind(fd, kFdConsole)) {
     if (cmd == F_GETFL) {
-      rc = g_fds.p[fd].flags & access_mode_flags;
+      rc = g_fds.p[fd].flags & (O_ACCMODE | O_APPEND | O_DIRECT | O_NONBLOCK |
+                                O_RANDOM | O_SEQUENTIAL);
     } else if (cmd == F_SETFL) {
-      rc = sys_fcntl_nt_setfl(fd, &g_fds.p[fd].flags, arg, access_mode_flags);
+      rc = sys_fcntl_nt_setfl(fd, &g_fds.p[fd].flags, g_fds.p[fd].mode, arg,
+                              &g_fds.p[fd].handle);
     } else if (cmd == F_GETFD) {
       if (g_fds.p[fd].flags & O_CLOEXEC) {
         rc = FD_CLOEXEC;

@@ -43,7 +43,7 @@
 #include "third_party/xed/x86.h"
 #include "tool/build/lib/getargs.h"
 
-STATIC_YOINK("realloc");
+__static_yoink("realloc");
 
 /**
  * @fileoverview Build Package Script.
@@ -204,7 +204,7 @@ static void PrintObject(struct Package *pkg, struct Object *obj) {
 }
 
 static void PrintPackage(struct Package *pkg) {
-  int i, j, o;
+  int i;
   kprintf("- %s\n", pkg->strings.p + pkg->path);
   kprintf("  objects=%d\n", pkg->objects.i);
   for (i = 0; i < pkg->objects.i; ++i) {
@@ -224,7 +224,7 @@ static void PrintPackages(struct Package *p, int n) {
 
 static struct Package *LoadPackage(const char *path) {
   int fd;
-  ssize_t i, size;
+  ssize_t size;
   struct Package *pkg;
   if ((fd = open(path, O_RDONLY)) == -1) {
     SysExit(path, "open");
@@ -339,7 +339,7 @@ FLAGS\n\
 
 static void GetOpts(struct Package *pkg, struct Packages *deps, int argc,
                     char *argv[]) {
-  long i, si, opt;
+  long opt;
   const char *arg;
   struct GetArgs ga;
   pkg->path = -1;
@@ -381,10 +381,8 @@ static void GetOpts(struct Package *pkg, struct Packages *deps, int argc,
 static void IndexSections(struct Package *pkg, struct Object *obj) {
   int i;
   const char *name;
-  const uint8_t *code;
   struct Section sect;
   const Elf64_Shdr *shdr;
-  struct XedDecodedInst xedd;
   obj->section_offset = pkg->sections.i;
   for (i = 0; i < obj->elf->e_shnum; ++i) {
     bzero(&sect, sizeof(sect));
@@ -566,7 +564,7 @@ static struct Symbol *BisectSymbol(struct Package *pkg, const char *name) {
 static bool FindSymbol(const char *name, struct Package *pkg,
                        struct Packages *directdeps, struct Package **out_pkg,
                        struct Symbol **out_sym) {
-  size_t i, j;
+  size_t i;
   struct Symbol *sym;
   if ((sym = BisectSymbol(pkg, name))) {
     if (out_sym) *out_sym = sym;
@@ -607,7 +605,7 @@ static void CheckStrictDeps(struct Package *pkg, struct Packages *deps) {
 }
 
 static void CheckYourPrivilege(struct Package *pkg, struct Packages *deps) {
-  int i, j, o, f;
+  int i, f;
   const char *name;
   struct Symbol *sym;
   struct Package *dep;
@@ -634,7 +632,7 @@ static bool IsSymbolDirectlyReachable(struct Package *pkg,
 
 static void Package(int argc, char *argv[], struct Package *pkg,
                     struct Packages *deps) {
-  size_t i, j;
+  size_t i;
   GetOpts(pkg, deps, argc, argv);
   LoadObjects(pkg);
   CheckStrictDeps(pkg, deps);
@@ -651,9 +649,9 @@ int main(int argc, char *argv[]) {
   if (argc == 2 && !strcmp(argv[1], "-n")) {
     exit(0);
   }
-  if (!IsOptimized()) {
-    ShowCrashReports();
-  }
+#ifndef NDEBUG
+  ShowCrashReports();
+#endif
   bzero(&pkg, sizeof(pkg));
   bzero(&deps, sizeof(deps));
   Package(argc, argv, &pkg, &deps);

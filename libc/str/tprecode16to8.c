@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
 #include "libc/fmt/conv.h"
 #include "libc/intrin/packsswb.h"
 #include "libc/intrin/pandn.h"
@@ -27,8 +28,8 @@
 static const int16_t kDel16[8] = {127, 127, 127, 127, 127, 127, 127, 127};
 
 /* 10x speedup for ascii */
-static noasan axdx_t tprecode16to8_sse2(char *dst, size_t dstsize,
-                                        const char16_t *src, axdx_t r) {
+static axdx_t tprecode16to8_sse2(char *dst, size_t dstsize, const char16_t *src,
+                                 axdx_t r) {
   int16_t v1[8], v2[8], v3[8], vz[8];
   memset(vz, 0, 16);
   while (r.ax + 8 < dstsize) {
@@ -64,16 +65,18 @@ axdx_t tprecode16to8(char *dst, size_t dstsize, const char16_t *src) {
   r.ax = 0;
   r.dx = 0;
   for (;;) {
-    if (!IsTiny() && !((uintptr_t)(src + r.dx) & 15)) {
+#if defined(__x86_64__) && !IsModeDbg() && !IsTiny()
+    if (!((uintptr_t)(src + r.dx) & 15)) {
       r = tprecode16to8_sse2(dst, dstsize, src, r);
     }
+#endif
     if (!(x = src[r.dx++])) break;
     if (IsUtf16Cont(x)) continue;
     if (!IsUcs2(x)) {
       if (!(y = src[r.dx++])) break;
       x = MergeUtf16(x, y);
     }
-    w = _tpenc(x);
+    w = tpenc(x);
     while (w && r.ax + 1 < dstsize) {
       dst[r.ax++] = w & 0xFF;
       w >>= 8;

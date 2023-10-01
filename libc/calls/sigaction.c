@@ -47,15 +47,10 @@
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
-
-#ifdef SYSDEBUG
-STATIC_YOINK("strsignal");  // for kprintf()
-#endif
+#include "libc/thread/tls.h"
 
 #if SupportsWindows()
-STATIC_YOINK("_init_onntconsoleevent");
-STATIC_YOINK("_check_sigwinch");
-STATIC_YOINK("_init_wincrash");
+__static_yoink("__sig_ctor");
 #endif
 
 #define SA_RESTORER 0x04000000
@@ -195,7 +190,7 @@ static int __sigaction(int sig, const struct sigaction *act,
           ap->sa_flags |= SA_RESTORER;
           ap->sa_restorer = &__restore_rt;
         }
-        if (IsWsl1()) {
+        if (__iswsl1()) {
           sigenter = __sigenter_wsl;
         } else {
           sigenter = ap->sa_sigaction;
@@ -250,22 +245,26 @@ static int __sigaction(int sig, const struct sigaction *act,
   } else {
     if (oldact) {
       bzero(oldact, sizeof(*oldact));
-    }
-    rc = 0;
-  }
-  if (rc != -1 && !__vforked) {
-    if (oldact) {
       oldrva = __sighandrvas[sig];
+      oldact->sa_flags = __sighandflags[sig];
       oldact->sa_sigaction =
           (sigaction_f)(oldrva < kSigactionMinRva
                             ? oldrva
                             : (intptr_t)&__executable_start + oldrva);
     }
+    rc = 0;
+  }
+  if (rc != -1 && !__vforked) {
     if (act) {
       __sighandrvas[sig] = rva;
       __sighandflags[sig] = act->sa_flags;
       if (IsWindows()) {
-        __sig_check_ignore(sig, rva);
+        if (__sig_ignored(sig)) {
+          __sig.pending &= ~(1ull << (sig - 1));
+          if (__tls_enabled) {
+            __get_tls()->tib_sigpending &= ~(1ull << (sig - 1));
+          }
+        }
       }
     }
   }
@@ -275,7 +274,9 @@ static int __sigaction(int sig, const struct sigaction *act,
 /**
  * Installs handler for kernel interrupt to thread, e.g.:
  *
- *     void GotCtrlC(int sig, siginfo_t *si, void *ctx);
+ *     void GotCtrlC(int sig, siginfo_t *si, void *arg) {
+ *       ucontext_t *ctx = arg;
+ *     }
  *     struct sigaction sa = {.sa_sigaction = GotCtrlC,
  *                            .sa_flags = SA_RESETHAND|SA_RESTART|SA_SIGINFO};
  *     CHECK_NE(-1, sigaction(SIGINT, &sa, NULL));
@@ -478,6 +479,15 @@ static int __sigaction(int sig, const struct sigaction *act,
  * know that signals are in play. That way code which would otherwise be
  * frequently calling sigprocmask() out of an abundance of caution, will
  * no longer need to pay its outrageous cost.
+ *
+ * Signal handlers should avoid clobbering global variables like `errno`
+ * because most signals are asynchronous, i.e. the signal handler might
+ * be called at any assembly instruction. If something like a `SIGCHLD`
+ * handler doesn't save / restore the `errno` global when calling wait,
+ * then any i/o logic in the main program that checks `errno` will most
+ * likely break. This is rare in practice, since systems usually design
+ * signals to favor delivery from cancellation points before they block
+ * however that's not guaranteed.
  *
  * @return 0 on success or -1 w/ errno
  * @see xsigaction() for a much better api

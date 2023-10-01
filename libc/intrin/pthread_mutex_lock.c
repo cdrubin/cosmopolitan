@@ -65,14 +65,15 @@
  * @vforksafe
  */
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
-  int c, d, t;
-
-  if (__vforked) return 0;
+  int t;
 
   LOCKTRACE("pthread_mutex_lock(%t)", mutex);
 
-  if (__tls_enabled &&                               //
-      mutex->_type == PTHREAD_MUTEX_NORMAL &&        //
+  if (__vforked) {
+    return 0;
+  }
+
+  if (mutex->_type == PTHREAD_MUTEX_NORMAL &&        //
       mutex->_pshared == PTHREAD_PROCESS_PRIVATE &&  //
       _weaken(nsync_mu_lock)) {
     _weaken(nsync_mu_lock)((nsync_mu *)mutex);

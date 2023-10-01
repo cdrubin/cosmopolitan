@@ -19,11 +19,12 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/cpuset.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/intrin/popcnt.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/posix_spawn.h"
+#include "libc/proc/posix_spawn.h"
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
@@ -50,7 +51,7 @@ TEST(sched_getaffinity, firstOnly) {
 }
 
 TEST(sched_getaffinity, secondOnly) {
-  if (_getcpucount() < 2) return;
+  if (__get_cpu_count() < 2) return;
   cpu_set_t x, y;
   CPU_ZERO(&x);
   CPU_SET(1, &x);
@@ -90,11 +91,11 @@ __attribute__((__constructor__)) static void init(void) {
 
 #ifdef __x86_64__
 TEST(sched_setaffinity, isInheritedAcrossExecve) {
-  cpu_set_t x, y;
+  cpu_set_t x;
   CPU_ZERO(&x);
   CPU_SET(0, &x);
   ASSERT_SYS(0, 0, sched_setaffinity(0, sizeof(x), &x));
-  int rc, ws, pid;
+  int ws, pid;
   char *prog = GetProgramExecutableName();
   char *args[] = {program_invocation_name, NULL};
   char *envs[] = {"THE_DOGE=42", NULL};

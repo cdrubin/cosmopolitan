@@ -1,10 +1,11 @@
 #ifndef _COSMO_H
 #define _COSMO_H
+#include "libc/stdbool.h"
 
-#ifdef COSMO
+#ifdef _COSMO_SOURCE
 #define COSMO_ALREADY_DEFINED
 #else
-#define COSMO
+#define _COSMO_SOURCE
 #endif
 
 /**
@@ -29,6 +30,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timeval.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/elf/elf.h"
 #include "libc/fmt/itoa.h"
@@ -61,7 +63,7 @@
 #ifdef COSMO_ALREADY_DEFINED
 #undef COSMO_ALREADY_DEFINED
 #else
-#undef COSMO
+#undef _COSMO_SOURCE
 #endif
 
 #endif /* _COSMO_H */

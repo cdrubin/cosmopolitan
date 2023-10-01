@@ -25,7 +25,8 @@
            "_Imaginary_I"))
 
         (cosmo
-         '("__msabi"
+         '("__weak"
+           "__msabi"
            "__funline"
            "function"
            "offsetof"
@@ -69,11 +70,10 @@
            "privileged"
            "hasatleast"
            "nodebuginfo"
-           "frownedupon"
            "wontreturn"
-           "noasan"
+           "dontasan"
            "nomsan"
-           "noubsan"
+           "dontubsan"
            "nostackprotector"
            "initarray"
            "mayalias"
@@ -84,9 +84,8 @@
            "warnifused"
            "attributeallocsize"
            "attributeallocalign"
-           "dontdiscard"
+           "__wur"
            "nointerpose"
-           "compatfn"
            "returnsnonnull"
            "strftimeesque"
            "firstclass"
@@ -205,7 +204,6 @@
            "__vector_size__"
            "__ms_abi__"
            "__sysv_abi__"
-           "systemfive"
            "__mode__"
            "__seg_fs"
            "__seg_gs"))

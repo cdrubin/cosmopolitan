@@ -27,7 +27,7 @@
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
-#include "libc/thread/spawn.h"
+#include "libc/thread/thread.h"
 #include "libc/x/x.h"
 #ifdef __x86_64__
 // TODO(jart): get gclongjmp() working properly on aarch64
@@ -82,30 +82,28 @@ TEST(gclongjmp, test) {
 }
 
 void crawl(const char *path) {
-  const char *dir;
   if (!strcmp(path, "/") || !strcmp(path, ".")) return;
   crawl(_gc(xdirname(path)));
 }
 
-int Worker(void *arg, int tid) {
+void *Worker(void *arg) {
   crawl("a/b/c/d/a/b/c/d/a/b/c/d/a/b/c/d/a/b/c/d/a/b/c/d");
   return 0;
 }
 
 TEST(gc, torture) {
   int i, n = 32;
-  struct spawn *t = gc(malloc(sizeof(struct spawn) * n));
-  for (i = 0; i < n; ++i) ASSERT_SYS(0, 0, _spawn(Worker, 0, t + i));
-  for (i = 0; i < n; ++i) EXPECT_SYS(0, 0, _join(t + i));
+  pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
+  for (i = 0; i < n; ++i) ASSERT_SYS(0, 0, pthread_create(t + i, 0, Worker, 0));
+  for (i = 0; i < n; ++i) EXPECT_SYS(0, 0, pthread_join(t[i], 0));
 }
 
 void crawl2(jmp_buf jb, const char *path) {
-  const char *dir;
   if (!strcmp(path, "/") || !strcmp(path, ".")) _gclongjmp(jb, 1);
   crawl2(jb, _gc(xdirname(path)));
 }
 
-int Worker2(void *arg, int tid) {
+void *Worker2(void *arg) {
   jmp_buf jb;
   if (!setjmp(jb)) {
     crawl2(jb, "a/b/c/d/a/b/c/d/a/b/c/d/a/b/c/d/a/b/c/d/a/b/c/d");
@@ -115,9 +113,13 @@ int Worker2(void *arg, int tid) {
 
 TEST(_gclongjmp, torture) {
   int i, n = 32;
-  struct spawn *t = gc(malloc(sizeof(struct spawn) * n));
-  for (i = 0; i < n; ++i) ASSERT_SYS(0, 0, _spawn(Worker2, 0, t + i));
-  for (i = 0; i < n; ++i) EXPECT_SYS(0, 0, _join(t + i));
+  pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
+  for (i = 0; i < n; ++i) {
+    ASSERT_SYS(0, 0, pthread_create(t + i, 0, Worker2, 0));
+  }
+  for (i = 0; i < n; ++i) {
+    EXPECT_SYS(0, 0, pthread_join(t[i], 0));
+  }
 }
 
 dontinline void F1(void) {

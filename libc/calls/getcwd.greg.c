@@ -24,6 +24,7 @@
 #include "libc/dce.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
@@ -52,7 +53,7 @@ char *getcwd(char *buf, size_t size) {
       return 0;
     }
   } else if (_weaken(malloc)) {
-    _unassert(!__vforked);
+    unassert(!__vforked);
     if (!size) size = PATH_MAX;
     if (!(p = _weaken(malloc)(size))) {
       STRACE("getcwd(%p, %'zu) %m", buf, size);
@@ -60,7 +61,7 @@ char *getcwd(char *buf, size_t size) {
     }
   } else {
     einval();
-    STRACE("getcwd() needs buf≠0 or STATIC_YOINK(\"malloc\")");
+    STRACE("getcwd() needs buf≠0 or __static_yoink(\"malloc\")");
     return 0;
   }
   *p = '\0';

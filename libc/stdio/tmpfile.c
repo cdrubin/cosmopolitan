@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/stdio/stdio.h"
-#include "libc/stdio/temp.h"
+#include "libc/temp.h"
 
 /**
  * Opens stream backed by anonymous file, e.g.
@@ -33,8 +33,7 @@
  *
  * This creates a secure temporary file inside $TMPDIR. If it isn't
  * defined, then /tmp is used on UNIX and GetTempPath() is used on the
- * New Technology. This resolution of $TMPDIR happens once in a ctor,
- * which is copied to the `kTmpDir` global.
+ * New Technology. This resolution of $TMPDIR happens once in a ctor.
  *
  * Once fclose() is called, the returned file is guaranteed to be
  * deleted automatically. On UNIX the file is unlink()'d before this

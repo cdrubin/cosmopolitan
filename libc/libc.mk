@@ -24,6 +24,7 @@ o/$(MODE)/libc:	o/$(MODE)/libc/calls		\
 		o/$(MODE)/libc/mem		\
 		o/$(MODE)/libc/nexgen32e	\
 		o/$(MODE)/libc/nt		\
+		o/$(MODE)/libc/proc		\
 		o/$(MODE)/libc/runtime		\
 		o/$(MODE)/libc/sock		\
 		o/$(MODE)/libc/stdio		\
@@ -35,5 +36,4 @@ o/$(MODE)/libc:	o/$(MODE)/libc/calls		\
 		o/$(MODE)/libc/tinymath		\
 		o/$(MODE)/libc/vga		\
 		o/$(MODE)/libc/x		\
-		o/$(MODE)/libc/zipos		\
 		$(LIBC_CHECKS)

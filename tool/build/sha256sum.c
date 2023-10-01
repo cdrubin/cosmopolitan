@@ -21,6 +21,7 @@
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
+#include "libc/limits.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -119,15 +120,15 @@ static bool GetDigest(const char *path, FILE *f, unsigned char digest[32]) {
   unsigned char buf[512];
   mbedtls_sha256_context ctx;
   mbedtls_sha256_init(&ctx);
-  _unassert(!mbedtls_sha256_starts_ret(&ctx, false));
+  unassert(!mbedtls_sha256_starts_ret(&ctx, false));
   while ((got = fread(buf, 1, sizeof(buf), f))) {
-    _unassert(!mbedtls_sha256_update_ret(&ctx, buf, got));
+    unassert(!mbedtls_sha256_update_ret(&ctx, buf, got));
   }
   if (ferror(f)) {
     tinyprint(2, prog, ": ", path, ": ", strerror(errno), "\n", NULL);
     return false;
   }
-  _unassert(!mbedtls_sha256_finish_ret(&ctx, digest));
+  unassert(!mbedtls_sha256_finish_ret(&ctx, digest));
   mbedtls_sha256_free(&ctx);
   return true;
 }
@@ -151,7 +152,7 @@ static bool CheckDigests(const char *path, FILE *f) {
   unsigned char wantdigest[32], gotdigest[32];
   char buf[64 + 2 + PATH_MAX + 1 + 1], *p;
   for (line = 0; fgets(buf, sizeof(buf), f); ++line) {
-    if (!*_chomp(buf)) continue;
+    if (!*chomp(buf)) continue;
     for (p = buf, i = 0; i < 32; ++i) {
       if ((a = kHexToInt[*p++ & 255]) == -1) goto InvalidLine;
       if ((b = kHexToInt[*p++ & 255]) == -1) goto InvalidLine;

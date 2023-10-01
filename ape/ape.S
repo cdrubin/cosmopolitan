@@ -44,6 +44,7 @@
 #include "libc/runtime/pc.internal.h"
 #include "ape/ape.internal.h"
 #include "libc/thread/tls.h"
+#include "ape/ape.h"
 #include "libc/sysv/consts/prot.h"
 
 #define USE_SYMBOL_HACK 1
@@ -610,7 +611,9 @@ apesh:	.ascii	"\n@\n#'\"\n"			// sixth edition shebang
 //	extract the loader into a temp folder, and use it to
 //	load the APE without modifying it.
 	.ascii	  "[ x\"$1\" != x--assimilate ] && {\n"
-	.ascii	    "t=\"${TMPDIR:-${HOME:-.}}/.ape-1.4\"\n"
+	.ascii	    "t=\"${TMPDIR:-${HOME:-.}}/.ape-"
+	.ascii	     APE_VERSION_STR
+	.ascii	     "\"\n"
 	.ascii	    "[ -x \"$t\" ] || {\n"
 	.ascii	      "mkdir -p \"${t%/*}\" &&\n"
 	.ascii	      "dd if=\"$o\" of=\"$t.$$\" skip="
@@ -717,8 +720,8 @@ emush:	.ascii	"\n@\n#'\"\n"
 	.previous
 //	...
 //	decentralized section (.emush)
-//	- STATIC_YOINK("blink_linux_aarch64");  // for raspberry pi
-//	- STATIC_YOINK("blink_xnu_aarch64");    // is apple silicon
+//	- __static_yoink("blink_linux_aarch64");  // for raspberry pi
+//	- __static_yoink("blink_xnu_aarch64");    // is apple silicon
 //	...
         .section .emushepilogue,"a",@progbits
 	.ascii	"echo \"$0: this ape binary lacks $m support\" >&2\n"
@@ -772,30 +775,19 @@ ape_loader_end:
 	.stub	ape_ram_memsz,quad
 	.stub	ape_ram_align,quad
 
-//	APE Stack Configuration
-//
-//	We actually respect this when allocating a deterministically
-//	addressed stack on Windows and other operating systems. However
-//	there's a few caveats:
-//
-//	- If ape_stack_pf has PF_X then OpenBSD probably won't work
-//	- We don't bother creating a deterministic stack in MODE=tiny
-//
-//	With that said, here's some examples of configuration:
-//
-//	    STATIC_SYMBOL("ape_stack_pf", "7");  // RWX
-//	    STATIC_STACK_ADDR(0x6fffffff0000);
-//	    STATIC_STACK_SIZE(65536);
-//
-//	@see ape.lds for defaults
+//	These values are left empty because some UNIX OSes give p_filesz
+//	priority over `ulimit -s` a.k.a. RLIMIT_STACK which is preferred
+//	because we use an 8mb stack by default so that decadent software
+//	doesn't unexpectedly crash, but putting that here meant NetBSD's
+//	rusage accounting (which is the best) always reported 6mb of RSS
 	.long	PT_GNU_STACK
-	.stub	ape_stack_pf,long		// override w/ PF_X for execstack
-	.stub	ape_stack_offset,quad		// ignored
-	.stub	ape_stack_vaddr,quad		// is mmap()'d with MAP_FIXED
-	.stub	ape_stack_paddr,quad		// ignored
-	.stub	ape_stack_filesz,quad		// ignored
-	.stub	ape_stack_memsz2,quad		// is mmap(size) argument
-	.stub	ape_stack_align,quad		// must be 16+
+	.stub	ape_stack_pf,long
+	.quad	0
+	.quad	0
+	.quad	0
+	.quad	0
+	.quad	0
+	.stub	ape_stack_align,quad
 
 #if SupportsOpenbsd() || SupportsNetbsd()
 	.long	PT_NOTE
@@ -818,7 +810,7 @@ ape.ident:
 	.long	1
 1:	.asciz	"APE"
 2:	.balign	4
-3:	.long	104000000
+3:	.long	APE_VERSION_NOTE
 4:	.size	ape.ident,.-ape.ident
 	.type	ape.ident,@object
 	.previous
@@ -1044,7 +1036,8 @@ DLLEXE = DLLSTD
 //	   ││││││││        │       │┌6:Contains Initialized Data
 //	   ││││││││ o      │       ││┌5:Contains Code
 //	   ││││││││┌┴─┐rrrr│  ooror│││rorrr
-PETEXT = 0b01100000000000000000000001100000
+PETEXT = 0b01100000000000000000000000100000
+PERDAT = 0b01000000000000000000000001000000
 PEDATA = 0b11000000000000000000000011000000
 PEIMPS = 0b11000000000000000000000001000000
 
@@ -1052,11 +1045,11 @@ PEIMPS = 0b11000000000000000000000001000000
 	.balign	__SIZEOF_POINTER__
 ape_pe:	.ascin	"PE",4
 	.short	kNtImageFileMachineNexgen32e
-	.stub	ape_pe_shnum,short	// NumberOfSections
+	.short	ape_pe_shnum		// NumberOfSections
 	.long	0x5c64126b		// TimeDateStamp
 	.long	0			// PointerToSymbolTable
 	.long	0			// NumberOfSymbols
-	.stub	ape_pe_optsz,short	// SizeOfOptionalHeader
+	.short	ape_pe_optsz		// SizeOfOptionalHeader
 	.short	PEEXE			// Characteristics
 	.short	kNtPe64bit		// Optional Header Magic
 	.byte	14			// MajorLinkerVersion
@@ -1080,25 +1073,25 @@ ape_pe:	.ascin	"PE",4
 	.long	ape_pe_sizeofheaders	// SizeOfHeaders
 	.long	0			// Checksum
 	.short	v_ntsubsystem		// Subsystem: 0=Neutral,2=GUI,3=Console
-	.stub	v_ntdllchar,short	// DllCharacteristics
-	.quad	0x0000000000100000	// StackReserve
-	.quad	0x00000000000fc000	// StackCommit
+	.short	v_ntdllchar		// DllCharacteristics
+	.quad	0x10000			// StackReserve
+	.quad	0x1000			// StackCommit
 	.quad	0			// HeapReserve
 	.quad	0			// HeapCommit
 	.long	0			// LoaderFlags
 	.long	2			// NumberOfDirectoryEntries
 	.long	0,0			// ExportsDirectory
-	.stub	ape_idata,long		// ImportsDirectory
-	.stub	ape_idata_idtsize,long	// ImportsDirectorySize
+	.long	ape_idata		// ImportsDirectory
+	.long	ape_idata_idtsize	// ImportsDirectorySize
 	.endobj	ape_pe,globl
 	.previous
 
 	.section .pe.sections,"a",@progbits
 	.ascin	".text",8		// Section Name
-	.stub	ape_text_memsz,long	// Virtual Size or Physical Address
-	.stub	ape_text_rva,long	// Relative Virtual Address
-	.stub	ape_text_filesz,long	// Physical Size
-	.stub	ape_text_offset,long	// Physical Offset
+	.long	ape_text_memsz		// Virtual Size or Physical Address
+	.long	ape_text_rva		// Relative Virtual Address
+	.long	ape_text_filesz		// Physical Size
+	.long	ape_text_offset		// Physical Offset
 	.long	0			// Relocation Table Offset
 	.long	0			// Line Number Table Offset
 	.short	0			// Relocation Count
@@ -1107,11 +1100,24 @@ ape_pe:	.ascin	"PE",4
 	.previous
 
 	.section .pe.sections,"a",@progbits
+	.ascin	".rdata",8		// Section Name
+	.long	ape_rom_memsz		// Virtual Size or Physical Address
+	.long	ape_rom_rva		// Relative Virtual Address
+	.long	ape_rom_filesz		// Physical Size
+	.long	ape_rom_offset		// Physical Offset
+	.long	0			// Relocation Table Offset
+	.long	0			// Line Number Table Offset
+	.short	0			// Relocation Count
+	.short	0			// Line Number Count
+	.long	PERDAT			// Flags
+	.previous
+
+	.section .pe.sections,"a",@progbits
 	.ascin	".data",8		// Section Name
-	.stub	ape_ram_memsz,long	// Virtual Size or Physical Address
-	.stub	ape_ram_rva,long	// Relative Virtual Address
-	.stub	ape_ram_filesz,long	// Physical Size
-	.stub	ape_ram_offset,long	// Physical Offset
+	.long	ape_ram_memsz		// Virtual Size or Physical Address
+	.long	ape_ram_rva		// Relative Virtual Address
+	.long	ape_ram_filesz		// Physical Size
+	.long	ape_ram_offset		// Physical Offset
 	.long	0			// Relocation Table Offset
 	.long	0			// Line Number Table Offset
 	.short	0			// Relocation Count
@@ -1128,6 +1134,7 @@ ape_pe:	.ascin	"PE",4
 	.type	ape_idata_idt,@object
 	.globl	ape_idata_idt,ape_idata_idtend
 	.hidden	ape_idata_idt,ape_idata_idtend
+	.balign	4
 ape_idata_idt:
 	.previous/*
 	...
@@ -1136,6 +1143,7 @@ ape_idata_idt:
 	*/.section .idata.ro.idt.3,"a",@progbits
 	.long	0,0,0,0,0
 ape_idata_idtend:
+	.byte	0
 	.previous
 
 	.section .piro.data.sort.iat.1,"aw",@progbits
@@ -1143,13 +1151,16 @@ ape_idata_idtend:
 	.type	ape_idata_iat,@object
 	.globl	ape_idata_iat,ape_idata_iatend
 	.hidden	ape_idata_iat,ape_idata_iatend
+	.balign	8
 ape_idata_iat:
 	.previous/*
 	...
 	decentralized content
 	...
 	*/.section .piro.data.sort.iat.3,"aw",@progbits
+	.quad	0
 ape_idata_iatend:
+	.byte	0
 	.previous
 
 #endif /* SupportsWindows() */
@@ -1259,8 +1270,6 @@ realmodeloader:
 	call	lhinit
 	call	rlinit
 	call	sinit4
-	.optfn	_start16
-	call	_start16
 	call	longmodeloader
 	.endfn	realmodeloader
 
@@ -1718,7 +1727,7 @@ ape_grub_entry:
 │ αcτµαlly pδrταblε εxεcµταblε § cosmopolitan libc runtime runtime         ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 kernel:	movabs	$ape_stack_vaddr,%rsp
-	add	$ape_stack_memsz2,%rsp
+	add	$ape_stack_memsz,%rsp
 	movl	$0,0x7b000			// unmap null 2mb
 #if USE_SYMBOL_HACK
 	.byte	0x0f,0x1f,0207			// nop rdi binbase

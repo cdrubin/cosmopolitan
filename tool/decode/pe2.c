@@ -23,10 +23,13 @@
 #include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/nt/struct/imagedosheader.internal.h"
 #include "libc/nt/struct/imagentheaders.internal.h"
 #include "libc/nt/struct/imageoptionalheader.internal.h"
 #include "libc/nt/struct/imagesectionheader.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
@@ -45,8 +48,31 @@
  */
 
 static const char *path;
+
 static struct NtImageDosHeader *mz;
 static size_t mzsize;
+
+static struct NtImageSectionHeader *sections;
+static size_t section_count;
+
+static void *GetOff(uint32_t off) {
+  if (off < mzsize) return (char *)mz + off;
+  fprintf(stderr, "%s: off %#x not defined within image\n", path, off);
+  exit(1);
+}
+
+static void *GetRva(uint32_t rva) {
+  int i;
+  for (i = 0; i < section_count; ++i) {
+    if (sections[i].VirtualAddress <= rva &&
+        rva < sections[i].VirtualAddress + sections[i].Misc.VirtualSize) {
+      return (char *)mz + sections[i].PointerToRawData +
+             (rva - sections[i].VirtualAddress);
+    }
+  }
+  fprintf(stderr, "%s: rva %#x not defined by any sections\n", path, rva);
+  exit(1);
+}
 
 static struct XedDecodedInst *ildreal(void *addr) {
   static struct XedDecodedInst xedd;
@@ -67,22 +93,15 @@ static void startfile(void) {
 
 static void *pecheckaddress(struct NtImageDosHeader *mz, size_t mzsize,
                             void *addr, uint32_t addrsize) {
-#if !(TRUSTWORTHY + PE_TRUSTWORTHY + 0)
   if ((intptr_t)addr < (intptr_t)mz ||
       (intptr_t)addr + addrsize > (intptr_t)mz + mzsize) {
     abort();
   }
-#endif
   return addr;
 }
 
-static void *PeComputeRva(struct NtImageDosHeader *mz, size_t mzsize,
-                          uint32_t reladdr, uint32_t addrsize) {
-  return pecheckaddress(mz, mzsize, (void *)((intptr_t)mz + reladdr), addrsize);
-}
-
 static void showmzheader(void) {
-  showtitle(basename(path), "dos", "mz header",
+  showtitle(basename(gc(strdup(path))), "dos", "mz header",
             "\tMZ = Mark 'Zibo' Joseph Zbikowski\n"
             "\te_cblp: bytes on last page\n"
             "\te_cp: 512-byte pages in file\n"
@@ -135,7 +154,8 @@ static void showdosstub(void) {
 
 static void showpeoptionalheader(struct NtImageOptionalHeader *opt) {
   int i;
-  showtitle(basename(path), "windows", "pe \"optional\" header", NULL, NULL);
+  showtitle(basename(gc(strdup(path))), "windows", "pe \"optional\" header",
+            NULL, NULL);
   printf("\n");
   show(".short",
        firstnonnull(findnamebyid(kNtPeOptionalHeaderMagicNames, opt->Magic),
@@ -209,29 +229,31 @@ static void showpeoptionalheader(struct NtImageOptionalHeader *opt) {
   }
 }
 
-static void ShowIlt(int64_t *ilt) {
-  printf("\n");
-  showtitle(basename(path), "windows", "import lookup table (ilt)", 0, 0);
+static void ShowIlt(uint32_t rva) {
+  int64_t *ilt, *ilt0;
+  ilt = ilt0 = GetRva(rva);
   do {
     printf("\n");
     show(".quad", format(b1, "%#lx", *ilt),
-         _gc(xasprintf("@%#lx", (intptr_t)ilt - (intptr_t)mz)));
+         _gc(xasprintf("rva=%#lx off=%#lx", (char *)ilt - (char *)ilt0 + rva,
+                       (intptr_t)ilt - (intptr_t)mz)));
     if (*ilt) {
-      char *hint = (char *)((intptr_t)mz + *ilt);
+      char *hint = GetRva(*ilt);
       printf("/\t.short\t%d\t\t\t# @%#lx\n", READ16LE(hint),
              (intptr_t)hint - (intptr_t)mz);
-      char *name = (char *)((intptr_t)mz + *ilt + 2);
+      char *name = GetRva(*ilt + 2);
       printf("/\t.asciz\t%`'s\n", name);
       printf("/\t.align\t2\n");
     }
   } while (*ilt++);
 }
 
-static void ShowIat(char *iat, size_t size) {
+static void ShowIdt(char *idt, size_t size) {
   char *p, *e;
   printf("\n");
-  showtitle(basename(path), "windows", "import address table (iat)", 0, 0);
-  for (p = iat, e = iat + size; p + 20 <= e; p += 20) {
+  showtitle(basename(gc(strdup(path))), "windows",
+            "import descriptor table (idt)", 0, 0);
+  for (p = idt, e = idt + size; p + 20 <= e; p += 20) {
     printf("\n");
     show(".long", format(b1, "%#x", READ32LE(p)),
          _gc(xasprintf("ImportLookupTable RVA @%#lx",
@@ -240,14 +262,25 @@ static void ShowIat(char *iat, size_t size) {
     show(".long", format(b1, "%#x", READ32LE(p + 8)), "ForwarderChain");
     show(".long", format(b1, "%#x", READ32LE(p + 12)),
          READ32LE(p + 12)
-             ? _gc(xasprintf("DllName RVA (%s)", (char *)mz + READ32LE(p + 12)))
+             ? _gc(xasprintf("DllName RVA (%s)", GetRva(READ32LE(p + 12))))
              : "DllName RVA");
     show(".long", format(b1, "%#x", READ32LE(p + 16)),
          "ImportAddressTable RVA");
   }
-  for (p = iat, e = iat + size; p + 20 <= e; p += 20) {
+  for (p = idt, e = idt + size; p + 20 <= e; p += 20) {
     if (READ32LE(p)) {
-      ShowIlt((void *)((intptr_t)mz + READ32LE(p)));
+      printf("\n");
+      showtitle(basename(gc(strdup(path))), "windows",
+                "import lookup table (ilt)", 0, 0);
+      ShowIlt(READ32LE(p));
+    }
+  }
+  for (p = idt, e = idt + size; p + 20 <= e; p += 20) {
+    if (READ32LE(p)) {
+      printf("\n");
+      showtitle(basename(gc(strdup(path))), "windows",
+                "import address table (iat)", 0, 0);
+      ShowIlt(READ32LE(p + 16));
     }
   }
 }
@@ -286,15 +319,17 @@ static void ShowSection(struct NtImageSectionHeader *s) {
 
 static void ShowSections(struct NtImageSectionHeader *s, size_t n) {
   size_t i;
+  sections = s;
+  section_count = n;
   printf("\n");
-  showtitle(basename(path), "windows", "sections", 0, 0);
+  showtitle(basename(gc(strdup(path))), "windows", "sections", 0, 0);
   for (i = 0; i < n; ++i) {
     ShowSection(s + i);
   }
 }
 
 static void showpeheader(struct NtImageNtHeaders *pe) {
-  showtitle(basename(path), "windows", "pe header", NULL, NULL);
+  showtitle(basename(gc(strdup(path))), "windows", "pe header", NULL, NULL);
   printf("\n");
   showorg(mz->e_lfanew);
   show(".ascii", format(b1, "%`'.*s", 4, (const char *)&pe->Signature),
@@ -317,30 +352,31 @@ static void showpeheader(struct NtImageNtHeaders *pe) {
   printf("\n");
   showpeoptionalheader(pecheckaddress(mz, mzsize, &pe->OptionalHeader,
                                       pe->FileHeader.SizeOfOptionalHeader));
-  ShowSections(pecheckaddress(mz, mzsize, pe + 1,
+  ShowSections(pecheckaddress(mz, mzsize,
+                              (char *)(pe + 1) +
+                                  pe->OptionalHeader.NumberOfRvaAndSizes * 8,
                               pe->FileHeader.NumberOfSections *
                                   sizeof(struct NtImageSectionHeader)),
                pe->FileHeader.NumberOfSections);
-  ShowIat(
-      (void *)((intptr_t)mz +
-               pe->OptionalHeader.DataDirectory[kNtImageDirectoryEntryImport]
-                   .VirtualAddress),
-      pe->OptionalHeader.DataDirectory[kNtImageDirectoryEntryImport].Size);
+  ShowIdt(GetRva(pe->OptionalHeader.DataDirectory[kNtImageDirectoryEntryImport]
+                     .VirtualAddress),
+          pe->OptionalHeader.DataDirectory[kNtImageDirectoryEntryImport].Size);
 }
 
 static void showall(void) {
+
   startfile();
   showmzheader();
   showdosstub();
   if (mz->e_lfanew) {
-    showpeheader(PeComputeRva(mz, mzsize, mz->e_lfanew,
-                              sizeof(struct NtImageFileHeader)));
+    showpeheader(GetOff(mz->e_lfanew));
   }
 }
 
 int main(int argc, char *argv[]) {
   int64_t fd;
   struct stat st[1];
+  ShowCrashReports();
   if (argc != 2) fprintf(stderr, "usage: %s FILE\n", argv[0]), exit(1);
   if ((fd = open((path = argv[1]), O_RDONLY)) == -1 || fstat(fd, st) == -1 ||
       (mz = mmap(NULL, (mzsize = st->st_size), PROT_READ, MAP_SHARED, fd, 0)) ==

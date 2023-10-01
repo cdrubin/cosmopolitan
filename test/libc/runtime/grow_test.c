@@ -16,7 +16,6 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/pushpop.internal.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
@@ -27,7 +26,7 @@
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 
-STATIC_YOINK("realloc");
+__static_yoink("realloc");
 
 TEST(grow, testNull_hasAllocatingBehavior) {
   void *p = NULL;

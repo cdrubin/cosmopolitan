@@ -18,14 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/mem/mem.h"
 #include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/stdio/rand.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
-static noasan void *golden(void *p, int c, size_t n) {
+static dontasan void *golden(void *p, int c, size_t n) {
   size_t i;
   if (IsAsan()) __asan_verify(p, n);
   for (i = 0; i < n; ++i) ((char *)p)[i] = c;
@@ -88,14 +88,13 @@ BENCH(memset, bench) {
 }
 
 BENCH(strlen, bench) {
-  volatile size_t r;
   int n, max = 8 * 1024 * 1024;
   char *volatile p = gc(calloc(max + 1, 1));
   EZBENCH_N("strlen", 0, strlen(p));
   for (n = 2; n <= max; n *= 2) {
     memset(p, -1, n - 1);
-    EZBENCH_N("strlen", n - 1, r = strlen(p));
+    EZBENCH_N("strlen", n - 1, strlen(p));
     p[n - 1] = -1;
-    EZBENCH_N("strlen", n, r = strlen(p));
+    EZBENCH_N("strlen", n, strlen(p));
   }
 }

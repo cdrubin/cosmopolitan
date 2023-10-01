@@ -32,10 +32,10 @@
  * @param fd is file descriptor of file whose timestamps will change
  * @param ts is {access, modified} timestamps, or null for current time
  * @return 0 on success, or -1 w/ errno
- * @raise ENOTSUP if `fd` is on the zip filesystem
  * @raise EINVAL if `flags` had an unrecognized value
  * @raise EPERM if pledge() is in play without `fattr` promise
  * @raise EINVAL if `ts` specifies a nanosecond value that's out of range
+ * @raise EROFS if `fd` is a zip file or on a read-only filesystem
  * @raise EBADF if `fd` isn't an open file descriptor
  * @raise EFAULT if `ts` memory was invalid
  * @raise ENOSYS on RHEL5 or bare metal
@@ -44,7 +44,11 @@
  */
 int futimens(int fd, const struct timespec ts[2]) {
   int rc;
-  rc = __utimens(fd, 0, ts, 0);
+  if (fd < 0) {
+    rc = ebadf();  // so we don't confuse __utimens if caller passes AT_FDCWD
+  } else {
+    rc = __utimens(fd, 0, ts, 0);
+  }
   STRACE("futimens(%d, {%s, %s}) → %d% m", fd, DescribeTimespec(0, ts),
          DescribeTimespec(0, ts ? ts + 1 : 0), rc);
   return rc;

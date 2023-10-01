@@ -29,10 +29,10 @@
  * @return is <0, 0, or >0 based on uint8_t comparison
  * @asyncsignalsafe
  */
-noasan int strcmp(const char *a, const char *b) {
+int strcmp(const char *a, const char *b) {
   int c;
   size_t i = 0;
-  uint64_t v, w, d;
+  uint64_t v, w;
   if (a == b) return 0;
   if (IsAsan()) __asan_verify_str(a);
   if (IsAsan()) __asan_verify_str(b);

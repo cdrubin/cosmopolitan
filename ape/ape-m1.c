@@ -33,7 +33,7 @@
 
 #define pagesz         16384
 #define SYSLIB_MAGIC   ('s' | 'l' << 8 | 'i' << 16 | 'b' << 24)
-#define SYSLIB_VERSION 1
+#define SYSLIB_VERSION 4
 
 struct Syslib {
   int magic;
@@ -50,12 +50,34 @@ struct Syslib {
                         void *);
   void (*pthread_exit)(void *);
   int (*pthread_kill)(pthread_t, int);
-  int (*pthread_sigmask)(int, const sigset_t *restrict, sigset_t *restrict);
+  int (*pthread_sigmask)(int, const sigset_t *, sigset_t *);
   int (*pthread_setname_np)(const char *);
   dispatch_semaphore_t (*dispatch_semaphore_create)(long);
   long (*dispatch_semaphore_signal)(dispatch_semaphore_t);
   long (*dispatch_semaphore_wait)(dispatch_semaphore_t, dispatch_time_t);
   dispatch_time_t (*dispatch_walltime)(const struct timespec *, int64_t);
+  /* v2 (2023-09-10) */
+  pthread_t (*pthread_self)(void);
+  void (*dispatch_release)(dispatch_semaphore_t);
+  int (*raise)(int);
+  int (*pthread_join)(pthread_t, void **);
+  void (*pthread_yield_np)(void);
+  int pthread_stack_min;
+  int sizeof_pthread_attr_t;
+  int (*pthread_attr_init)(pthread_attr_t *);
+  int (*pthread_attr_destroy)(pthread_attr_t *);
+  int (*pthread_attr_setstacksize)(pthread_attr_t *, size_t);
+  int (*pthread_attr_setguardsize)(pthread_attr_t *, size_t);
+  /* v4 (2023-09-19) */
+  void (*exit)(int);
+  long (*close)(int);
+  long (*munmap)(void *, size_t);
+  long (*openat)(int, const char *, int, int);
+  long (*write)(int, const void *, size_t);
+  long (*read)(int, void *, size_t);
+  long (*sigaction)(int, const struct sigaction *, struct sigaction *);
+  long (*pselect)(int, fd_set *, fd_set *, fd_set *, const struct timespec *, const sigset_t *);
+  long (*mprotect)(void *, size_t, int);
 };
 
 #define ELFCLASS32  1
@@ -87,11 +109,9 @@ struct Syslib {
 #define AT_RANDOM   25
 #define AT_EXECFN   31
 
-#define STACK_SIZE  (8ul * 1024 * 1024)
-#define STACK_ALIGN (sizeof(long) * 2)
-#define AUXV_BYTES  (sizeof(long) * 2 * 15)
+#define AUXV_WORDS 29
 
-// from the xnu codebase
+/* from the xnu codebase */
 #define _COMM_PAGE_START_ADDRESS      0x0000000FFFFFC000ul
 #define _COMM_PAGE_APRR_SUPPORT       (_COMM_PAGE_START_ADDRESS + 0x10C)
 #define _COMM_PAGE_APRR_WRITE_ENABLE  (_COMM_PAGE_START_ADDRESS + 0x110)
@@ -149,10 +169,11 @@ union ElfEhdrBuf {
 
 union ElfPhdrBuf {
   struct ElfPhdr phdr;
-  char buf[4096];
+  char buf[1024];
 };
 
 struct PathSearcher {
+  int literally;
   unsigned long namelen;
   const char *name;
   const char *syspath;
@@ -160,15 +181,7 @@ struct PathSearcher {
 };
 
 struct ApeLoader {
-  union ElfEhdrBuf ehdr;
   struct PathSearcher ps;
-  // this memory shall be discarded by the guest
-  //////////////////////////////////////////////
-  // this memory shall be known to guest program
-  union {
-    char argblock[ARG_MAX];
-    long numblock[ARG_MAX / sizeof(long)];
-  };
   union ElfPhdrBuf phdr;
   struct Syslib lib;
   char rando[16];
@@ -188,6 +201,19 @@ static int StrCmp(const char *l, const char *r) {
   unsigned long i = 0;
   while (l[i] == r[i] && r[i]) ++i;
   return (l[i] & 255) - (r[i] & 255);
+}
+
+static const char *BaseName(const char *s) {
+  int c;
+  const char *b = "";
+  if (s) {
+    while ((c = *s++)) {
+      if (c == '/') {
+        b = s;
+      }
+    }
+  }
+  return b;
 }
 
 static void Bzero(void *a, unsigned long n) {
@@ -374,10 +400,27 @@ static char SearchPath(struct PathSearcher *ps, const char *suffix) {
 }
 
 static char FindCommand(struct PathSearcher *ps, const char *suffix) {
+  ps->path[0] = 0;
+
+  /* paths are always 100% taken literally when a slash exists
+       $ ape foo/bar.com arg1 arg2 */
   if (MemChr(ps->name, '/', ps->namelen)) {
-    ps->path[0] = 0;
     return AccessCommand(ps, suffix, 0);
   }
+
+  /* we don't run files in the current directory
+       $ ape foo.com arg1 arg2
+     unless $PATH has an empty string entry, e.g.
+       $ expert PATH=":/bin"
+       $ ape foo.com arg1 arg2
+     however we will execute this
+       $ ape - foo.com foo.com arg1 arg2
+     because cosmo's execve needs it */
+  if (ps->literally && AccessCommand(ps, suffix, 0)) {
+    return 1;
+  }
+
+  /* otherwise search for name on $PATH */
   return SearchPath(ps, suffix);
 }
 
@@ -396,26 +439,24 @@ static char *Commandv(struct PathSearcher *ps, const char *name,
 static void pthread_jit_write_protect_np_workaround(int enabled) {
   int count_start = 8192;
   volatile int count = count_start;
-  unsigned long *addr, *other, val, val2, reread = -1;
+  unsigned long *addr, val, val2, reread = -1;
   addr = (unsigned long *)(!enabled ? _COMM_PAGE_APRR_WRITE_ENABLE
-                                    : _COMM_PAGE_APRR_WRITE_DISABLE);
-  other = (unsigned long *)(enabled ? _COMM_PAGE_APRR_WRITE_ENABLE
                                     : _COMM_PAGE_APRR_WRITE_DISABLE);
   switch (*(volatile unsigned char *)_COMM_PAGE_APRR_SUPPORT) {
     case 1:
       do {
         val = *addr;
         reread = -1;
-        asm volatile("msr\tS3_4_c15_c2_7,%0\n"
-                     "isb\tsy\n"
-                     : /* no outputs */
-                     : "r"(val)
-                     : "memory");
+        __asm__ volatile("msr\tS3_4_c15_c2_7,%0\n"
+                         "isb\tsy\n"
+                         : /* no outputs */
+                         : "r"(val)
+                         : "memory");
         val2 = *addr;
-        asm volatile("mrs\t%0,S3_4_c15_c2_7\n"
-                     : "=r"(reread)
-                     : /* no inputs */
-                     : "memory");
+        __asm__ volatile("mrs\t%0,S3_4_c15_c2_7\n"
+                         : "=r"(reread)
+                         : /* no inputs */
+                         : "memory");
         if (val2 == reread) {
           return;
         }
@@ -426,16 +467,16 @@ static void pthread_jit_write_protect_np_workaround(int enabled) {
       do {
         val = *addr;
         reread = -1;
-        asm volatile("msr\tS3_6_c15_c1_5,%0\n"
-                     "isb\tsy\n"
-                     : /* no outputs */
-                     : "r"(val)
-                     : "memory");
+        __asm__ volatile("msr\tS3_6_c15_c1_5,%0\n"
+                         "isb\tsy\n"
+                         : /* no outputs */
+                         : "r"(val)
+                         : "memory");
         val2 = *addr;
-        asm volatile("mrs\t%0,S3_6_c15_c1_5\n"
-                     : "=r"(reread)
-                     : /* no inputs */
-                     : "memory");
+        __asm__ volatile("mrs\t%0,S3_6_c15_c1_5\n"
+                         : "=r"(reread)
+                         : /* no inputs */
+                         : "memory");
         if (val2 == reread) {
           return;
         }
@@ -531,8 +572,9 @@ __attribute__((__noreturn__)) static void Spawn(const char *exe, int fd,
 
   /* load elf */
   for (i = 0; i < e->e_phnum; ++i) {
+    void *addr;
+    unsigned long size;
     if (p[i].p_type != PT_LOAD) continue;
-    if (!p[i].p_memsz) continue;
 
     /* configure mapping */
     prot = 0;
@@ -543,36 +585,47 @@ __attribute__((__noreturn__)) static void Spawn(const char *exe, int fd,
 
     /* load from file */
     if (p[i].p_filesz) {
-      void *addr;
       int prot1, prot2;
-      unsigned long size;
+      unsigned long wipe;
       prot1 = prot;
       prot2 = prot;
+      /* when we ask the system to map the interval [vaddr,vaddr+filesz)
+         it might schlep extra file content into memory on both the left
+         and the righthand side. that's because elf doesn't require that
+         either side of the interval be aligned on the system page size.
+         normally we can get away with ignoring these junk bytes. but if
+         the segment defines bss memory (i.e. memsz > filesz) then we'll
+         need to clear the extra bytes in the page, if they exist. since
+         we can't do that if we're mapping a read-only page, we can just
+         map it with write permissions and call mprotect on it afterward */
       a = p[i].p_vaddr + p[i].p_filesz; /* end of file content */
       b = (a + (pagesz - 1)) & -pagesz; /* first pure bss page */
       c = p[i].p_vaddr + p[i].p_memsz;  /* end of segment data */
-      if (b > c) b = c;
-      if (c > b && (~prot1 & PROT_WRITE)) {
+      wipe = MIN(b - a, c - a);
+      if (wipe && (~prot1 & PROT_WRITE)) {
         prot1 = PROT_READ | PROT_WRITE;
       }
       addr = (void *)(dynbase + (p[i].p_vaddr & -pagesz));
       size = (p[i].p_vaddr & (pagesz - 1)) + p[i].p_filesz;
       rc = (long)mmap(addr, size, prot1, flags, fd, p[i].p_offset & -pagesz);
       if (rc < 0) Pexit(exe, rc, "prog mmap");
-      if (c > b) Bzero((void *)(dynbase + a), b - a);
+      if (wipe) Bzero((void *)(dynbase + a), wipe);
       if (prot2 != prot1) {
         rc = mprotect(addr, size, prot2);
         if (rc < 0) Pexit(exe, rc, "prog mprotect");
       }
-    }
-
-    /* allocate extra bss */
-    a = p[i].p_vaddr + p[i].p_filesz;
-    a = (a + (pagesz - 1)) & -pagesz;
-    b = p[i].p_vaddr + p[i].p_memsz;
-    if (b > a) {
+      /* allocate extra bss */
+      if (c > b) {
+        flags |= MAP_ANONYMOUS;
+        rc = (long)mmap((void *)(dynbase + b), c - b, prot, flags, -1, 0);
+        if (rc < 0) Pexit(exe, rc, "extra bss mmap");
+      }
+    } else {
+      /* allocate pure bss */
+      addr = (void *)(dynbase + (p[i].p_vaddr & -pagesz));
+      size = (p[i].p_vaddr & (pagesz - 1)) + p[i].p_memsz;
       flags |= MAP_ANONYMOUS;
-      rc = (long)mmap((void *)(dynbase + a), b - a, prot, flags, -1, 0);
+      rc = (long)mmap(addr, size, prot, flags, -1, 0);
       if (rc < 0) Pexit(exe, rc, "bss mmap");
     }
   }
@@ -580,55 +633,56 @@ __attribute__((__noreturn__)) static void Spawn(const char *exe, int fd,
   /* finish up */
   close(fd);
 
-  register long *x0 asm("x0") = sp;
-  register struct Syslib *x15 asm("x15") = lib;
-  register long x16 asm("x16") = e->e_entry;
-  asm volatile("mov\tx1,#0\n\t"
-               "mov\tx2,#0\n\t"
-               "mov\tx3,#0\n\t"
-               "mov\tx4,#0\n\t"
-               "mov\tx5,#0\n\t"
-               "mov\tx6,#0\n\t"
-               "mov\tx7,#0\n\t"
-               "mov\tx8,#0\n\t"
-               "mov\tx9,#0\n\t"
-               "mov\tx10,#0\n\t"
-               "mov\tx11,#0\n\t"
-               "mov\tx12,#0\n\t"
-               "mov\tx13,#0\n\t"
-               "mov\tx14,#0\n\t"
-               "mov\tx17,#0\n\t"
-               "mov\tx19,#0\n\t"
-               "mov\tx20,#0\n\t"
-               "mov\tx21,#0\n\t"
-               "mov\tx22,#0\n\t"
-               "mov\tx23,#0\n\t"
-               "mov\tx24,#0\n\t"
-               "mov\tx25,#0\n\t"
-               "mov\tx26,#0\n\t"
-               "mov\tx27,#0\n\t"
-               "mov\tx28,#0\n\t"
-               "mov\tx29,#0\n\t"
-               "mov\tx30,#0\n\t"
-               "mov\tsp,x0\n\t"
-               "mov\tx0,#0\n\t"
-               "br\tx16"
-               : /* no outputs */
-               : "r"(x0), "r"(x15), "r"(x16)
-               : "memory");
+  register long *x0 __asm__("x0") = sp;
+  register struct Syslib *x15 __asm__("x15") = lib;
+  register long x16 __asm__("x16") = e->e_entry;
+  __asm__ volatile("mov\tx1,#0\n\t"
+                   "mov\tx2,#0\n\t"
+                   "mov\tx3,#0\n\t"
+                   "mov\tx4,#0\n\t"
+                   "mov\tx5,#0\n\t"
+                   "mov\tx6,#0\n\t"
+                   "mov\tx7,#0\n\t"
+                   "mov\tx8,#0\n\t"
+                   "mov\tx9,#0\n\t"
+                   "mov\tx10,#0\n\t"
+                   "mov\tx11,#0\n\t"
+                   "mov\tx12,#0\n\t"
+                   "mov\tx13,#0\n\t"
+                   "mov\tx14,#0\n\t"
+                   "mov\tx17,#0\n\t"
+                   "mov\tx19,#0\n\t"
+                   "mov\tx20,#0\n\t"
+                   "mov\tx21,#0\n\t"
+                   "mov\tx22,#0\n\t"
+                   "mov\tx23,#0\n\t"
+                   "mov\tx24,#0\n\t"
+                   "mov\tx25,#0\n\t"
+                   "mov\tx26,#0\n\t"
+                   "mov\tx27,#0\n\t"
+                   "mov\tx28,#0\n\t"
+                   "mov\tx29,#0\n\t"
+                   "mov\tx30,#0\n\t"
+                   "mov\tsp,x0\n\t"
+                   "mov\tx0,#0\n\t"
+                   "br\tx16"
+                   : /* no outputs */
+                   : "r"(x0), "r"(x15), "r"(x16)
+                   : "memory");
   __builtin_unreachable();
 }
 
-static const char *TryElf(struct ApeLoader *M, const char *exe, int fd,
-                          long *sp, long *bp, char *execfn) {
+static const char *TryElf(struct ApeLoader *M, union ElfEhdrBuf *ebuf,
+                          const char *exe, int fd, long *sp, long *auxv,
+                          char *execfn) {
   long i, rc;
   unsigned size;
   struct ElfEhdr *e;
   struct ElfPhdr *p;
 
   /* validate elf header */
-  e = &M->ehdr.ehdr;
-  if (READ32(M->ehdr.buf) != READ32("\177ELF")) {
+  e = &ebuf->ehdr;
+  if (READ32(ebuf->buf) != READ32("\177ELF")) {
     return "didn't embed ELF magic";
   }
   if (e->e_ident[EI_CLASS] == ELFCLASS32) {
@@ -649,7 +703,7 @@ static const char *TryElf(struct ApeLoader *M, const char *exe, int fd,
   }
 
   /* read program headers */
-  rc = pread(fd, M->phdr.buf, size, M->ehdr.ehdr.e_phoff);
+  rc = pread(fd, M->phdr.buf, size, ebuf->ehdr.e_phoff);
   if (rc < 0) return "failed to read ELF program headers";
   if (rc != size) return "truncated read of ELF program headers";
 
@@ -706,26 +760,35 @@ static const char *TryElf(struct ApeLoader *M, const char *exe, int fd,
   }
 
   /* simulate linux auxiliary values */
-  long auxv[][2] = {
-      {AT_PHDR, (long)&M->phdr.phdr},        //
-      {AT_PHENT, M->ehdr.ehdr.e_phentsize},  //
-      {AT_PHNUM, M->ehdr.ehdr.e_phnum},      //
-      {AT_ENTRY, M->ehdr.ehdr.e_entry},      //
-      {AT_PAGESZ, pagesz},                   //
-      {AT_UID, getuid()},                    //
-      {AT_EUID, geteuid()},                  //
-      {AT_GID, getgid()},                    //
-      {AT_EGID, getegid()},                  //
-      {AT_HWCAP, 0xffb3ffffu},               //
-      {AT_HWCAP2, 0x181},                    //
-      {AT_SECURE, issetugid()},              //
-      {AT_RANDOM, (long)M->rando},           //
-      {AT_EXECFN, (long)execfn},             //
-      {0, 0},                                //
-  };
-  _Static_assert(sizeof(auxv) == AUXV_BYTES,
-                 "Please update the AUXV_BYTES constant");
-  MemMove(bp, auxv, sizeof(auxv));
+  auxv[0] = AT_PHDR;
+  auxv[1] = (long)&M->phdr.phdr;
+  auxv[2] = AT_PHENT;
+  auxv[3] = ebuf->ehdr.e_phentsize;
+  auxv[4] = AT_PHNUM;
+  auxv[5] = ebuf->ehdr.e_phnum;
+  auxv[6] = AT_ENTRY;
+  auxv[7] = ebuf->ehdr.e_entry;
+  auxv[8] = AT_PAGESZ;
+  auxv[9] = pagesz;
+  auxv[10] = AT_UID;
+  auxv[11] = getuid();
+  auxv[12] = AT_EUID;
+  auxv[13] = geteuid();
+  auxv[14] = AT_GID;
+  auxv[15] = getgid();
+  auxv[16] = AT_EGID;
+  auxv[17] = getegid();
+  auxv[18] = AT_HWCAP;
+  auxv[19] = 0xffb3ffffu;
+  auxv[20] = AT_HWCAP2;
+  auxv[21] = 0x181;
+  auxv[22] = AT_SECURE;
+  auxv[23] = issetugid();
+  auxv[24] = AT_RANDOM;
+  auxv[25] = (long)M->rando;
+  auxv[26] = AT_EXECFN;
+  auxv[27] = (long)execfn;
+  auxv[28] = 0;
 
   /* we're now ready to load */
   Spawn(exe, fd, sp, e, p, &M->lib);
@@ -739,12 +802,36 @@ static long sys_fork(void) {
   return sysret(fork());
 }
 
+static long sys_close(int fd) {
+  return sysret(close(fd));
+}
+
 static long sys_pipe(int pfds[2]) {
   return sysret(pipe(pfds));
 }
 
+static long sys_munmap(void *addr, size_t size) {
+  return sysret(munmap(addr, size));
+}
+
+static long sys_read(int fd, void *data, size_t size) {
+  return sysret(read(fd, data, size));
+}
+
+static long sys_mprotect(void *data, size_t size, int prot) {
+  return sysret(mprotect(data, size, prot));
+}
+
+static long sys_write(int fd, const void *data, size_t size) {
+  return sysret(write(fd, data, size));
+}
+
 static long sys_clock_gettime(int clock, struct timespec *ts) {
-  return sysret(clock_gettime(clock, ts));
+  return sysret(clock_gettime((clockid_t)clock, ts));
+}
+
+static long sys_openat(int fd, const char *path, int flags, int mode) {
+  return sysret(openat(fd, path, flags, mode));
 }
 
 static long sys_nanosleep(const struct timespec *req, struct timespec *rem) {
@@ -756,34 +843,28 @@ static long sys_mmap(void *addr, size_t size, int prot, int flags, int fd,
   return sysret((long)mmap(addr, size, prot, flags, fd, off));
 }
 
+static long sys_sigaction(int sig, const struct sigaction *act, struct sigaction *oact) {
+  return sysret(sigaction(sig, act, oact));
+}
+
+static long sys_pselect(int nfds, fd_set *readfds, fd_set *writefds, fd_set *errorfds,
+                        const struct timespec *timeout, const sigset_t *sigmask) {
+  return sysret(pselect(nfds, readfds, writefds, errorfds, timeout, sigmask));
+}
+
 int main(int argc, char **argv, char **envp) {
-  long z;
-  void *map;
-  long *sp, *bp, *ip;
-  int c, i, n, fd, rc;
+  unsigned i;
+  int c, n, fd, rc;
   struct ApeLoader *M;
-  unsigned char rando[24];
-  char *p, *pe, *tp, *exe, *prog, *execfn;
+  long *sp, *sp2, *auxv;
+  union ElfEhdrBuf *ebuf;
+  char *p, *pe, *exe, *prog, *execfn;
 
-  // generate some hard random data
-  if (getentropy(rando, sizeof(rando))) {
-    Pexit(argv[0], -1, "getentropy");
-  }
+  /* allocate loader memory in program's arg block */
+  n = sizeof(struct ApeLoader);
+  M = (struct ApeLoader *)__builtin_alloca(n);
 
-  // make the stack look like a linux one
-  map = mmap((void *)(0x7f0000000000 | (long)rando[23] << 32), STACK_SIZE,
-             PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-  if (map == MAP_FAILED) {
-    Pexit(argv[0], -1, "stack mmap");
-  }
-
-  // put argument block at top of allocated stack
-  z = (long)map;
-  z += STACK_SIZE - sizeof(struct ApeLoader);
-  z &= -_Alignof(struct ApeLoader);
-  M = (struct ApeLoader *)z;
-
-  // expose screwy apple libs
+  /* expose apple libs */
   M->lib.magic = SYSLIB_MAGIC;
   M->lib.version = SYSLIB_VERSION;
   M->lib.fork = sys_fork;
@@ -803,52 +884,52 @@ int main(int argc, char **argv, char **envp) {
   M->lib.dispatch_semaphore_signal = dispatch_semaphore_signal;
   M->lib.dispatch_semaphore_wait = dispatch_semaphore_wait;
   M->lib.dispatch_walltime = dispatch_walltime;
+  M->lib.pthread_self = pthread_self;
+  M->lib.dispatch_release = dispatch_release;
+  M->lib.raise = raise;
+  M->lib.pthread_join = pthread_join;
+  M->lib.pthread_yield_np = pthread_yield_np;
+  M->lib.pthread_stack_min = PTHREAD_STACK_MIN;
+  M->lib.sizeof_pthread_attr_t = sizeof(pthread_attr_t);
+  M->lib.pthread_attr_init = pthread_attr_init;
+  M->lib.pthread_attr_destroy = pthread_attr_destroy;
+  M->lib.pthread_attr_setstacksize = pthread_attr_setstacksize;
+  M->lib.pthread_attr_setguardsize = pthread_attr_setguardsize;
+  M->lib.exit = exit;
+  M->lib.close = sys_close;
+  M->lib.munmap = sys_munmap;
+  M->lib.openat = sys_openat;
+  M->lib.write = sys_write;
+  M->lib.read = sys_read;
+  M->lib.sigaction = sys_sigaction;
+  M->lib.pselect = sys_pselect;
+  M->lib.mprotect = sys_mprotect;
 
-  // copy system provided argument block
-  bp = M->numblock;
-  tp = M->argblock + sizeof(M->argblock);
-  *bp++ = argc;
-  for (i = 0; i < argc; ++i) {
-    tp -= (n = StrLen(argv[i]) + 1);
-    MemMove(tp, argv[i], n);
-    *bp++ = (long)tp;
-  }
-  *bp++ = 0;
-  for (i = 0; envp[i]; ++i) {
-    tp -= (n = StrLen(envp[i]) + 1);
-    MemMove(tp, envp[i], n);
-    *bp++ = (long)tp;
-  }
-  *bp++ = 0;
-
-  // get arguments that point into our block
-  sp = M->numblock;
-  argc = *sp;
-  argv = (char **)(sp + 1);
-  envp = (char **)(sp + 1 + argc + 1);
-
-  // xnu stores getauxval(at_execfn) in getenv("_")
+  /* getenv("_") is close enough to at_execfn */
   execfn = argc > 0 ? argv[0] : 0;
   for (i = 0; envp[i]; ++i) {
     if (envp[i][0] == '_' && envp[i][1] == '=') {
       execfn = envp[i] + 2;
-      break;
     }
   }
 
-  // interpret command line arguments
-  if (argc >= 3 && !StrCmp(argv[1], "-")) {
-    // if the first argument is a hyphen then we give the user the
-    // power to change argv[0] or omit it entirely. most operating
-    // systems don't permit the omission of argv[0] but we do, b/c
-    // it's specified by ANSI X3.159-1988.
+  /* sneak the system five abi back out of args */
+  sp = (long *)(argv - 1);
+  auxv = (long *)(envp + i + 1);
+
+  /* interpret command line arguments */
+  if ((M->ps.literally = argc >= 3 && !StrCmp(argv[1], "-"))) {
+    /* if the first argument is a hyphen then we give the user the
+       power to change argv[0] or omit it entirely. most operating
+       systems don't permit the omission of argv[0] but we do, b/c
+       it's specified by ANSI X3.159-1988. */
     prog = (char *)sp[3];
     argc = sp[3] = sp[0] - 3;
     argv = (char **)((sp += 3) + 1);
   } else if (argc < 2) {
     Emit("usage: ape   PROG [ARGV1,ARGV2,...]\n"
          "       ape - PROG [ARGV0,ARGV1,...]\n"
-         "actually portable executable loader silicon 1.4\n"
+         "actually portable executable loader silicon 1.8\n"
          "copyright 2023 justine alexandra roberts tunney\n"
          "https://justine.lol/ape.html\n");
     _exit(1);
@@ -858,47 +939,60 @@ int main(int argc, char **argv, char **envp) {
     argv = (char **)((sp += 1) + 1);
   }
 
-  // search for executable
+  /* create new bottom of stack for spawned program
+     system v abi aligns this on a 16-byte boundary
+     grows down the alloc by poking the guard pages */
+  n = (auxv - sp + AUXV_WORDS + 1) * sizeof(long);
+  sp2 = (long *)__builtin_alloca(n);
+  if ((long)sp2 & 15) ++sp2;
+  for (; n > 0; n -= pagesz) {
+    ((char *)sp2)[n - 1] = 0;
+  }
+  MemMove(sp2, sp, (auxv - sp) * sizeof(long));
+  argv = (char **)(sp2 + 1);
+  envp = (char **)(sp2 + 1 + argc + 1);
+  auxv = sp2 + (auxv - sp);
+  sp = sp2;
+
+  /* allocate ephemeral memory for reading file */
+  n = sizeof(union ElfEhdrBuf);
+  ebuf = (union ElfEhdrBuf *)__builtin_alloca(n);
+  for (; n > 0; n -= pagesz) {
+    ((char *)ebuf)[n - 1] = 0;
+  }
+
+  /* search for executable */
   if (!(exe = Commandv(&M->ps, prog, GetEnv(envp, "PATH")))) {
     Pexit(prog, 0, "not found (maybe chmod +x)");
   } else if ((fd = openat(AT_FDCWD, exe, O_RDONLY)) < 0) {
     Pexit(exe, -1, "open");
-  } else if ((rc = read(fd, M->ehdr.buf, sizeof(M->ehdr.buf))) < 0) {
+  } else if ((rc = read(fd, ebuf->buf, sizeof(ebuf->buf))) < 0) {
     Pexit(exe, -1, "read");
-  } else if ((unsigned long)rc < sizeof(M->ehdr.ehdr)) {
+  } else if ((unsigned long)rc < sizeof(ebuf->ehdr)) {
     Pexit(exe, 0, "too small");
   }
-  pe = M->ehdr.buf + rc;
+  pe = ebuf->buf + rc;
 
-  // resolve argv[0] to reflect path search
-  if (argc > 0 && *prog != '/' && *exe == '/' && !StrCmp(prog, argv[0])) {
-    tp -= (n = StrLen(exe) + 1);
-    MemMove(tp, exe, n);
-    argv[0] = tp;
+  /* resolve argv[0] to reflect path search */
+  if (argc > 0 && ((*prog != '/' && *exe == '/' && !StrCmp(prog, argv[0])) ||
+                   !StrCmp(BaseName(prog), argv[0]))) {
+    argv[0] = exe;
   }
 
-  // squeeze and align the argument block
-  ip = (long *)(((long)tp - AUXV_BYTES) & -sizeof(long));
-  ip -= (n = bp - sp);
-  ip = (long *)((long)ip & -STACK_ALIGN);
-  MemMove(ip, sp, n * sizeof(long));
-  bp = ip + n;
-  sp = ip;
+  /* generate some hard random data */
+  if (getentropy(M->rando, sizeof(M->rando))) {
+    Pexit(argv[0], -1, "getentropy");
+  }
 
-  // relocate the guest's random numbers
-  MemMove(M->rando, rando, sizeof(M->rando));
-  Bzero(rando, sizeof(rando));
-
-  // ape intended behavior
-  // 1. if file is an elf executable, it'll be used as-is
-  // 2. if ape, will scan shell script for elf printf statements
-  // 3. shell script may have multiple lines producing elf headers
-  // 4. all elf printf lines must exist in the first 8192 bytes of file
-  // 5. elf program headers may appear anywhere in the binary
-  if (READ64(M->ehdr.buf) == READ64("MZqFpD='") ||
-      READ64(M->ehdr.buf) == READ64("jartsr='") ||
-      READ64(M->ehdr.buf) == READ64("APEDBG='")) {
-    for (p = M->ehdr.buf; p < pe; ++p) {
+  /* ape intended behavior
+     1. if ape, will scan shell script for elf printf statements
+     2. shell script may have multiple lines producing elf headers
+     3. all elf printf lines must exist in the first 8192 bytes of file
+     4. elf program headers may appear anywhere in the binary */
+  if (READ64(ebuf->buf) == READ64("MZqFpD='") ||
+      READ64(ebuf->buf) == READ64("jartsr='") ||
+      READ64(ebuf->buf) == READ64("APEDBG='")) {
+    for (p = ebuf->buf; p < pe; ++p) {
       if (READ64(p) != READ64("printf '")) {
         continue;
       }
@@ -916,15 +1010,15 @@ int main(int argc, char **argv, char **envp) {
             }
           }
         }
-        M->ehdr.buf[i++] = c;
-        if (i >= sizeof(M->ehdr.buf)) {
+        ebuf->buf[i++] = c;
+        if (i >= sizeof(ebuf->buf)) {
           break;
         }
       }
-      if (i >= sizeof(M->ehdr.ehdr)) {
-        TryElf(M, exe, fd, sp, bp, execfn);
+      if (i >= sizeof(ebuf->ehdr)) {
+        TryElf(M, ebuf, exe, fd, sp, auxv, execfn);
       }
     }
   }
-  Pexit(exe, 0, TryElf(M, exe, fd, sp, bp, execfn));
+  Pexit(exe, 0, TryElf(M, ebuf, exe, fd, sp, auxv, execfn));
 }

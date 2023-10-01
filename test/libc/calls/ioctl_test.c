@@ -19,19 +19,21 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/intrin/bits.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/ifconf.h"
 #include "libc/sock/struct/ifreq.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/af.h"
+#include "libc/sysv/consts/fio.h"
 #include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/sio.h"
 #include "libc/sysv/consts/sock.h"
+#include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
 
 TEST(siocgifconf, test) {
@@ -40,7 +42,6 @@ TEST(siocgifconf, test) {
   int socketfd;
   struct ifreq *ifr;
   struct ifconf conf;
-  char addrbuf[1024];
   uint32_t ip, netmask;
   bool foundloopback = false;
   data = gc(malloc((n = 4096)));
@@ -69,4 +70,40 @@ TEST(siocgifconf, test) {
   }
   EXPECT_TRUE(foundloopback);
   ASSERT_NE(-1, close(socketfd));
+}
+
+TEST(siocgifconf, mkntenvblock_systemroot) {
+  if (__argc != 1) return;
+  SPAWN(fork);
+  execve(GetProgramExecutableName(),
+         (char *[]){GetProgramExecutableName(), "hi", NULL}, (char *[]){NULL});
+  abort();
+  EXITS(0);
+}
+
+TEST(fionread, pipe) {
+  int pfds[2];
+  int pending;
+  ASSERT_SYS(0, 0, pipe(pfds));
+  ASSERT_SYS(0, 2, write(pfds[1], "hi", 2));
+  // checking the reading end is agreed upon
+  ASSERT_SYS(0, 0, ioctl(pfds[0], FIONREAD, &pending));
+  ASSERT_EQ(2, pending);
+  // checking the writing end is real hairy
+  // ASSERT_SYS(0, 0, ioctl(pfds[1], FIONREAD, &pending));
+  // ASSERT_EQ(2, pending);
+  ASSERT_SYS(0, 0, close(pfds[1]));
+  ASSERT_SYS(0, 0, close(pfds[0]));
+}
+
+TEST(fionread, eof_returnsZeroWithoutError) {
+  char buf[8];
+  int pfds[2];
+  int pending;
+  ASSERT_SYS(0, 0, pipe(pfds));
+  ASSERT_SYS(0, 0, close(pfds[1]));
+  ASSERT_SYS(0, 0, ioctl(pfds[0], FIONREAD, &pending));
+  ASSERT_EQ(0, pending);
+  ASSERT_SYS(0, 0, read(pfds[0], buf, 8));
+  ASSERT_SYS(0, 0, close(pfds[0]));
 }

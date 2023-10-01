@@ -16,7 +16,6 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/stdio.h"
 
 /**
@@ -24,7 +23,7 @@
  *
  * This function is similar to getline() except it'll truncate lines
  * exceeding size. The line ending marker is included and may be removed
- * using _chomp().
+ * using chomp().
  *
  * @param s is is nul-terminated string that's non-null
  * @param size is byte length of `s`

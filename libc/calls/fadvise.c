@@ -43,7 +43,7 @@ int sys_fadvise_netbsd(int, int, int64_t, int64_t, int) asm("sys_fadvise");
  * @raise ENOSYS on XNU and OpenBSD
  */
 int fadvise(int fd, uint64_t offset, uint64_t len, int advice) {
-  int rc, e = errno;
+  int rc;
   if (IsLinux()) {
     rc = sys_fadvise(fd, offset, len, advice);
   } else if (IsFreebsd() || IsNetbsd()) {
@@ -52,7 +52,7 @@ int fadvise(int fd, uint64_t offset, uint64_t len, int advice) {
     } else {
       rc = sys_fadvise_netbsd(fd, offset, offset, len, advice);
     }
-    _npassert(rc >= 0);
+    npassert(rc >= 0);
     if (rc) {
       errno = rc;
       rc = -1;

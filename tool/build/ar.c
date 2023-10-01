@@ -31,7 +31,6 @@
 #include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/bsr.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
@@ -319,7 +318,7 @@ int main(int argc, char *argv[]) {
   if (argc < 3) {
     ShowUsage(1, 2);
   }
-  const char *flags = argv[1];
+  char *flags = argv[1];
   const char *outpath = argv[2];
 
   // we only support one mode of operation, which is creating a new
@@ -327,8 +326,11 @@ int main(int argc, char *argv[]) {
   // on modern systems that it isn't worth supporting the byzantine
   // standard posix ar flags intended to improve cassette tape perf
   SortChars(flags, strlen(flags));
-  if (!IsEqual(flags, "crs") &&  //
-      !IsEqual(flags, "Dcrs")) {
+  if (*flags == 'D') ++flags;
+  if (!IsEqual(flags, "cr") &&    //
+      !IsEqual(flags, "cru") &&   //
+      !IsEqual(flags, "crsu") &&  //
+      !IsEqual(flags, "crs")) {
     tinyprint(2, program_invocation_name, ": flags should be rcsD\n", NULL);
     ShowUsage(1, 2);
   }
@@ -348,8 +350,8 @@ int main(int argc, char *argv[]) {
     struct stat st;
     const char *arg;
     if (!(arg = getargs_next(&ga))) break;
-    if (_endswith(arg, "/")) continue;
-    if (_endswith(arg, ".pkg")) continue;
+    if (endswith(arg, "/")) continue;
+    if (endswith(arg, ".pkg")) continue;
     if (stat(arg, &st)) SysDie(arg, "stat");
     if (S_ISDIR(st.st_mode)) continue;
     if (!st.st_size) Die(arg, "file is empty");

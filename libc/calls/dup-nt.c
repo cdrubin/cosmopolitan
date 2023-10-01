@@ -31,7 +31,7 @@
 // Implements dup(), dup2(), dup3(), and F_DUPFD for Windows.
 textwindows int sys_dup_nt(int oldfd, int newfd, int flags, int start) {
   int64_t rc, proc, handle;
-  _unassert(!(flags & ~O_CLOEXEC));
+  unassert(!(flags & ~O_CLOEXEC));
 
   __fds_lock();
 
@@ -55,13 +55,14 @@ textwindows int sys_dup_nt(int oldfd, int newfd, int flags, int start) {
     }
     if (g_fds.p[newfd].kind) {
       sys_close_nt(g_fds.p + newfd, newfd);
+      bzero(g_fds.p + newfd, sizeof(*g_fds.p));
     }
   }
 
   handle = g_fds.p[oldfd].handle;
   proc = GetCurrentProcess();
 
-  if (DuplicateHandle(proc, handle, proc, &g_fds.p[newfd].handle, 0, true,
+  if (DuplicateHandle(proc, handle, proc, &g_fds.p[newfd].handle, 0, false,
                       kNtDuplicateSameAccess)) {
     g_fds.p[newfd].kind = g_fds.p[oldfd].kind;
     g_fds.p[newfd].mode = g_fds.p[oldfd].mode;

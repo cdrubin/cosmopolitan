@@ -19,6 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/intrin/weaken.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
@@ -35,7 +36,7 @@
  * @raise ENOTRECOVERABLE if `mutex` is corrupted
  */
 errno_t pthread_mutex_trylock(pthread_mutex_t *mutex) {
-  int c, d, t;
+  int t;
 
   if (__tls_enabled &&                               //
       mutex->_type == PTHREAD_MUTEX_NORMAL &&        //

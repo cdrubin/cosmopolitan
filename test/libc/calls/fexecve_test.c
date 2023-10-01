@@ -29,15 +29,18 @@
 #include "libc/testlib/testlib.h"
 // clang-format off
 
-STATIC_YOINK("zipos");
+__static_yoink("zipos");
 
 int fds[2];
 char buf[8];
-char testlib_enable_tmp_setup_teardown;
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 void SetUp(void) {
   if (IsFreebsd()) exit(0);           // TODO: fixme on freebsd
-  if (!__is_linux_2_6_23()) exit(0);  // TODO: fixme on old linux
+  if (IsLinux() && !__is_linux_2_6_23()) exit(0);  // TODO: fixme on old linux
 }
 
 TEST(execve, elfIsUnreadable_mayBeExecuted) {

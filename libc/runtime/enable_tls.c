@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "ape/sections.internal.h"
-#include "libc/assert.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
@@ -27,21 +26,25 @@
 #include "libc/intrin/dll.h"
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
+#include "libc/nt/files.h"
+#include "libc/nt/runtime.h"
+#include "libc/nt/synchronization.h"
+#include "libc/nt/thread.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/syslib.internal.h"
+#include "libc/str/locale.h"
 #include "libc/str/str.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
+#include "third_party/make/gnumake.h"
 
 #define I(x) ((uintptr_t)x)
 
 extern unsigned char __tls_mov_nt_rax[];
 extern unsigned char __tls_add_nt_rax[];
 
-struct Dll *_pthread_list;
-pthread_spinlock_t _pthread_lock;
-static struct PosixThread _pthread_main;
 _Alignas(TLS_ALIGNMENT) static char __static_tls[6016];
 
 /**
@@ -96,17 +99,17 @@ _Alignas(TLS_ALIGNMENT) static char __static_tls[6016];
  */
 textstartup void __enable_tls(void) {
   int tid;
-  size_t hiz, siz;
+  size_t siz;
   char *mem, *tls;
   struct CosmoTib *tib;
 
   // Here's the layout we're currently using:
   //
-  //         .balign PAGESIZE
+  //         .balign 4096
   //     _tdata_start:
   //         .tdata
   //         _tdata_size = . - _tdata_start
-  //         .balign PAGESIZE
+  //         .balign 4096
   //     _tbss_start:
   //     _tdata_start + _tbss_offset:
   //         .tbss
@@ -116,8 +119,8 @@ textstartup void __enable_tls(void) {
   //     _tbss_start + _tbss_size:
   //     _tdata_start + _tls_size:
   //
-  _unassert(_tbss_start == _tdata_start + I(_tbss_offset));
-  _unassert(_tbss_start + I(_tbss_size) == _tdata_start + I(_tls_size));
+  // unassert(_tbss_start == _tdata_start + I(_tbss_offset));
+  // unassert(_tbss_start + I(_tbss_size) == _tdata_start + I(_tls_size));
 
 #ifdef __x86_64__
 
@@ -130,12 +133,9 @@ textstartup void __enable_tls(void) {
   } else {
     // if this binary needs a hefty tls block then we'll bank on
     // malloc() being linked, which links _mapanon().  otherwise
-    // if you exceed this, you need to STATIC_YOINK("_mapanon").
+    // if you exceed this, you need to __static_yoink("_mapanon").
     // please note that it's probably too early to call calloc()
-    _npassert(_weaken(_mapanon));
-    siz = ROUNDUP(siz, FRAMESIZE);
     mem = _weaken(_mapanon)(siz);
-    _npassert(mem);
   }
 
   if (IsAsan()) {
@@ -149,15 +149,12 @@ textstartup void __enable_tls(void) {
 
 #elif defined(__aarch64__)
 
-  hiz = ROUNDUP(sizeof(*tib) + 2 * sizeof(void *), I(_tls_align));
+  size_t hiz = ROUNDUP(sizeof(*tib) + 2 * sizeof(void *), I(_tls_align));
   siz = hiz + I(_tls_size);
   if (siz <= sizeof(__static_tls)) {
     mem = __static_tls;
   } else {
-    _npassert(_weaken(_mapanon));
-    siz = ROUNDUP(siz, FRAMESIZE);
     mem = _weaken(_mapanon)(siz);
-    _npassert(mem);
   }
 
   if (IsAsan()) {
@@ -191,7 +188,16 @@ textstartup void __enable_tls(void) {
   tib->tib_errno = __errno;
   tib->tib_strace = __strace;
   tib->tib_ftrace = __ftrace;
-  tib->tib_pthread = (pthread_t)&_pthread_main;
+  tib->tib_locale = (intptr_t)&__c_dot_utf8_locale;
+  tib->tib_pthread = (pthread_t)&_pthread_static;
+  if (IsWindows()) {
+    intptr_t threadhand, pseudo = GetCurrentThread();
+    DuplicateHandle(GetCurrentProcess(), pseudo, GetCurrentProcess(),
+                    &threadhand, 0, false, kNtDuplicateSameAccess);
+    atomic_store_explicit(&tib->tib_syshand, threadhand, memory_order_relaxed);
+  } else if (IsXnuSilicon()) {
+    tib->tib_syshand = __syslib->__pthread_self();
+  }
   if (IsLinux() || IsXnuSilicon()) {
     // gnu/systemd guarantees pid==tid for the main thread so we can
     // avoid issuing a superfluous system call at startup in program
@@ -202,11 +208,16 @@ textstartup void __enable_tls(void) {
   atomic_store_explicit(&tib->tib_tid, tid, memory_order_relaxed);
 
   // initialize posix threads
-  _pthread_main.tib = tib;
-  _pthread_main.flags = PT_STATIC;
-  _pthread_main.list.prev = _pthread_main.list.next =  //
-      _pthread_list = VEIL("r", &_pthread_main.list);
-  atomic_store_explicit(&_pthread_main.ptid, tid, memory_order_relaxed);
+  _pthread_static.tib = tib;
+  _pthread_static.pt_flags = PT_STATIC;
+  dll_init(&_pthread_static.list);
+  _pthread_list = &_pthread_static.list;
+  atomic_store_explicit(&_pthread_static.ptid, tid, memory_order_relaxed);
+  if (IsWindows()) {
+    if (!(_pthread_static.semaphore = CreateSemaphore(0, 0, 1, 0))) {
+      notpossible;
+    }
+  }
 
   // copy in initialized data section
   if (I(_tdata_size)) {

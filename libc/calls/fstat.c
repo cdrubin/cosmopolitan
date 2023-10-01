@@ -24,11 +24,15 @@
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 /**
  * Returns information about file, via open()'d descriptor.
+ *
+ * On Windows, this implementation always sets `st_uid` and `st_gid` to
+ * `getuid()` and `getgid()`. The `st_mode` field is generated based on
+ * the current umask().
  *
  * @return 0 on success or -1 w/ errno
  * @raise EBADF if `fd` isn't a valid file descriptor
@@ -38,17 +42,19 @@
  */
 int fstat(int fd, struct stat *st) {
   int rc;
-  if (__isfdkind(fd, kFdZip)) {
+  if (IsAsan() && !__asan_is_valid(st, sizeof(*st))) {
+    rc = efault();
+  } else if (__isfdkind(fd, kFdZip)) {
     rc = _weaken(__zipos_fstat)(
         (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, st);
-  } else if (!IsWindows() && !IsMetal()) {
+  } else if (IsLinux() || IsXnu() || IsFreebsd() || IsOpenbsd() || IsNetbsd()) {
     rc = sys_fstat(fd, st);
   } else if (IsMetal()) {
     rc = sys_fstat_metal(fd, st);
-  } else if (!__isfdkind(fd, kFdFile)) {
-    rc = ebadf();
-  } else {
+  } else if (IsWindows()) {
     rc = sys_fstat_nt(__getfdhandleactual(fd), st);
+  } else {
+    rc = enosys();
   }
   STRACE("fstat(%d, [%s]) → %d% m", fd, DescribeStat(rc, st), rc);
   return rc;

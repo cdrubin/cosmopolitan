@@ -510,7 +510,7 @@ struct llama_file_loader {
             }
 
             vocab.token_to_id[word] = i;
-            vocab.longest_token = MAX(vocab.longest_token, word.size());
+            vocab.longest_token = std::max(vocab.longest_token, (int)word.size());
 
             auto & tok_score = vocab.id_to_token[i];
             tok_score.tok = std::move(word);
@@ -2140,7 +2140,7 @@ static void llama_model_quantize_internal(const std::string & fname_inp, const s
         bool quantize =
                 tensor.ne.size() == 2 &&
                 tensor.type != quantized_type &&
-                _endswith(tensor.name.c_str(), "weight") &&
+                endswith(tensor.name.c_str(), "weight") &&
                 tensor.name != "output.weight";
 
         enum ggml_type new_type;

@@ -9,11 +9,6 @@ COSMOPOLITAN_C_START_
 
 int rand(void);
 void srand(unsigned);
-double poz(double);
-double pochisq(double, int);
-void rt_init(int);
-void rt_add(void *, int);
-void rt_end(double *, double *, double *, double *, double *);
 char *strfry(char *);
 int getentropy(void *, size_t);
 ssize_t getrandom(void *, size_t, unsigned);
@@ -22,12 +17,14 @@ char *setstate(char *);
 long random(void);
 void srandom(unsigned);
 
-#ifdef COSMO
+#ifdef _COSMO_SOURCE
 #define vigna   __vigna
 #define vigna_r __vigna_r
 #define rngset  __rngset
 #define rdrand  __rdrand
 #define rdseed  __rdseed
+double poz(double);
+double pochisq(double, int);
 uint64_t lemur64(void);
 uint64_t _rand64(void);
 uint64_t vigna(void);
@@ -43,7 +40,10 @@ double _real2(uint64_t);
 double _real3(uint64_t);
 double MeasureEntropy(const char *, size_t);
 void *rngset(void *, size_t, uint64_t (*)(void), size_t);
-#endif /* COSMO */
+void rt_init(int);
+void rt_add(void *, int);
+void rt_end(double *, double *, double *, double *, double *);
+#endif /* _COSMO_SOURCE */
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

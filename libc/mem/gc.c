@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/mem/gc.h"
 #include "libc/assert.h"
 #include "libc/intrin/likely.h"
 #include "libc/mem/mem.h"
@@ -33,7 +34,6 @@ forceinline bool PointerNotOwnedByParentStackFrame(struct StackFrame *frame,
 }
 
 static void TeardownGc(void) {
-  int i;
   struct Garbages *g;
   struct CosmoTib *t;
   if (__tls_enabled) {
@@ -62,7 +62,6 @@ static void DeferFunction(struct StackFrame *frame, void *fn, void *arg) {
   struct Garbage *p2;
   struct Garbages *g;
   struct CosmoTib *t;
-  __require_tls();
   t = __get_tls();
   g = t->tib_garbages;
   if (UNLIKELY(!g)) {
@@ -93,8 +92,8 @@ static void DeferFunction(struct StackFrame *frame, void *fn, void *arg) {
 void __defer(void *rbp, void *fn, void *arg) {
   struct StackFrame *f, *frame = rbp;
   f = __builtin_frame_address(0);
-  _unassert(f->next == frame);
-  _unassert(PointerNotOwnedByParentStackFrame(f, frame, arg));
+  unassert(f->next == frame);
+  unassert(PointerNotOwnedByParentStackFrame(f, frame, arg));
   DeferFunction(frame, fn, arg);
 }
 

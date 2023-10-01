@@ -23,6 +23,7 @@
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/macros.internal.h"
 #include "libc/sysv/consts/rlimit.h"
 #include "libc/sysv/errfuns.h"
 
@@ -30,6 +31,12 @@
  * Sets resource limit for current process.
  *
  * The following resources are recommended:
+ *
+ * - `RLIMIT_STACK` controls how much stack memory is available to the
+ *   main thread. This setting is inherited across fork() and execve()
+ *   Please note it's only safe for Cosmopolitan programs, to set this
+ *   value to at least `PTHREAD_STACK_MIN * 2`. On Windows this cannot
+ *   be used to extend the stack, which is currently hard-coded.
  *
  * - `RLIMIT_AS` limits the size of the virtual address space. This will
  *   work on all platforms except WSL. It is emulated on XNU and Windows
@@ -78,6 +85,8 @@ int setrlimit(int resource, const struct rlimit *rlim) {
       // TODO(jart): What's up with XNU and NetBSD?
       __virtualmax = rlim->rlim_cur;
     }
+  } else if (resource == RLIMIT_STACK) {
+    rc = enotsup();
   } else if (resource == RLIMIT_AS) {
     __virtualmax = rlim->rlim_cur;
     rc = 0;
@@ -88,3 +97,5 @@ int setrlimit(int resource, const struct rlimit *rlim) {
          DescribeRlimit(0, rlim), rc);
   return rc;
 }
+
+__weak_reference(setrlimit, setrlimit64);

@@ -198,6 +198,10 @@
 #define SKEW 0
 #endif
 
+#ifndef IMAGE_BASE_VIRTUAL
+#define IMAGE_BASE_VIRTUAL 0x400000
+#endif
+
 #if IMAGE_BASE_VIRTUAL > 0xffffffff
 #error "please use 32-bit addresses for image data"
 #endif
@@ -229,7 +233,7 @@ SECTIONS {
     KEEP(*(.text.head))
 
     /* Executable & Linkable Format */
-    . = ALIGN(__SIZEOF_POINTER__);
+    . = ALIGN(. != 0 ? __SIZEOF_POINTER__ : 0);
     ape_phdrs = .;
     KEEP(*(.elf.phdrs))
     ape_phdrs_end = .;
@@ -239,7 +243,7 @@ SECTIONS {
     KEEP(*(.emushepilogue))
 
     /* OpenBSD */
-    . = ALIGN(__SIZEOF_POINTER__);
+    . = ALIGN(. != 0 ? __SIZEOF_POINTER__ : 0);
     ape_note = .;
     KEEP(*(.note.openbsd.ident))
     KEEP(*(.note.netbsd.ident))
@@ -253,15 +257,15 @@ SECTIONS {
 
     /* Mach-O */
     KEEP(*(.macho))
-    . = ALIGN(__SIZEOF_POINTER__);
+    . = ALIGN(. != 0 ? __SIZEOF_POINTER__ : 0);
     ape_macho_end = .;
 
     /* APE loader */
     KEEP(*(.ape.loader))
-    . = ALIGN(CODE_GRANULE);
+    . = ALIGN(. != 0 ? CODE_GRANULE : 0);
 
     KEEP(*(.ape.pad.head))
-    . = ALIGN(SupportsWindows() || SupportsMetal() ? CONSTANT(COMMONPAGESIZE) : 16);
+    . = ALIGN(. != 0 ? (SupportsWindows() || SupportsMetal() ? CONSTANT(COMMONPAGESIZE) : 16) : 0);
     _ehead = .;
   } :Head
 
@@ -312,14 +316,14 @@ SECTIONS {
 
     /* Privileged code invulnerable to magic */
     KEEP(*(.ape.pad.privileged));
-    . = ALIGN(__privileged_end > __privileged_start ? CONSTANT(COMMONPAGESIZE) : 1);
+    . = ALIGN(__privileged_end > __privileged_start ? CONSTANT(COMMONPAGESIZE) : 0);
 /*END: morphable code */
     __privileged_start = .;
     *(.privileged)
     __privileged_end = .;
 
     KEEP(*(.ape.pad.text))
-    . = ALIGN(CONSTANT(COMMONPAGESIZE));
+    . = ALIGN(. != 0 ? CONSTANT(COMMONPAGESIZE) : 0);
 /*END: Read Only Data (only needed for initialization) */
   } :Cod
 
@@ -349,28 +353,12 @@ SECTIONS {
     KEEP(*(SORT_BY_NAME(.idata.ro.*)))
 #endif
 
-    . = ALIGN(__SIZEOF_POINTER__);
-    __init_array_start = .;
-    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)
-           SORT_BY_INIT_PRIORITY(.ctors.*)))
-    KEEP(*(.ctors))
-    KEEP(*(.init_array))
-    KEEP(*(.preinit_array))
-    __init_array_end = .;
-
-    . = ALIGN(__SIZEOF_POINTER__);
-    __fini_array_start = .;
-    KEEP(*(SORT_BY_INIT_PRIORITY(.fini_array.*)
-           SORT_BY_INIT_PRIORITY(.dtors.*)))
-    KEEP(*(.fini_array))
-    KEEP(*(.dtors))
-    __fini_array_end = .;
-
     /* Encoded Data Structures w/ Linear Initialization Order */
     KEEP(*(.initroprologue))
     KEEP(*(SORT_BY_NAME(.initro.*)))
     KEEP(*(.initroepilogue))
     KEEP(*(SORT_BY_NAME(.sort.rodata.*)))
+    . = ALIGN(. != 0 ? CONSTANT(COMMONPAGESIZE) : 0); /* don't delete this line :o */
 
 /*END: read-only data that's only needed for initialization */
 
@@ -384,14 +372,13 @@ SECTIONS {
     *(SORT_BY_ALIGNMENT(.tdata.*))
     _tdata_end = .;
     KEEP(*(.ape.pad.rodata))
-    . = ALIGN(CONSTANT(COMMONPAGESIZE));
+    . = ALIGN(. != 0 ? CONSTANT(COMMONPAGESIZE) : 0);
     _etext = .;
     PROVIDE(etext = .);
   } :Tls :Rom
 /*END: Read Only Data */
 
-  . = DATA_SEGMENT_ALIGN(CONSTANT(COMMONPAGESIZE), CONSTANT(COMMONPAGESIZE));
-  . = DATA_SEGMENT_RELRO_END(0, .);
+  . = ALIGN(CONSTANT(COMMONPAGESIZE));
 
 /* this only tells the linker about the layout of uninitialized */
 /* TLS data, and does not advance the linker's location counter */
@@ -425,18 +412,38 @@ SECTIONS {
     *(.got.plt)
     KEEP(*(.gotpltepilogue))
 
+    . = ALIGN(. != 0 ? __SIZEOF_POINTER__ : 0);
+    __init_array_start = .;
+    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)
+           SORT_BY_INIT_PRIORITY(.ctors.*)))
+    KEEP(*(.ctors))
+    KEEP(*(.init_array))
+    KEEP(*(.preinit_array))
+    __init_array_end = .;
+
+    . = ALIGN(. != 0 ? __SIZEOF_POINTER__ : 0);
+    __fini_array_start = .;
+    KEEP(*(SORT_BY_INIT_PRIORITY(.fini_array.*)
+           SORT_BY_INIT_PRIORITY(.dtors.*)))
+    KEEP(*(.fini_array))
+    KEEP(*(.dtors))
+    __fini_array_end = .;
+
 /*BEGIN: Post-Initialization Read-Only */
-    . = ALIGN(__SIZEOF_POINTER__);
+    . = ALIGN(. != 0 ? __SIZEOF_POINTER__ : 0);
     KEEP(*(SORT_BY_NAME(.piro.relo.sort.*)))
-    . = ALIGN(__SIZEOF_POINTER__);
+    . = ALIGN(. != 0 ? __SIZEOF_POINTER__ : 0);
     KEEP(*(SORT_BY_NAME(.piro.data.sort.*)))
     KEEP(*(.piro.pad.data))
     KEEP(*(.dataepilogue))
+    . = ALIGN(. != 0 ? CONSTANT(COMMONPAGESIZE) : 0);
 /*END: NT FORK COPYING */
     _edata = .;
     PROVIDE(edata = .);
     _ezip = .; /* <-- very deprecated */
   } :Ram
+
+  . = ALIGN(CONSTANT(COMMONPAGESIZE));
 
 /*END:   file content that's loaded by o/s */
 /*END:   file content */
@@ -461,14 +468,14 @@ SECTIONS {
 
     KEEP(*(.bssepilogue))
 
-    . = ALIGN(CONSTANT(COMMONPAGESIZE));
+    . = ALIGN(. != 0 ? CONSTANT(COMMONPAGESIZE) : 0);
 
 /*END: NT FORK COPYING */
-    _end = .;
-    PROVIDE(end = .);
   } :Ram
 
-  . = DATA_SEGMENT_END(.);
+  . = ALIGN(CONSTANT(COMMONPAGESIZE));
+  _end = .;
+  PROVIDE(end = .);
 
 /*END: nt addressability guarantee */
 /*END: bsd addressability guarantee */
@@ -554,24 +561,24 @@ _tls_align = 1;
 ape_cod_offset = 0;
 ape_cod_vaddr = ADDR(.head);
 ape_cod_paddr = LOADADDR(.head);
-ape_cod_filesz = SIZEOF(.head) + SIZEOF(.text);
+ape_cod_filesz = ADDR(.rodata) - ADDR(.head);
 ape_cod_memsz = ape_cod_filesz;
 ape_cod_align = CONSTANT(COMMONPAGESIZE);
 ape_cod_rva = RVA(ape_cod_vaddr);
 
-ape_rom_offset = ape_cod_offset + ape_cod_filesz;
 ape_rom_vaddr = ADDR(.rodata);
+ape_rom_offset = ape_rom_vaddr - __executable_start;
 ape_rom_paddr = LOADADDR(.rodata);
-ape_rom_filesz = SIZEOF(.rodata) + SIZEOF(.tdata);
+ape_rom_filesz = ADDR(.tbss) - ADDR(.rodata);
 ape_rom_memsz = ape_rom_filesz;
 ape_rom_align = CONSTANT(COMMONPAGESIZE);
 ape_rom_rva = RVA(ape_rom_vaddr);
 
-ape_ram_offset = ape_rom_offset + ape_rom_filesz;
 ape_ram_vaddr = ADDR(.data);
+ape_ram_offset = ape_ram_vaddr - __executable_start;
 ape_ram_paddr = LOADADDR(.data);
-ape_ram_filesz = SIZEOF(.data);
-ape_ram_memsz = SIZEOF(.data) + SIZEOF(.bss);
+ape_ram_filesz = ADDR(.bss) - ADDR(.data);
+ape_ram_memsz = _end - ADDR(.data);
 ape_ram_align = CONSTANT(COMMONPAGESIZE);
 ape_ram_rva = RVA(ape_ram_vaddr);
 
@@ -581,18 +588,18 @@ ape_stack_offset = 0;
 ape_stack_vaddr = DEFINED(ape_stack_vaddr) ? ape_stack_vaddr : 0x700000000000;
 ape_stack_paddr = ape_ram_paddr + ape_ram_filesz;
 ape_stack_filesz = 0;
-ape_stack_memsz = DEFINED(ape_stack_memsz) ? ape_stack_memsz : APE_STACKSIZE;
-ape_stack_memsz2 = ape_stack_memsz * 2;
-ape_stack_align = 16;
+ape_stack_memsz = DEFINED(ape_stack_memsz) ? ape_stack_memsz : 8 * 1024 * 1024;
+ape_stack_align = DEFINED(ape_stack_align) ? ape_stack_align : 16;
+ape_stack_round = -ape_stack_align;
 
 ape_note_offset = ape_cod_offset + (ape_note - ape_cod_vaddr);
 ape_note_filesz = ape_note_end - ape_note;
 ape_note_memsz = ape_note_filesz;
 
-ape_text_offset = ape_cod_offset + LOADADDR(.text) - ape_cod_paddr;
-ape_text_paddr = LOADADDR(.text);
 ape_text_vaddr = ADDR(.text);
-ape_text_filesz = SIZEOF(.text) + SIZEOF(.rodata) + SIZEOF(.tdata);
+ape_text_offset = ape_text_vaddr - __executable_start;
+ape_text_paddr = LOADADDR(.text);
+ape_text_filesz = ADDR(.rodata) - ADDR(.text);
 ape_text_memsz = ape_text_filesz;
 ape_text_align = CONSTANT(COMMONPAGESIZE);
 ape_text_rva = RVA(ape_text_vaddr);
@@ -758,12 +765,6 @@ ASSERT(((DEFINED(__init_rodata_end) ? __init_rodata_end : 0) %
 ASSERT((!DEFINED(ape_grub) ? 1 : RVA(ape_grub) < 8192),
        "grub stub needs to be in first 8kb of image");
 
-ASSERT(DEFINED(_start) || DEFINED(_start16),
-       "please link a _start() or _start16() entrypoint");
-
-ASSERT(!DEFINED(_start16) || REAL(_end) < 65536,
-       "ape won't support non-tiny real mode programs");
-
 ASSERT(IS2POW(ape_stack_memsz),
        "ape_stack_memsz must be a two power");
 
@@ -772,6 +773,8 @@ ASSERT(ape_stack_vaddr % ape_stack_memsz == 0,
 
 ASSERT(ALIGNOF(.tdata) <= TLS_ALIGNMENT && ALIGNOF(.tbss) <= TLS_ALIGNMENT,
        "_Thread_local _Alignof can't exceed TLS_ALIGNMENT");
+
+ASSERT(DEFINED(main), "main() function not defined");
 
 /* Let's not be like Knight Capital. */
 /* NOCROSSREFS_TO(.test .text) */

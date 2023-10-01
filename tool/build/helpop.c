@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
@@ -330,7 +331,7 @@ void HandleOperand(const char *op) {
   while (*op) {
     found = false;
     for (i = 0; i < ARRAYLEN(kDescriptors); ++i) {
-      if (_startswith(op, kDescriptors[i].prefix)) {
+      if (startswith(op, kDescriptors[i].prefix)) {
         found = true;
         op += strlen(kDescriptors[i].prefix);
         if (succinct_) {

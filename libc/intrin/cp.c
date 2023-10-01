@@ -28,11 +28,11 @@ int begin_cancellation_point(void) {
   int state = 0;
   struct CosmoTib *tib;
   struct PosixThread *pt;
-  if (__enable_tls) {
+  if (__tls_enabled) {
     tib = __get_tls();
     if ((pt = (struct PosixThread *)tib->tib_pthread)) {
-      state = pt->flags & PT_INCANCEL;
-      pt->flags |= PT_INCANCEL;
+      state = pt->pt_flags & PT_INCANCEL;
+      pt->pt_flags |= PT_INCANCEL;
     }
   }
   return state;
@@ -41,11 +41,11 @@ int begin_cancellation_point(void) {
 void end_cancellation_point(int state) {
   struct CosmoTib *tib;
   struct PosixThread *pt;
-  if (__enable_tls) {
+  if (__tls_enabled) {
     tib = __get_tls();
     if ((pt = (struct PosixThread *)tib->tib_pthread)) {
-      pt->flags &= ~PT_INCANCEL;
-      pt->flags |= state;
+      pt->pt_flags &= ~PT_INCANCEL;
+      pt->pt_flags |= state;
     }
   }
 }

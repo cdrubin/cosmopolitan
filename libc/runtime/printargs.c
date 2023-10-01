@@ -32,6 +32,7 @@
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/promises.internal.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/cpuid4.internal.h"
 #include "libc/nexgen32e/kcpuids.h"
@@ -63,57 +64,14 @@
 #include "tool/decode/lib/idname.h"
 #include "tool/decode/lib/x86idnames.h"
 
-STATIC_YOINK("strerror");   // for kprintf()
-STATIC_YOINK("strsignal");  // for kprintf()
+__static_yoink("strerror");   // for kprintf()
+__static_yoink("strsignal");  // for kprintf()
 
 #define PRINT(FMT, ...)               \
   do {                                \
     kprintf(prologue);                \
     kprintf(FMT "\n", ##__VA_ARGS__); \
   } while (0)
-
-static const struct AuxiliaryValue {
-  const char *fmt;
-  long *id;
-  const char *name;
-} kAuxiliaryValues[] = {
-    {"%-14p", &AT_EXECFD, "AT_EXECFD"},
-    {"%-14p", &AT_PHDR, "AT_PHDR"},
-    {"%-14p", &AT_PHENT, "AT_PHENT"},
-    {"%-14p", &AT_PHNUM, "AT_PHNUM"},
-    {"%-14p", &AT_PAGESZ, "AT_PAGESZ"},
-    {"%-14p", &AT_BASE, "AT_BASE"},
-    {"%-14p", &AT_ENTRY, "AT_ENTRY"},
-    {"%-14p", &AT_NOTELF, "AT_NOTELF"},
-    {"%-14d", &AT_UID, "AT_UID"},
-    {"%-14d", &AT_EUID, "AT_EUID"},
-    {"%-14d", &AT_GID, "AT_GID"},
-    {"%-14d", &AT_EGID, "AT_EGID"},
-    {"%-14d", &AT_CLKTCK, "AT_CLKTCK"},
-    {"%-14d", &AT_OSRELDATE, "AT_OSRELDATE"},
-    {"%-14p", &AT_PLATFORM, "AT_PLATFORM"},
-    {"%-14p", &AT_DCACHEBSIZE, "AT_DCACHEBSIZE"},
-    {"%-14p", &AT_ICACHEBSIZE, "AT_ICACHEBSIZE"},
-    {"%-14p", &AT_UCACHEBSIZE, "AT_UCACHEBSIZE"},
-    {"%-14p", &AT_SECURE, "AT_SECURE"},
-    {"%-14s", &AT_BASE_PLATFORM, "AT_BASE_PLATFORM"},
-    {"%-14p", &AT_RANDOM, "AT_RANDOM"},
-    {"%-14s", &AT_EXECFN, "AT_EXECFN"},
-    {"%-14p", &AT_SYSINFO_EHDR, "AT_SYSINFO_EHDR"},
-    {"%-14p", &AT_FLAGS, "AT_FLAGS"},
-    {"%-14p", &AT_HWCAP, "AT_HWCAP"},
-    {"%-14p", &AT_HWCAP2, "AT_HWCAP2"},
-    {"%-14p", &AT_STACKBASE, "AT_STACKBASE"},
-    {"%-14p", &AT_CANARY, "AT_CANARY"},
-    {"%-14p", &AT_CANARYLEN, "AT_CANARYLEN"},
-    {"%-14ld", &AT_NCPUS, "AT_NCPUS"},
-    {"%-14p", &AT_PAGESIZES, "AT_PAGESIZES"},
-    {"%-14d", &AT_PAGESIZESLEN, "AT_PAGESIZESLEN"},
-    {"%-14p", &AT_TIMEKEEP, "AT_TIMEKEEP"},
-    {"%-14p", &AT_STACKPROT, "AT_STACKPROT"},
-    {"%-14p", &AT_EHDRFLAGS, "AT_EHDRFLAGS"},
-    {"%-14d", &AT_MINSIGSTKSZ, "AT_MINSIGSTKSZ"},
-};
 
 static const char *FindNameById(const struct IdName *names, unsigned long id) {
   for (; names->name; names++) {
@@ -124,17 +82,7 @@ static const char *FindNameById(const struct IdName *names, unsigned long id) {
   return NULL;
 }
 
-static const struct AuxiliaryValue *DescribeAuxv(unsigned long x) {
-  int i;
-  for (i = 0; i < ARRAYLEN(kAuxiliaryValues); ++i) {
-    if (*kAuxiliaryValues[i].id && x == *kAuxiliaryValues[i].id) {
-      return kAuxiliaryValues + i;
-    }
-  }
-  return NULL;
-}
-
-static noasan void PrintDependencies(const char *prologue) {
+static void PrintDependencies(const char *prologue) {
   struct NtLinkedList *head = &NtGetPeb()->Ldr->InLoadOrderModuleList;
   struct NtLinkedList *ldr = head->Next;
   do {
@@ -145,7 +93,17 @@ static noasan void PrintDependencies(const char *prologue) {
   } while ((ldr = ldr->Next) && ldr != head);
 }
 
-static noasan void Print(const char *prologue) {
+static void Print(const char *prologue) {
+}
+
+static const char *ConvertCcToStr(int cc) {
+  if (cc == _POSIX_VDISABLE) {
+    return "_POSIX_VDISABLE";
+  } else {
+    static char buf[8] = "CTRL-";
+    buf[5] = CTRL(cc);
+    return buf;
+  }
 }
 
 /**
@@ -158,23 +116,73 @@ static noasan void Print(const char *prologue) {
  * @param prologue needs to be a .rodata kprintf string
  */
 textstartup void __printargs(const char *prologue) {
-  long key;
+
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
+  union {
+    char path[PATH_MAX];
+    struct pollfd pfds[128];
+  } u;
+  CheckLargeStackAllocation(&u, sizeof(u));
+#pragma GCC pop_options
+
+  const struct AuxiliaryValue {
+    const char *fmt;
+    unsigned long id;
+    const char *name;
+  } kAuxiliaryValues[] = {
+      {"%-14p", AT_EXECFD, "AT_EXECFD"},
+      {"%-14p", AT_PHDR, "AT_PHDR"},
+      {"%-14p", AT_PHENT, "AT_PHENT"},
+      {"%-14p", AT_PHNUM, "AT_PHNUM"},
+      {"%-14p", AT_PAGESZ, "AT_PAGESZ"},
+      {"%-14p", AT_BASE, "AT_BASE"},
+      {"%-14p", AT_ENTRY, "AT_ENTRY"},
+      {"%-14p", AT_NOTELF, "AT_NOTELF"},
+      {"%-14d", AT_UID, "AT_UID"},
+      {"%-14d", AT_EUID, "AT_EUID"},
+      {"%-14d", AT_GID, "AT_GID"},
+      {"%-14d", AT_EGID, "AT_EGID"},
+      {"%-14d", AT_CLKTCK, "AT_CLKTCK"},
+      {"%-14d", AT_OSRELDATE, "AT_OSRELDATE"},
+      {"%-14p", AT_PLATFORM, "AT_PLATFORM"},
+      {"%-14p", AT_DCACHEBSIZE, "AT_DCACHEBSIZE"},
+      {"%-14p", AT_ICACHEBSIZE, "AT_ICACHEBSIZE"},
+      {"%-14p", AT_UCACHEBSIZE, "AT_UCACHEBSIZE"},
+      {"%-14p", AT_SECURE, "AT_SECURE"},
+      {"%-14s", AT_BASE_PLATFORM, "AT_BASE_PLATFORM"},
+      {"%-14p", AT_RANDOM, "AT_RANDOM"},
+      {"%-14s", AT_EXECFN, "AT_EXECFN"},
+      {"%-14p", AT_SYSINFO_EHDR, "AT_SYSINFO_EHDR"},
+      {"%-14p", AT_FLAGS, "AT_FLAGS"},
+      {"%-14p", AT_HWCAP, "AT_HWCAP"},
+      {"%-14p", AT_HWCAP2, "AT_HWCAP2"},
+      {"%-14p", AT_STACKBASE, "AT_STACKBASE"},
+      {"%-14p", AT_CANARY, "AT_CANARY"},
+      {"%-14p", AT_CANARYLEN, "AT_CANARYLEN"},
+      {"%-14ld", AT_NCPUS, "AT_NCPUS"},
+      {"%-14p", AT_PAGESIZES, "AT_PAGESIZES"},
+      {"%-14d", AT_PAGESIZESLEN, "AT_PAGESIZESLEN"},
+      {"%-14p", AT_TIMEKEEP, "AT_TIMEKEEP"},
+      {"%-14p", AT_STACKPROT, "AT_STACKPROT"},
+      {"%-14p", AT_EHDRFLAGS, "AT_EHDRFLAGS"},
+      {"%-14d", AT_MINSIGSTKSZ, "AT_MINSIGSTKSZ"},
+  };
+
+  int e, x;
   char **env;
   sigset_t ss;
   bool gotsome;
-  int e, x, flags;
+  unsigned i, n;
   uintptr_t *auxp;
-  unsigned i, n, b;
   struct rlimit rlim;
   struct utsname uts;
   struct sigaction sa;
   struct sched_param sp;
   struct termios termios;
-  struct AuxiliaryValue *auxinfo;
-  union {
-    char path[PATH_MAX];
-    struct pollfd pfds[128];
-  } u;
+  const struct AuxiliaryValue *auxinfo;
+
+  (void)x;
 
   if (!PLEDGED(STDIO)) return;
 
@@ -272,7 +280,9 @@ textstartup void __printargs(const char *prologue) {
   if (X86_HAVE(LA57)) kprintf(" LA57");
   if (X86_HAVE(FSGSBASE)) kprintf(" FSGSBASE");
 #elif defined(__aarch64__)
-  PRINT("  AARCH64");
+  kprintf("  AARCH64\n");
+#else
+  kprintf("\n");
 #endif
 
   PRINT("");
@@ -283,9 +293,11 @@ textstartup void __printargs(const char *prologue) {
   }
   if ((n = poll(u.pfds, ARRAYLEN(u.pfds), 0)) != -1) {
     for (i = 0; i < ARRAYLEN(u.pfds); ++i) {
+      char oflagbuf[128];
       if (i && (u.pfds[i].revents & POLLNVAL)) continue;
-      PRINT(" ☼ %d (revents=%#hx fcntl(F_GETFL)=%#x isatty()=%hhhd)", i,
-            u.pfds[i].revents, fcntl(i, F_GETFL), isatty(i));
+      PRINT(" ☼ %d (revents=%#hx fcntl(F_GETFL)=%s isatty()=%hhhd)", i,
+            u.pfds[i].revents, (DescribeOpenFlags)(oflagbuf, fcntl(i, F_GETFL)),
+            isatty(i));
     }
   } else {
     PRINT("  poll() returned %d %m", n);
@@ -348,7 +360,7 @@ textstartup void __printargs(const char *prologue) {
     PRINT("");
     PRINT("CAPABILITIES");
     if (prctl(PR_CAPBSET_READ, 0) != -1) {
-      for (gotsome = i = 0; i <= CAP_LAST_CAP; ++i) {
+      for (gotsome = false, i = 0; i <= CAP_LAST_CAP; ++i) {
         if (prctl(PR_CAPBSET_READ, i) == 1) {
           char buf[64];
           PRINT(" ☼ %s", (DescribeCapability)(buf, i));
@@ -365,7 +377,7 @@ textstartup void __printargs(const char *prologue) {
 
   PRINT("");
   PRINT("RESOURCE LIMITS");
-  for (gotsome = i = 0; i < RLIM_NLIMITS; ++i) {
+  for (gotsome = false, i = 0; i < RLIM_NLIMITS; ++i) {
     if (!getrlimit(i, &rlim)) {
       char buf[20];
       if (rlim.rlim_cur == RLIM_INFINITY) rlim.rlim_cur = -1;
@@ -386,6 +398,7 @@ textstartup void __printargs(const char *prologue) {
   PRINT(" ☼ %p __oldstack ptr", __oldstack);
   PRINT(" ☼ %p __oldstack bot", ROUNDDOWN(__oldstack, foss_stack_size));
   PRINT(" ☼ %p __builtin_frame_address(0)", __builtin_frame_address(0));
+  PRINT(" ☼ %p GetStackPointer()", GetStackPointer());
 
   PRINT("");
   PRINT("ARGUMENTS (%p)", __argv);
@@ -412,7 +425,14 @@ textstartup void __printargs(const char *prologue) {
   if (*__auxv) {
     if (*__auxv) {
       for (auxp = __auxv; *auxp; auxp += 2) {
-        if ((auxinfo = DescribeAuxv(auxp[0]))) {
+        auxinfo = 0;
+        for (i = 0; i < ARRAYLEN(kAuxiliaryValues); ++i) {
+          if (kAuxiliaryValues[i].id && auxp[0] == kAuxiliaryValues[i].id) {
+            auxinfo = kAuxiliaryValues + i;
+            break;
+          }
+        }
+        if (auxinfo) {
           ksnprintf(u.path, sizeof(u.path), auxinfo->fmt, auxp[1]);
           PRINT(" ☼ %16s[%4ld] = %s", auxinfo->name, auxp[0], u.path);
         } else {
@@ -436,18 +456,23 @@ textstartup void __printargs(const char *prologue) {
   PRINT(" ☼ %s = %d", "geteuid()", geteuid());
   PRINT(" ☼ %s = %d", "getgid()", getgid());
   PRINT(" ☼ %s = %d", "getegid()", getegid());
-  PRINT(" ☼ %s = %#s", "kTmpPath", kTmpPath);
+  PRINT(" ☼ %s = %#s", "__get_tmpdir()", __get_tmpdir());
 #ifdef __x86_64__
   PRINT(" ☼ %s = %#s", "kNtSystemDirectory", kNtSystemDirectory);
   PRINT(" ☼ %s = %#s", "kNtWindowsDirectory", kNtWindowsDirectory);
 #endif
+  PRINT(" ☼ %s = %#s", "__argv[0]", __argv[0]);
+  PRINT(" ☼ %s = %#s", "getenv(\"_\")", getenv("_"));
+  PRINT(" ☼ %s = %#s", "getauxval(AT_EXECFN)", getauxval(AT_EXECFN));
   PRINT(" ☼ %s = %#s", "GetProgramExecutableName", GetProgramExecutableName());
   PRINT(" ☼ %s = %#s", "GetInterpreterExecutableName",
         GetInterpreterExecutableName(u.path, sizeof(u.path)));
-  PRINT(" ☼ %s = %p", "RSP", __builtin_frame_address(0));
-  PRINT(" ☼ %s = %p", "GetStackAddr()", GetStackAddr());
-  PRINT(" ☼ %s = %p", "GetStaticStackAddr(0)", GetStaticStackAddr(0));
   PRINT(" ☼ %s = %p", "GetStackSize()", GetStackSize());
+  PRINT(" ☼ %s = %p", "GetGuardSize()", GetGuardSize());
+  PRINT(" ☼ %s = %p", "GetStackAddr()", GetStackAddr());
+  PRINT(" ☼ %s = %p", "GetStaticStackSize()", GetStaticStackSize());
+  PRINT(" ☼ %s = %p", "GetStaticStackAddr(0)", GetStaticStackAddr(0));
+  PRINT(" ☼ %s = %p", "__builtin_frame_address(0)", __builtin_frame_address(0));
 
   PRINT("");
   PRINT("MEMTRACK");
@@ -465,11 +490,15 @@ textstartup void __printargs(const char *prologue) {
       } else {
         PRINT("  - stderr");
       }
-      kprintf(prologue);
+      errno = 0;
+      PRINT("    isatty = %d% m", isatty(i));
       if (!tcgetwinsize(i, &ws)) {
-        kprintf("    ws_row = %d\n", ws.ws_row);
-        kprintf("    ws_col = %d\n", ws.ws_col);
+        PRINT("    ws_row = %d", ws.ws_row);
+        PRINT("    ws_col = %d", ws.ws_col);
+      } else {
+        PRINT("    tcgetwinsize = %s", strerror(errno));
       }
+      kprintf(prologue);
       kprintf("    c_iflag =");
       if (termios.c_iflag & IGNBRK) kprintf(" IGNBRK");
       if (termios.c_iflag & BRKINT) kprintf(" BRKINT");
@@ -497,46 +526,34 @@ textstartup void __printargs(const char *prologue) {
       if (termios.c_oflag & OFILL) kprintf(" OFILL");
       if (termios.c_oflag & OFDEL) kprintf(" OFDEL");
       if (termios.c_oflag & OLCUC) kprintf(" OLCUC");
-      if ((termios.c_oflag & NLDLY) == NL0) {
-        kprintf(" NL0");
-      } else if ((termios.c_oflag & NLDLY) == NL1) {
+      if ((termios.c_oflag & NLDLY) == NL1) {
         kprintf(" NL1");
       } else if ((termios.c_oflag & NLDLY) == NL2) {
         kprintf(" NL2");
       } else if ((termios.c_oflag & NLDLY) == NL3) {
         kprintf(" NL3");
       }
-      if ((termios.c_oflag & CRDLY) == CR0) {
-        kprintf(" CR0");
-      } else if ((termios.c_oflag & CRDLY) == CR1) {
+      if ((termios.c_oflag & CRDLY) == CR1) {
         kprintf(" CR1");
       } else if ((termios.c_oflag & CRDLY) == CR2) {
         kprintf(" CR2");
       } else if ((termios.c_oflag & CRDLY) == CR3) {
         kprintf(" CR3");
       }
-      if ((termios.c_oflag & TABDLY) == TAB0) {
-        kprintf(" TAB0");
-      } else if ((termios.c_oflag & TABDLY) == TAB1) {
+      if ((termios.c_oflag & TABDLY) == TAB1) {
         kprintf(" TAB1");
       } else if ((termios.c_oflag & TABDLY) == TAB2) {
         kprintf(" TAB2");
       } else if ((termios.c_oflag & TABDLY) == TAB3) {
         kprintf(" TAB3");
       }
-      if ((termios.c_oflag & BSDLY) == BS0) {
-        kprintf(" BS0");
-      } else if ((termios.c_oflag & BSDLY) == BS1) {
+      if ((termios.c_oflag & BSDLY) == BS1) {
         kprintf(" BS1");
       }
-      if ((termios.c_oflag & VTDLY) == VT0) {
-        kprintf(" VT0");
-      } else if ((termios.c_oflag & VTDLY) == VT1) {
+      if ((termios.c_oflag & VTDLY) == VT1) {
         kprintf(" VT1");
       }
-      if ((termios.c_oflag & FFDLY) == FF0) {
-        kprintf(" FF0");
-      } else if ((termios.c_oflag & FFDLY) == FF1) {
+      if ((termios.c_oflag & FFDLY) == FF1) {
         kprintf(" FF1");
       }
       kprintf("\n");
@@ -557,67 +574,6 @@ textstartup void __printargs(const char *prologue) {
         kprintf(" CS7");
       } else if ((termios.c_cflag & CSIZE) == CS8) {
         kprintf(" CS8");
-      }
-
-      b = cfgetospeed(&termios);
-      if (b == B0) {
-        kprintf(" B0");
-      } else if (b == B50) {
-        kprintf(" B50");
-      } else if (b == B75) {
-        kprintf(" B75");
-      } else if (b == B110) {
-        kprintf(" B110");
-      } else if (b == B134) {
-        kprintf(" B134");
-      } else if (b == B150) {
-        kprintf(" B150");
-      } else if (b == B200) {
-        kprintf(" B200");
-      } else if (b == B300) {
-        kprintf(" B300");
-      } else if (b == B600) {
-        kprintf(" B600");
-      } else if (b == B1200) {
-        kprintf(" B1200");
-      } else if (b == B1800) {
-        kprintf(" B1800");
-      } else if (b == B2400) {
-        kprintf(" B2400");
-      } else if (b == B4800) {
-        kprintf(" B4800");
-      } else if (b == B9600) {
-        kprintf(" B9600");
-      } else if (b == B19200) {
-        kprintf(" B19200");
-      } else if (b == B38400) {
-        kprintf(" B38400");
-      } else if (b == B57600) {
-        kprintf(" B57600");
-      } else if (b == B115200) {
-        kprintf(" B115200");
-      } else if (b == B230400) {
-        kprintf(" B230400");
-      } else if (b == B500000) {
-        kprintf(" B500000");
-      } else if (b == B576000) {
-        kprintf(" B576000");
-      } else if (b == B1000000) {
-        kprintf(" B1000000");
-      } else if (b == B1152000) {
-        kprintf(" B1152000");
-      } else if (b == B1500000) {
-        kprintf(" B1500000");
-      } else if (b == B2000000) {
-        kprintf(" B2000000");
-      } else if (b == B2500000) {
-        kprintf(" B2500000");
-      } else if (b == B3000000) {
-        kprintf(" B3000000");
-      } else if (b == B3500000) {
-        kprintf(" B3500000");
-      } else if (b == B4000000) {
-        kprintf(" B4000000");
       }
       kprintf("\n");
       kprintf(prologue);
@@ -642,21 +598,21 @@ textstartup void __printargs(const char *prologue) {
       PRINT("    cfgetospeed()  = %u", cfgetospeed(&termios));
       PRINT("    c_cc[VMIN]     = %d", termios.c_cc[VMIN]);
       PRINT("    c_cc[VTIME]    = %d", termios.c_cc[VTIME]);
-      PRINT("    c_cc[VINTR]    = CTRL-%c", CTRL(termios.c_cc[VINTR]));
-      PRINT("    c_cc[VQUIT]    = CTRL-%c", CTRL(termios.c_cc[VQUIT]));
-      PRINT("    c_cc[VERASE]   = CTRL-%c", CTRL(termios.c_cc[VERASE]));
-      PRINT("    c_cc[VKILL]    = CTRL-%c", CTRL(termios.c_cc[VKILL]));
-      PRINT("    c_cc[VEOF]     = CTRL-%c", CTRL(termios.c_cc[VEOF]));
-      PRINT("    c_cc[VSTART]   = CTRL-%c", CTRL(termios.c_cc[VSTART]));
-      PRINT("    c_cc[VSTOP]    = CTRL-%c", CTRL(termios.c_cc[VSTOP]));
-      PRINT("    c_cc[VSUSP]    = CTRL-%c", CTRL(termios.c_cc[VSUSP]));
-      PRINT("    c_cc[VEOL]     = CTRL-%c", CTRL(termios.c_cc[VEOL]));
-      PRINT("    c_cc[VSWTC]    = CTRL-%c", CTRL(termios.c_cc[VSWTC]));
-      PRINT("    c_cc[VREPRINT] = CTRL-%c", CTRL(termios.c_cc[VREPRINT]));
-      PRINT("    c_cc[VDISCARD] = CTRL-%c", CTRL(termios.c_cc[VDISCARD]));
-      PRINT("    c_cc[VWERASE]  = CTRL-%c", CTRL(termios.c_cc[VWERASE]));
-      PRINT("    c_cc[VLNEXT]   = CTRL-%c", CTRL(termios.c_cc[VLNEXT]));
-      PRINT("    c_cc[VEOL2]    = CTRL-%c", CTRL(termios.c_cc[VEOL2]));
+      PRINT("    c_cc[VINTR]    = %s", ConvertCcToStr(termios.c_cc[VINTR]));
+      PRINT("    c_cc[VQUIT]    = %s", ConvertCcToStr(termios.c_cc[VQUIT]));
+      PRINT("    c_cc[VERASE]   = %s", ConvertCcToStr(termios.c_cc[VERASE]));
+      PRINT("    c_cc[VKILL]    = %s", ConvertCcToStr(termios.c_cc[VKILL]));
+      PRINT("    c_cc[VEOF]     = %s", ConvertCcToStr(termios.c_cc[VEOF]));
+      PRINT("    c_cc[VSTART]   = %s", ConvertCcToStr(termios.c_cc[VSTART]));
+      PRINT("    c_cc[VSTOP]    = %s", ConvertCcToStr(termios.c_cc[VSTOP]));
+      PRINT("    c_cc[VSUSP]    = %s", ConvertCcToStr(termios.c_cc[VSUSP]));
+      PRINT("    c_cc[VSWTC]    = %s", ConvertCcToStr(termios.c_cc[VSWTC]));
+      PRINT("    c_cc[VREPRINT] = %s", ConvertCcToStr(termios.c_cc[VREPRINT]));
+      PRINT("    c_cc[VDISCARD] = %s", ConvertCcToStr(termios.c_cc[VDISCARD]));
+      PRINT("    c_cc[VWERASE]  = %s", ConvertCcToStr(termios.c_cc[VWERASE]));
+      PRINT("    c_cc[VLNEXT]   = %s", ConvertCcToStr(termios.c_cc[VLNEXT]));
+      PRINT("    c_cc[VEOL]     = %s", ConvertCcToStr(termios.c_cc[VEOL]));
+      PRINT("    c_cc[VEOL2]    = %s", ConvertCcToStr(termios.c_cc[VEOL2]));
     } else {
       PRINT("  - tcgetattr(%d) failed %m", i);
     }

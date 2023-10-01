@@ -20,6 +20,8 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/cxaatexit.internal.h"
 #include "libc/intrin/safemacros.internal.h"
@@ -46,17 +48,59 @@
 #define N 1024
 #define M 20
 
-void SetUp(void) {
-  // TODO(jart): what is wrong?
-  if (IsWindows()) exit(0);
+TEST(malloc, zero) {
+  char *p;
+  ASSERT_NE(NULL, (p = malloc(0)));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p, 1));
+  free(p);
 }
 
-TEST(malloc, zeroMeansOne) {
-  ASSERT_GE(malloc_usable_size(gc(malloc(0))), 1);
+TEST(realloc, bothAreZero_createsMinimalAllocation) {
+  char *p;
+  ASSERT_NE(NULL, (p = realloc(0, 0)));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p, 1));
+  free(p);
 }
 
-TEST(calloc, zerosMeansOne) {
-  ASSERT_GE(malloc_usable_size(gc(calloc(0, 0))), 1);
+TEST(realloc, ptrIsZero_createsAllocation) {
+  char *p;
+  ASSERT_NE(NULL, (p = realloc(0, 1)));
+  if (IsAsan()) ASSERT_TRUE(__asan_is_valid(p, 1));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p + 1, 1));
+  ASSERT_EQ(p, realloc(p, 0));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p, 1));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p + 1, 1));
+  free(p);
+}
+
+TEST(realloc, sizeIsZero_shrinksAllocation) {
+  char *p;
+  ASSERT_NE(NULL, (p = malloc(1)));
+  if (IsAsan()) ASSERT_TRUE(__asan_is_valid(p, 1));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p + 1, 1));
+  ASSERT_EQ(p, realloc(p, 0));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p, 1));
+  if (IsAsan()) ASSERT_FALSE(__asan_is_valid(p + 1, 1));
+  free(p);
+}
+
+TEST(realloc_in_place, test) {
+  char *x = malloc(16);
+  EXPECT_EQ(x, realloc_in_place(x, 0));
+  EXPECT_EQ(x, realloc_in_place(x, 1));
+  *x = 2;
+  free(x);
+}
+
+BENCH(realloc_in_place, bench) {
+  volatile int i = 1000;
+  char *volatile x = malloc(i);
+  EZBENCH2("malloc", donothing, free(malloc(i)));
+  EZBENCH2("memalign", donothing, free(memalign(16, i)));
+  EZBENCH2("memalign", donothing, free(memalign(32, i)));
+  EZBENCH2("realloc", donothing, x = realloc(x, --i));
+  EZBENCH2("realloc_in_place", donothing, realloc_in_place(x, --i));
+  free(x);
 }
 
 void AppendStuff(char **p, size_t *n) {
@@ -67,10 +111,11 @@ void AppendStuff(char **p, size_t *n) {
 }
 
 TEST(malloc, test) {
+  size_t n;
   char *big = 0;
-  size_t n, bigsize = 0;
   static struct stat st;
-  static volatile int i, j, k, *A[4096], fds[M], *maps[M], mapsizes[M];
+  static int *A[4096], *maps[M];
+  static int i, j, k, fds[M], mapsizes[M];
   memset(fds, -1, sizeof(fds));
   memset(maps, -1, sizeof(maps));
   for (i = 0; i < N * M; ++i) {
@@ -165,7 +210,7 @@ void *Worker(void *arg) {
 }
 
 BENCH(malloc, torture) {
-  int i, n = _getcpucount() * 2;
+  int i, n = __get_cpu_count() * 2;
   pthread_t *t = _gc(malloc(sizeof(pthread_t) * n));
   if (!n) return;
   printf("\nmalloc torture test w/ %d threads and %d iterations\n", n,

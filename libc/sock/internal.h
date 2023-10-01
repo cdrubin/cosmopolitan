@@ -36,8 +36,8 @@ struct SockFd {
 
 errno_t __dos2errno(uint32_t);
 
-int32_t __sys_accept(int32_t, void *, uint32_t *, int) dontdiscard;
-int32_t __sys_accept4(int32_t, void *, uint32_t *, int) dontdiscard;
+int32_t __sys_accept(int32_t, void *, uint32_t *, int) __wur;
+int32_t __sys_accept4(int32_t, void *, uint32_t *, int) __wur;
 int32_t __sys_bind(int32_t, const void *, uint32_t);
 int32_t __sys_connect(int32_t, const void *, uint32_t);
 int32_t __sys_getpeername(int32_t, void *, uint32_t *);
@@ -45,7 +45,7 @@ int32_t __sys_getsockname(int32_t, void *, uint32_t *);
 int32_t __sys_socket(int32_t, int32_t, int32_t);
 int32_t __sys_socketpair(int32_t, int32_t, int32_t, int32_t[2]);
 
-int32_t sys_accept4(int32_t, struct sockaddr_storage *, int) dontdiscard;
+int32_t sys_accept4(int32_t, struct sockaddr_storage *, int) __wur;
 int32_t sys_bind(int32_t, const void *, uint32_t);
 int32_t sys_connect(int32_t, const void *, uint32_t);
 int32_t sys_getsockopt(int32_t, int32_t, int32_t, void *, uint32_t *);
@@ -80,7 +80,7 @@ int sys_select_nt(int, fd_set *, fd_set *, fd_set *, struct timeval *,
 size_t __iovec2nt(struct NtIovec[hasatleast 16], const struct iovec *, size_t);
 
 void WinSockInit(void);
-int64_t __winsockerr(void) nocallback;
+int64_t __winsockerr(void);
 int __fixupnewsockfd(int, int);
 int64_t __winsockblock(int64_t, unsigned, int64_t, uint32_t);
 struct SockFd *_dupsockfd(struct SockFd *);

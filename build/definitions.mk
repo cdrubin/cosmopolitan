@@ -61,7 +61,6 @@ ZFLAGS ?=
 XARGS ?= xargs -P4 -rs8000
 DOT ?= dot
 CLANG = clang
-FC = gfortran  #/opt/cross9f/bin/x86_64-linux-musl-gfortran
 TMPDIR = o/tmp
 
 AR = build/bootstrap/ar.com
@@ -75,6 +74,7 @@ PKG = build/bootstrap/package.com
 MKDEPS = build/bootstrap/mkdeps.com
 ZIPOBJ = build/bootstrap/zipobj.com
 ZIPCOPY = build/bootstrap/zipcopy.com
+PECHECK = build/bootstrap/pecheck.com
 FIXUPOBJ = build/bootstrap/fixupobj.com
 MKDIR = build/bootstrap/mkdir.com -p
 COMPILE = build/bootstrap/compile.com -V9 -P4096 $(QUOTA)
@@ -82,16 +82,14 @@ COMPILE = build/bootstrap/compile.com -V9 -P4096 $(QUOTA)
 COMMA := ,
 PWD := $(shell build/bootstrap/pwd.com)
 
-IGNORE := $(shell $(ECHO) -2 ♥cosmo)
 IGNORE := $(shell $(MKDIR) $(TMPDIR))
 
 ifneq ($(findstring aarch64,$(MODE)),)
 ARCH = aarch64
-VM = o/third_party/qemu/qemu-aarch64
 HOSTS ?= pi silicon
 else
 ARCH = x86_64
-HOSTS ?= freebsd openbsd openbsd73 netbsd rhel7 rhel5 xnu win10
+HOSTS ?= freebsd rhel7 rhel5 xnu win10 openbsd netbsd
 endif
 
 ifeq ($(PREFIX),)
@@ -137,12 +135,6 @@ else
 TMPSAFE = $(TMPDIR)/
 endif
 
-ifeq ($(ARCH), aarch64)
-IMAGE_BASE_VIRTUAL ?= 0x010000000000
-else
-IMAGE_BASE_VIRTUAL ?= 0x400000
-endif
-
 BACKTRACES =								\
 	-fno-optimize-sibling-calls					\
 	-mno-omit-leaf-frame-pointer
@@ -155,9 +147,11 @@ SANITIZER =								\
 	-fsanitize=address
 
 NO_MAGIC =								\
+	-ffreestanding							\
 	-fno-stack-protector						\
 	-fwrapv								\
-	-fno-sanitize=all
+	-fno-sanitize=all						\
+	-fpatchable-function-entry=0,0
 
 OLD_CODE =								\
 	-fno-strict-aliasing						\
@@ -187,6 +181,10 @@ DEFAULT_COPTS ?=							\
 	-fno-asynchronous-unwind-tables
 
 ifeq ($(ARCH), x86_64)
+# Microsoft says "[a]ny memory below the stack beyond the red zone
+# [note: Windows defines the x64 red zone size as 0] is considered
+# volatile and may be modified by the operating system at any time."
+# https://devblogs.microsoft.com/oldnewthing/20190111-00/?p=100685
 DEFAULT_COPTS +=							\
 	-mno-red-zone							\
 	-mno-tls-direct-seg-refs
@@ -200,6 +198,9 @@ ifeq ($(ARCH), aarch64)
 # - Cosmopolitan Libc uses x28 for thread-local storage because Apple
 #   forbids us from using tpidr_el0 too.
 #
+# - Cosmopolitan currently lacks an implementation of the runtime
+#   libraries needed by the -moutline-atomics flag
+#
 DEFAULT_COPTS +=							\
 	-ffixed-x18							\
 	-ffixed-x28							\
@@ -211,9 +212,8 @@ MATHEMATICAL =								\
 	-fwrapv
 
 DEFAULT_CPPFLAGS +=							\
-	-DCOSMO								\
+	-D_COSMO_SOURCE							\
 	-DMODE='"$(MODE)"'						\
-	-DIMAGE_BASE_VIRTUAL=$(IMAGE_BASE_VIRTUAL)			\
 	-nostdinc							\
 	-iquote .
 
@@ -224,7 +224,6 @@ DEFAULT_CXXFLAGS =							\
 	-fno-rtti							\
 	-fno-exceptions							\
 	-fuse-cxa-atexit						\
-	-fno-threadsafe-statics						\
 	-Wno-int-in-bool-context					\
 	-Wno-narrowing							\
 	-Wno-literal-suffix
@@ -252,7 +251,7 @@ DEFAULT_LDFLAGS +=							\
 	-znorelro
 else
 DEFAULT_LDFLAGS +=							\
-	-zmax-page-size=0x10000						\
+	-zmax-page-size=0x4000						\
 	-zcommon-page-size=0x1000
 endif
 
@@ -334,8 +333,6 @@ LD.libs =								\
 
 COMPILE.c.flags = $(cc.flags) $(copt.flags) $(cpp.flags) $(c.flags)
 COMPILE.cxx.flags = $(cc.flags) $(copt.flags) $(cpp.flags) $(cxx.flags)
-COMPILE.f.flags = $(cc.flags) $(copt.flags) $(f.flags)
-COMPILE.F.flags = $(cc.flags) $(copt.flags) $(cpp.flags) $(f.flags)
 COMPILE.i.flags = $(cc.flags) $(copt.flags) $(c.flags)
 COMPILE.ii.flags = $(cc.flags) $(copt.flags) $(cxx.flags)
 LINK.flags = $(DEFAULT_LDFLAGS) $(CONFIG_LDFLAGS) $(LDFLAGS)
@@ -343,20 +340,14 @@ OBJECTIFY.c.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags) $(copt.flags)
 OBJECTIFY.cxx.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags) $(copt.flags) $(cxx.flags)
 OBJECTIFY.s.flags = $(ASONLYFLAGS) $(s.flags)
 OBJECTIFY.S.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags)
-OBJECTIFY.f.flags = $(cc.flags) $(o.flags) $(S.flags) $(f.flags)
-OBJECTIFY.F.flags = $(cc.flags) $(o.flags) $(S.flags) $(cpp.flags) $(copt.flags) $(f.flags)
 PREPROCESS.flags = -E $(copt.flags) $(cc.flags) $(cpp.flags)
 PREPROCESS.lds.flags = -D__LINKER__ $(filter-out -g%,$(PREPROCESS.flags)) -P -xc
 
 COMPILE.c = $(CC) -S $(COMPILE.c.flags)
 COMPILE.cxx = $(CXX) -S $(COMPILE.cxx.flags)
 COMPILE.i = $(CC) -S $(COMPILE.i.flags)
-COMPILE.f = $(FC) -S $(COMPILE.f.flags)
-COMPILE.F = $(FC) -S $(COMPILE.F.flags)
 OBJECTIFY.s = $(AS) $(OBJECTIFY.s.flags)
 OBJECTIFY.S = $(CC) $(OBJECTIFY.S.flags) -c
-OBJECTIFY.f = $(FC) $(OBJECTIFY.f.flags) -c
-OBJECTIFY.F = $(FC) $(OBJECTIFY.F.flags) -c
 OBJECTIFY.c = $(CC) $(OBJECTIFY.c.flags) -c
 OBJECTIFY.cxx = $(CXX) $(OBJECTIFY.cxx.flags) -c
 PREPROCESS = $(CC) $(PREPROCESS.flags)
@@ -365,7 +356,6 @@ LINK = $(LD) $(LINK.flags)
 ELF = o/libc/elf/elf.lds
 ELFLINK = $(COMPILE) -ALINK.elf $(LINK) $(LINKARGS) $(OUTPUT_OPTION) && $(COMPILE) -AFIXUP.ape -T$@ $(FIXUPOBJ) $@
 LINKARGS = $(patsubst %.lds,-T %.lds,$(call uniqr,$(LD.libs) $(filter-out %.pkg,$^)))
-LOLSAN = build/lolsan -b $(IMAGE_BASE_VIRTUAL)
 
 # The compiler won't generate %xmm code for sources extensioned .greg.c,
 # which is needed for C modules wanting to run at the executive level or
@@ -381,68 +371,6 @@ OBJECTIFY.greg.c =							\
 	-fno-sanitize=all						\
 	-ffreestanding							\
 	-fwrapv								\
-	-c
-
-OBJECTIFY.ansi.c = $(CC) $(OBJECTIFY.c.flags) -ansi -Wextra -Werror -pedantic-errors -c
-OBJECTIFY.c99.c = $(CC) $(OBJECTIFY.c.flags) -std=c99 -Wextra -Werror -pedantic-errors -c
-OBJECTIFY.c11.c = $(CC) $(OBJECTIFY.c.flags) -std=c11 -Wextra -Werror -pedantic-errors -c
-OBJECTIFY.c2x.c = $(CC) $(OBJECTIFY.c.flags) -std=c2x -Wextra -Werror -pedantic-errors -c
-
-OBJECTIFY.real.c =							\
-	$(GCC)								\
-	-x-no-pg							\
-	$(OBJECTIFY.c.flags)						\
-	-wrapper build/realify.sh					\
-	-D__REAL_MODE__							\
-	-ffixed-r8							\
-	-ffixed-r9							\
-	-ffixed-r10							\
-	-ffixed-r11							\
-	-ffixed-r12							\
-	-ffixed-r13							\
-	-ffixed-r14							\
-	-ffixed-r15							\
-	-mno-red-zone							\
-	-fcall-used-rbx							\
-	-fno-jump-tables						\
-	-fno-shrink-wrap						\
-	-fno-schedule-insns2						\
-	-flive-range-shrinkage						\
-	-fno-omit-frame-pointer						\
-	-momit-leaf-frame-pointer					\
-	-mpreferred-stack-boundary=3					\
-	-fno-delete-null-pointer-checks					\
-	-c
-
-OBJECTIFY.ncabi.c =							\
-	$(GCC)								\
-	$(OBJECTIFY.c.flags)						\
-	-mno-sse							\
-	-mfpmath=387							\
-	-fno-stack-protector						\
-	-fno-instrument-functions					\
-	-fno-optimize-sibling-calls					\
-	-fno-sanitize=all						\
-	-fcall-saved-rcx						\
-	-fcall-saved-rdx						\
-	-fcall-saved-rdi						\
-	-fcall-saved-rsi						\
-	-fcall-saved-r8							\
-	-fcall-saved-r9							\
-	-fcall-saved-r10						\
-	-fcall-saved-r11						\
-	-c								\
-	-xc
-
-OBJECTIFY.initabi.c =							\
-	$(GCC)								\
-	$(OBJECTIFY.c.flags)						\
-	-fno-stack-protector						\
-	-fno-instrument-functions					\
-	-fno-optimize-sibling-calls					\
-	-fno-sanitize=all						\
-	-fcall-saved-rdi						\
-	-fcall-saved-rsi						\
 	-c
 
 TAGSFLAGS =								\

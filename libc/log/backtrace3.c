@@ -45,14 +45,14 @@
  * @param st is open symbol table for current executable
  * @return -1 w/ errno if error happened
  */
-dontinstrument noasan int PrintBacktraceUsingSymbols(
+dontinstrument dontasan int PrintBacktraceUsingSymbols(
     int fd, const struct StackFrame *bp, struct SymbolTable *st) {
-  bool ok;
   size_t gi;
   intptr_t addr;
   int i, symbol, addend;
   struct Garbages *garbage;
   const struct StackFrame *frame;
+  (void)gi;
   if (!bp) bp = __builtin_frame_address(0);
   garbage = __tls_enabled ? __get_tls()->tib_garbages : 0;
   gi = garbage ? garbage->i : 0;
@@ -67,7 +67,7 @@ dontinstrument noasan int PrintBacktraceUsingSymbols(
     }
     addr = frame->addr;
 #ifdef __x86_64__
-    if (addr == (intptr_t)_weaken(__gc)) {
+    if (gi && addr == (intptr_t)_weaken(__gc)) {
       do {
         --gi;
       } while ((addr = garbage->p[gi].ret) == (intptr_t)_weaken(__gc));

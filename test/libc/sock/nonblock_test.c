@@ -34,9 +34,7 @@
 #include "libc/thread/thread.h"
 
 TEST(O_NONBLOCK, canBeSetBySocket_toMakeListenNonBlocking) {
-  int ws, pid;
   char buf[16] = {0};
-  int64_t inoffset;
   uint32_t addrsize = sizeof(struct sockaddr_in);
   struct sockaddr_in addr = {
       .sin_family = AF_INET,
@@ -81,9 +79,7 @@ TEST(O_NONBLOCK, canBeSetBySocket_toMakeListenNonBlocking) {
 }
 
 TEST(O_NONBLOCK, canBeTunedWithFcntl_toMakeReadNonBlocking) {
-  int ws, pid;
   char buf[16] = {0};
-  int64_t inoffset;
   uint32_t addrsize = sizeof(struct sockaddr_in);
   struct sockaddr_in addr = {
       .sin_family = AF_INET,
@@ -106,8 +102,9 @@ TEST(O_NONBLOCK, canBeTunedWithFcntl_toMakeReadNonBlocking) {
   PARENT();
   EXPECT_SYS(0, 0, close(3));
   ASSERT_SYS(0, 3, socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+  ASSERT_SYS(0, O_RDWR, fcntl(3, F_GETFL));
   ASSERT_SYS(0, 0, connect(3, (struct sockaddr *)&addr, sizeof(addr)));
-  ASSERT_SYS(0, 0, fcntl(3, F_SETFL, O_NONBLOCK));
+  ASSERT_SYS(0, 0, fcntl(3, F_SETFL, O_RDWR | O_NONBLOCK));
   ASSERT_SYS(EAGAIN, -1, read(3, buf, 16));
   EXPECT_EQ(0, pthread_spin_unlock(phaser + 0));
 TryAgain:

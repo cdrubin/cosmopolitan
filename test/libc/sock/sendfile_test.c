@@ -20,7 +20,6 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
 #include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
@@ -39,11 +38,10 @@
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
-char testlib_enable_tmp_setup_teardown;
-
 void SetUpOnce(void) {
   if (IsNetbsd()) exit(0);
   if (IsOpenbsd()) exit(0);
+  testlib_enable_tmp_setup_teardown();
   ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath proc inet", 0));
 }
 
@@ -55,7 +53,6 @@ int64_t GetFileOffset(int fd) {
 
 TEST(sendfile, testSeeking) {
   char buf[1024];
-  int rc, ws, fds[2];
   int64_t inoffset = 0;
   uint32_t addrsize = sizeof(struct sockaddr_in);
   struct sockaddr_in addr = {
@@ -95,6 +92,7 @@ TEST(sendfile, testSeeking) {
   ASSERT_SYS(0, 500, read(3, buf + 12, 700));
   ASSERT_EQ(0, memcmp(buf, kHyperion, 512));
   ASSERT_SYS(0, 0, close(3));
+  int ws;
   ASSERT_NE(-1, wait(&ws));
   ASSERT_TRUE(WIFEXITED(ws));
   ASSERT_EQ(0, WEXITSTATUS(ws));
@@ -103,7 +101,6 @@ TEST(sendfile, testSeeking) {
 TEST(sendfile, testPositioning) {
   // TODO(jart): fix test regression on windows
   if (IsWindows()) return;
-  int ws, fds[2];
   char buf[1024];
   uint32_t addrsize = sizeof(struct sockaddr_in);
   struct sockaddr_in addr = {
@@ -129,7 +126,7 @@ TEST(sendfile, testPositioning) {
     ASSERT_TRUE(errno == EINVAL || errno == EPIPE);
     errno = 0;
     // XXX: WSL1 clobbers file offset on failure!
-    if (!IsWsl1()) {
+    if (!__iswsl1()) {
       ASSERT_EQ(12, GetFileOffset(5));
     }
     _Exit(0);
@@ -142,6 +139,7 @@ TEST(sendfile, testPositioning) {
   ASSERT_SYS(0, 0, read(3, buf, 12));
   ASSERT_EQ(0, memcmp(buf, kHyperion, 12));
   ASSERT_SYS(0, 0, close(3));
+  int ws;
   ASSERT_NE(-1, wait(&ws));
   ASSERT_TRUE(WIFEXITED(ws));
   ASSERT_EQ(0, WEXITSTATUS(ws));

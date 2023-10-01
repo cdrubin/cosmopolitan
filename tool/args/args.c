@@ -27,7 +27,7 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/x/x.h"
 
-STATIC_YOINK("zipos");
+__static_yoink("zipos");
 
 static struct ZipArgs {
   bool initialized;
@@ -55,11 +55,11 @@ void FreeZipArgs(void) {
 }
 
 int LoadZipArgsImpl(int *argc, char ***argv, char *data) {
-  int i, n, fd;
+  int i, n;
   bool founddots;
   char *arg, **args, *state, *start;
   assert(!g_zipargs.loaded);
-  if (_chomp(data)) {
+  if (chomp(data)) {
     n = 0;
     args = 0;
     start = data;

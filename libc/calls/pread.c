@@ -29,8 +29,8 @@
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 /**
  * Reads from file at offset.
@@ -71,12 +71,14 @@ ssize_t pread(int fd, void *buf, size_t size, int64_t offset) {
         (struct iovec[]){{buf, size}}, 1, offset);
   } else if (!IsWindows()) {
     rc = sys_pread(fd, buf, size, offset, offset);
+  } else if (__isfdkind(fd, kFdSocket)) {
+    rc = espipe();
   } else if (__isfdkind(fd, kFdFile)) {
-    rc = sys_read_nt(&g_fds.p[fd], (struct iovec[]){{buf, size}}, 1, offset);
+    rc = sys_read_nt(fd, (struct iovec[]){{buf, size}}, 1, offset);
   } else {
     rc = ebadf();
   }
-  _npassert(rc == -1 || (size_t)rc <= size);
+  npassert(rc == -1 || (size_t)rc <= size);
 
   END_CANCELLATION_POINT;
   DATATRACE("pread(%d, [%#.*hhs%s], %'zu, %'zd) → %'zd% m", fd,

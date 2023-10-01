@@ -19,6 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/statfs-meta.internal.h"
 #include "libc/calls/struct/statfs.internal.h"
 #include "libc/dce.h"
@@ -28,16 +29,23 @@
 
 /**
  * Returns information about filesystem.
+ *
  * @return 0 on success, or -1 w/ errno
+ * @raise ENOTSUP if /zip path
  * @cancellationpoint
  */
 int fstatfs(int fd, struct statfs *sf) {
-  int rc;
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
   union statfs_meta m;
-  BEGIN_CANCELLATION_POINT;
   CheckLargeStackAllocation(&m, sizeof(m));
+#pragma GCC pop_options
+  int rc;
+  BEGIN_CANCELLATION_POINT;
 
-  if (!IsWindows()) {
+  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    rc = enotsup();
+  } else if (!IsWindows()) {
     if ((rc = sys_fstatfs(fd, &m)) != -1) {
       statfs2cosmo(sf, &m);
     }
@@ -51,3 +59,5 @@ int fstatfs(int fd, struct statfs *sf) {
   STRACE("fstatfs(%d, [%s]) → %d% m", fd, DescribeStatfs(rc, sf));
   return rc;
 }
+
+__weak_reference(fstatfs, fstatfs64);

@@ -17,13 +17,22 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
+#include "ape/ape.h"
 #include "libc/macros.internal.h"
+
+#ifdef __aarch64__
+
+_start:	mov	x1,sp
+	mov	x29,0
+	bl	ApeLoader
+	.endfn	_start,globl
+
+#else
 
 XnuEntrypoint:
 	mov	$_HOSTXNU,%dl			// xnu's not unix!
 ElfEntrypoint:
 	mov	%rsp,%rsi			// save real stack
-	sub	$1024*1024,%rsp			// room for allocs
 	call	ApeLoader
 	.endfn	ElfEntrypoint,globl
 	.endfn	XnuEntrypoint,globl
@@ -56,6 +65,8 @@ ape.ident:
 	.long	1
 1:	.asciz	"APE"
 2:	.balign	4
-3:	.long	104000000
+3:	.long	APE_VERSION_NOTE
 4:	.size	ape.ident,.-ape.ident
 	.type	ape.ident,@object
+
+#endif

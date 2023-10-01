@@ -41,17 +41,17 @@
 #include "third_party/regex/regex.h"
 #ifdef __x86_64__
 
-STATIC_YOINK("zipos");
-STATIC_YOINK("o/" MODE "/test/tool/net/redbean-tester.com");
+__static_yoink("zipos");
+__static_yoink("o/" MODE "/test/tool/net/redbean-tester.com");
 
-char testlib_enable_tmp_setup_teardown_once;
 int port;
 
 void SetUpOnce(void) {
-  if (IsWindows()) return;
   ssize_t n;
   char buf[1024];
   int fdin, fdout;
+  if (IsWindows()) return;
+  testlib_enable_tmp_setup_teardown_once();
   ASSERT_NE(-1, mkdir("bin", 0755));
   ASSERT_NE(-1, (fdin = open("/zip/o/" MODE "/test/tool/net/redbean-tester.com",
                              O_RDONLY)));

@@ -16,9 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/elf/def.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/libgen.h"
 #include "libc/limits.h"
@@ -136,37 +138,49 @@ void GetOpts(int *argc, char ***argv) {
 void ProcessFile(struct ElfWriter *elf, const char *path) {
   int fd;
   void *map;
-  size_t pathlen;
   struct stat st;
   const char *name;
-  CHECK_NE(-1, (fd = open(path, O_RDONLY)));
-  CHECK_NE(-1, fstat(fd, &st));
+  if (stat(path, &st)) {
+    perror(path);
+    exit(1);
+  }
   if (S_ISDIR(st.st_mode)) {
+    if ((fd = open(path, O_RDONLY | O_DIRECTORY)) == -1) {
+      perror(path);
+      exit(1);
+    }
     map = "";
     st.st_size = 0;
   } else if (st.st_size) {
-    CHECK_NE(MAP_FAILED,
-             (map = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0)));
+    if ((fd = open(path, O_RDONLY)) == -1 ||
+        (map = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0)) ==
+            MAP_FAILED) {
+      perror(path);
+      exit(1);
+    }
   } else {
-    map = NULL;
+    fd = -1;
+    map = 0;
   }
   if (name_) {
     name = name_;
   } else {
     name = path;
-    if (basenamify_) name = basename(name);
+    if (basenamify_) name = basename(gc(xstrdup(name)));
     name = StripComponents(name, strip_components_);
     if (path_prefix_) name = gc(xjoinpaths(path_prefix_, name));
   }
   if (S_ISDIR(st.st_mode)) {
     st.st_size = 0;
-    if (!_endswith(name, "/")) {
+    if (!endswith(name, "/")) {
       name = gc(xstrcat(name, '/'));
     }
   }
   elfwriter_zip(elf, name, name, strlen(name), map, st.st_size, st.st_mode,
                 timestamp, timestamp, timestamp, nocompress_);
-  if (st.st_size) CHECK_NE(-1, munmap(map, st.st_size));
+  if (st.st_size) {
+    unassert(!munmap(map, st.st_size));
+  }
   close(fd);
 }
 
@@ -179,7 +193,7 @@ void PullEndOfCentralDirectoryIntoLinkage(struct ElfWriter *elf) {
 
 void CheckFilenameKosher(const char *path) {
   CHECK_LE(kZipCfileHdrMinSize + strlen(path), 65535);
-  CHECK(!_startswith(path, "/"));
+  CHECK(!startswith(path, "/"));
   CHECK(!strstr(path, ".."));
 }
 
@@ -197,6 +211,7 @@ void zipobj(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+  ShowCrashReports();
   timestamp.tv_sec = 1647414000; /* determinism */
   /* clock_gettime(CLOCK_REALTIME, &timestamp); */
   zipobj(argc, argv);

@@ -35,7 +35,7 @@ APELINK =					\
 	$(FIXUPOBJ)				\
 	$@
 
-APE_SRCS = ape/ape.S
+APE_SRCS = ape/ape.S ape/start.S ape/launch.S ape/systemcall.S
 APE_OBJS = o/$(MODE)/ape/ape.o
 APE_NO_MODIFY_SELF = $(APE)
 APE_COPY_SELF = $(APE)
@@ -51,6 +51,54 @@ o/$(MODE)/ape/aarch64.lds:			\
 	libc/calls/struct/timespec.h		\
 	libc/macros.internal.h			\
 	libc/str/str.h
+
+APE_LOADER_LDFLAGS =				\
+	-pie					\
+	-static					\
+	-nostdlib				\
+	--no-dynamic-linker			\
+	-z norelro				\
+	-z common-page-size=0x4000		\
+	-z max-page-size=0x4000
+
+APE_LOADER_FLAGS =				\
+	-DNDEBUG				\
+	-iquote.				\
+	-Wall					\
+	-Wextra					\
+	-fpie					\
+	-Os					\
+	-ffreestanding				\
+	-mgeneral-regs-only			\
+	-fno-asynchronous-unwind-tables		\
+	-fno-stack-protector			\
+	-fno-ident				\
+	-fno-gnu-unique				\
+	-c					\
+	 $(OUTPUT_OPTION)			\
+	$<
+
+o/$(MODE)/ape/ape.elf: o/$(MODE)/ape/ape.elf.dbg
+	$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -g $< $@
+
+o/$(MODE)/ape/ape.elf.dbg:			\
+		o/$(MODE)/ape/start.o		\
+		o/$(MODE)/ape/loader.o		\
+		o/$(MODE)/ape/launch.o		\
+		o/$(MODE)/ape/systemcall.o
+	@$(COMPILE) -ALINK.elf $(LD) $(APE_LOADER_LDFLAGS) -o $@ $(patsubst %.lds,-T %.lds,$^)
+
+o/$(MODE)/ape/loader.o: ape/loader.c ape/ape.h
+	@$(COMPILE) -AOBJECTIFY.c $(CC) -DSUPPORT_VECTOR=1 -g $(APE_LOADER_FLAGS)
+o/$(MODE)/ape/start.o: ape/start.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/ape/launch.o: ape/launch.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/ape/systemcall.o: ape/systemcall.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+
+.PHONY: o/$(MODE)/ape
+o/$(MODE)/ape: o/$(MODE)/ape/ape.elf
 
 else
 
@@ -82,6 +130,8 @@ APE_LOADER_FLAGS =				\
 	-iquote.				\
 	-Wall					\
 	-Wextra					\
+	-Werror					\
+	-pedantic-errors			\
 	-fpie					\
 	-Os					\
 	-ffreestanding				\
@@ -99,31 +149,13 @@ APE_SRCS = $(APE_SRCS_C) $(APE_SRCS_S)
 APE_OBJS = $(APE_SRCS_S:%.S=o/$(MODE)/%.o)
 APE_CHECKS = $(APE_HDRS:%=o/%.ok)
 
-o/$(MODE)/ape/public/ape.lds: CPPFLAGS += -UCOSMO
-o/$(MODE)/ape/public/ape.lds:			\
-		ape/public/ape.lds		\
-		ape/ape.lds			\
-		ape/ape.internal.h		\
-		ape/macros.internal.h		\
-		ape/relocations.h		\
-		libc/intrin/bits.h		\
-		libc/thread/tls.h		\
-		libc/calls/struct/timespec.h	\
-		libc/thread/thread.h		\
-		libc/dce.h			\
-		libc/elf/def.h			\
-		libc/elf/pf2prot.internal.h	\
-		libc/macros.internal.h		\
-		libc/nt/pedef.internal.h	\
-		libc/str/str.h			\
-		libc/zip.internal.h
-
 o/ape/idata.inc:				\
 		ape/idata.internal.h		\
 		ape/relocations.h
 
 o/$(MODE)/ape/ape-no-modify-self.o:		\
 		ape/ape.S			\
+		ape/ape.h			\
 		ape/macros.internal.h		\
 		ape/notice.inc			\
 		ape/relocations.h		\
@@ -154,6 +186,7 @@ o/$(MODE)/ape/ape-no-modify-self.o:		\
 
 o/$(MODE)/ape/ape-copy-self.o:			\
 		ape/ape.S			\
+		ape/ape.h			\
 		ape/macros.internal.h		\
 		ape/notice.inc			\
 		ape/relocations.h		\
@@ -221,7 +254,6 @@ o/$(MODE)/ape/ape.elf.dbg:			\
 o/$(MODE)/ape:	$(APE_CHECKS)			\
 		o/$(MODE)/ape/ape.o		\
 		o/$(MODE)/ape/ape.lds		\
-		o/$(MODE)/ape/public/ape.lds	\
 		o/$(MODE)/ape/ape.elf		\
 		o/$(MODE)/ape/ape.macho		\
 		o/$(MODE)/ape/ape-copy-self.o	\

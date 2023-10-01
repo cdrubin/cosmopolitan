@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/_getenv.internal.h"
+#include "libc/intrin/getenv.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/errfuns.h"
 
@@ -29,14 +29,15 @@
  * @raise EINVAL if `s` is an empty string or has a `'='` character
  */
 int unsetenv(const char *s) {
-  char **p, *t;
+  char **p;
   struct Env e;
+  const char *t;
   if (!s || !*s) return einval();
   for (t = s; *t; ++t) {
     if (*t == '=') return einval();
   }
   if ((p = environ)) {
-    e = _getenv(p, s);
+    e = __getenv(p, s);
     while (p[e.i]) {
       p[e.i] = p[e.i + 1];
       ++e.i;

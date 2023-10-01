@@ -16,13 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "tool/build/lib/demangle.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/intrin/safemacros.internal.h"
+#include "libc/limits.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
-#include "tool/build/lib/demangle.h"
 
 struct CxxFilt {
   int pid;
@@ -47,7 +48,7 @@ void SpawnCxxFilt(void) {
     if (!(g_cxxfilt.pid = vfork())) {
       dup2(pipefds[1][0], 0);
       dup2(pipefds[0][1], 1);
-      execv(path, (char *const[]){cxxfilt, NULL});
+      execv(path, (char *const[]){(char *)cxxfilt, 0});
       abort();
     }
     g_cxxfilt.reader = pipefds[0][0];
@@ -83,11 +84,11 @@ char *DemangleCxxFilt(char *p, size_t pn, const char *s, size_t sn) {
   ssize_t rc;
   size_t got;
   struct iovec iov[2];
-  static char buf[PAGESIZE];
+  static char buf[4096];
   if (!g_cxxfilt.pid) SpawnCxxFilt();
   if (g_cxxfilt.pid == -1) return NULL;
   buf[0] = '\n';
-  iov[0].iov_base = s;
+  iov[0].iov_base = (void *)s;
   iov[0].iov_len = sn;
   iov[1].iov_base = buf;
   iov[1].iov_len = 1;
@@ -115,7 +116,7 @@ char *Demangle(char *p, const char *symbol, size_t n) {
   char *r;
   size_t sn;
   sn = strlen(symbol);
-  if (_startswith(symbol, "_Z")) {
+  if (startswith(symbol, "_Z")) {
     if ((r = DemangleCxxFilt(p, n, symbol, sn))) return r;
   }
   return CopySymbol(p, n, symbol, sn);

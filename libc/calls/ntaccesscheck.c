@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
@@ -24,7 +25,11 @@
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
+#include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
+#include "libc/nt/enum/creationdisposition.h"
+#include "libc/nt/enum/fileflagandattributes.h"
+#include "libc/nt/enum/filesharemode.h"
 #include "libc/nt/enum/securityimpersonationlevel.h"
 #include "libc/nt/enum/securityinformation.h"
 #include "libc/nt/errors.h"
@@ -39,12 +44,10 @@
 #include "libc/sysv/consts/ok.h"
 #include "libc/sysv/errfuns.h"
 
+// TODO: what does this code do with symlinks?
+
 /**
  * Asks Microsoft if we're authorized to use a folder or file.
- *
- * Implementation Details: MSDN documentation imposes no limit on the
- * internal size of SECURITY_DESCRIPTOR, which we are responsible for
- * allocating. We've selected 1024 which shall hopefully be adequate.
  *
  * @param flags can have R_OK, W_OK, X_OK, etc.
  * @return 0 if authorized, or -1 w/ errno
@@ -52,18 +55,19 @@
  * @see libc/sysv/consts.sh
  */
 textwindows int ntaccesscheck(const char16_t *pathname, uint32_t flags) {
-  int rc, e;
-  void *freeme;
+  int rc;
   bool32 result;
+  uint32_t flagmask;
   struct NtSecurityDescriptor *s;
   struct NtGenericMapping mapping;
   struct NtPrivilegeSet privileges;
-  int64_t hToken, hImpersonatedToken;
   uint32_t secsize, granted, privsize;
+  int64_t hToken, hImpersonatedToken, hFile;
   intptr_t buffer[1024 / sizeof(intptr_t)];
-  freeme = 0;
+  if (flags & X_OK) flags |= R_OK;
   granted = 0;
   result = false;
+  flagmask = flags;
   s = (void *)buffer;
   secsize = sizeof(buffer);
   privsize = sizeof(privileges);
@@ -72,9 +76,8 @@ textwindows int ntaccesscheck(const char16_t *pathname, uint32_t flags) {
   mapping.GenericWrite = kNtFileGenericWrite;
   mapping.GenericExecute = kNtFileGenericExecute;
   mapping.GenericAll = kNtFileAllAccess;
-  MapGenericMask(&flags, &mapping);
+  MapGenericMask(&flagmask, &mapping);
   hImpersonatedToken = hToken = -1;
-TryAgain:
   if (GetFileSecurity(pathname,
                       kNtOwnerSecurityInformation |
                           kNtGroupSecurityInformation |
@@ -86,44 +89,59 @@ TryAgain:
                          &hToken)) {
       if (DuplicateToken(hToken, kNtSecurityImpersonation,
                          &hImpersonatedToken)) {
-        if (AccessCheck(s, hImpersonatedToken, flags, &mapping, &privileges,
+        if (AccessCheck(s, hImpersonatedToken, flagmask, &mapping, &privileges,
                         &privsize, &granted, &result)) {
           if (result || flags == F_OK) {
-            rc = 0;
+            if (flags & X_OK) {
+              if ((hFile = CreateFile(
+                       pathname, kNtFileGenericRead,
+                       kNtFileShareRead | kNtFileShareWrite |
+                           kNtFileShareDelete,
+                       0, kNtOpenExisting,
+                       kNtFileAttributeNormal | kNtFileFlagBackupSemantics,
+                       0)) != -1) {
+                if (IsWindowsExecutable(hFile)) {
+                  rc = 0;
+                } else {
+                  rc = eacces();
+                }
+                CloseHandle(hFile);
+              } else {
+                rc = __winerr();
+              }
+            } else {
+              rc = 0;
+            }
           } else {
-            STRACE("ntaccesscheck finale failed %d %d", result, flags);
+            NTTRACE("ntaccesscheck finale failed: result=%d flags=%x", result,
+                    flags);
             rc = eacces();
           }
         } else {
           rc = __winerr();
-          STRACE("%s(%#hs) failed: %m", "AccessCheck", pathname);
+          NTTRACE("%s(%#hs) failed: %s", "AccessCheck", pathname,
+                  strerror(errno));
         }
       } else {
         rc = __winerr();
-        STRACE("%s(%#hs) failed: %m", "DuplicateToken", pathname);
+        NTTRACE("%s(%#hs) failed: %s", "DuplicateToken", pathname,
+                strerror(errno));
       }
     } else {
       rc = __winerr();
-      STRACE("%s(%#hs) failed: %m", "OpenProcessToken", pathname);
+      NTTRACE("%s(%#hs) failed: %s", "OpenProcessToken", pathname,
+              strerror(errno));
     }
   } else {
-    e = GetLastError();
-    if (!IsTiny() && e == kNtErrorInsufficientBuffer) {
-      if (!freeme && _weaken(malloc) && (freeme = _weaken(malloc)(secsize))) {
-        s = freeme;
-        goto TryAgain;
-      } else {
-        rc = enomem();
-        STRACE("%s(%#hs) failed: %m", "GetFileSecurity", pathname);
-      }
-    } else {
-      errno = e;
-      STRACE("%s(%#hs) failed: %m", "GetFileSecurity", pathname);
-      rc = -1;
-    }
+    rc = __winerr();
+    NTTRACE("%s(%#hs) failed: %s", "GetFileSecurity", pathname,
+            strerror(errno));
   }
-  if (freeme && _weaken(free)) _weaken(free)(freeme);
-  if (hImpersonatedToken != -1) CloseHandle(hImpersonatedToken);
-  if (hToken != -1) CloseHandle(hToken);
+  if (hImpersonatedToken != -1) {
+    CloseHandle(hImpersonatedToken);
+  }
+  if (hToken != -1) {
+    CloseHandle(hToken);
+  }
   return rc;
 }

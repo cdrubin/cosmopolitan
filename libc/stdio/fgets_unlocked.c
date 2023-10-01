@@ -19,6 +19,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/macros.internal.h"
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 
@@ -27,7 +28,7 @@
  *
  * This function is similar to getline() except it'll truncate lines
  * exceeding size. The line ending marker is included and may be removed
- * using _chomp().
+ * using chomp().
  *
  * @param s is output buffer
  * @param size is capacity of s
@@ -47,7 +48,7 @@ char *fgets_unlocked(char *s, int size, FILE *f) {
         if ((t = memchr(b, '\n', n))) {
           n = t + 1 - b;
         }
-        memcpy(p, b, n);
+        if (n) memcpy(p, b, n);
         f->beg += n;
         size -= n - 1;
         p += n;

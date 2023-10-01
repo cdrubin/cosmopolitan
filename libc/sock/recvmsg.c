@@ -19,6 +19,7 @@
 #include "libc/assert.h"
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
 #include "libc/dce.h"
@@ -54,6 +55,8 @@ ssize_t recvmsg(int fd, struct msghdr *msg, int flags) {
   BEGIN_CANCELLATION_POINT;
   if (IsAsan() && !__asan_is_valid_msghdr(msg)) {
     rc = efault();
+  } else if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    rc = enotsock();
   } else if (!IsWindows()) {
     if (IsBsd() && msg->msg_name) {
       memcpy(&msg2, msg, sizeof(msg2));
@@ -71,12 +74,12 @@ ssize_t recvmsg(int fd, struct msghdr *msg, int flags) {
   } else if (__isfdopen(fd)) {
     if (!msg->msg_control) {
       if (__isfdkind(fd, kFdSocket)) {
-        rc = sys_recvfrom_nt(&g_fds.p[fd], msg->msg_iov, msg->msg_iovlen, flags,
+        rc = sys_recvfrom_nt(fd, msg->msg_iov, msg->msg_iovlen, flags,
                              msg->msg_name, &msg->msg_namelen);
       } else if (__isfdkind(fd, kFdFile) && !msg->msg_name) { /* socketpair */
         if (!flags) {
-          if ((got = sys_read_nt(&g_fds.p[fd], msg->msg_iov, msg->msg_iovlen,
-                                 -1)) != -1) {
+          if ((got = sys_read_nt(fd, msg->msg_iov, msg->msg_iovlen, -1)) !=
+              -1) {
             msg->msg_flags = 0;
             rc = got;
           } else {

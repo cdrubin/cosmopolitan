@@ -26,16 +26,19 @@
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/symbols.internal.h"
 #include "libc/testlib/testlib.h"
+#include "libc/thread/posixthread.internal.h"
+#include "libc/thread/tls.h"
 
-STATIC_YOINK("GetSymbolByAddr");
+__static_yoink("GetSymbolByAddr");
 
 #define MAXLEAKS 1000
 
 static bool once;
 static bool hasleaks;
 
-static noasan void CheckLeak(void *x, void *y, size_t n, void *a) {
+static dontasan void CheckLeak(void *x, void *y, size_t n, void *a) {
   if (n) {
     if (IsAsan()) {
       if (__asan_get_heap_size(x) && !__asan_is_leaky(x)) {
@@ -47,7 +50,7 @@ static noasan void CheckLeak(void *x, void *y, size_t n, void *a) {
   }
 }
 
-static noasan void OnMemory(void *x, void *y, size_t n, void *a) {
+static dontasan void OnMemory(void *x, void *y, size_t n, void *a) {
   static int i;
   if (n) {
     if (MAXLEAKS) {
@@ -67,7 +70,7 @@ static noasan void OnMemory(void *x, void *y, size_t n, void *a) {
   }
 }
 
-static noasan bool HasLeaks(void) {
+static dontasan bool HasLeaks(void) {
   malloc_inspect_all(CheckLeak, 0);
   return hasleaks;
 }
@@ -79,13 +82,20 @@ static noasan bool HasLeaks(void) {
  * services that depend on malloc() cannot be used, after calling this
  * function.
  */
-noasan void CheckForMemoryLeaks(void) {
+dontasan void CheckForMemoryLeaks(void) {
   struct mallinfo mi;
   if (!IsAsan()) return;  // we need traces to exclude leaky
+  if (!GetSymbolTable()) {
+    kprintf("CheckForMemoryLeaks() needs the symbol table\n");
+    return;
+  }
   if (!_cmpxchg(&once, false, true)) {
     kprintf("CheckForMemoryLeaks() may only be called once\n");
-    exit(1);
+    exit(0);
   }
+  _pthread_unwind(_pthread_self());
+  _pthread_unkey(__get_tls());
+  _pthread_ungarbage();
   __cxa_finalize(0);
   STRACE("checking for memory leaks% m");
   if (!IsAsan()) {
@@ -115,6 +125,6 @@ noasan void CheckForMemoryLeaks(void) {
     /* __print_maps(); */
     /* PrintSystemMappings(2); */
     /* PrintGarbage(); */
-    _Exitr(78);
+    _Exit(78);
   }
 }

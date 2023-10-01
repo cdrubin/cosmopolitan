@@ -37,26 +37,19 @@ static const char *GetFrameName(int x) {
     return "automap";
   } else if (IsFixedFrame(x)) {
     return "fixed";
-  } else if (IsArenaFrame(x)) {
-    return "arena";
   } else if (IsStaticStackFrame(x)) {
     return "stack";
   } else if (IsGfdsFrame(x)) {
     return "g_fds";
   } else if (IsZiposFrame(x)) {
     return "zipos";
-  } else if (IsKmallocFrame(x)) {
-    return "kmalloc";
   } else if (IsMemtrackFrame(x)) {
     return "memtrack";
   } else if (IsOldStackFrame(x)) {
-    return "oldstack";
-  } else if (IsWindows() &&
-             (((GetStaticStackAddr(0) + GetStackSize()) >> 16) <= x &&
-              x <= ((GetStaticStackAddr(0) + GetStackSize() +
-                     sizeof(struct WinArgs) - 1) >>
-                    16))) {
-    return "winargs";
+    return "system stack";
+  } else if (((GetStaticStackAddr(0) + GetStackSize()) >> 16) <= x &&
+             x <= ((GetStaticStackAddr(0) + GetStackSize() - 1) >> 16)) {
+    return "static stack";
   } else if ((int)((intptr_t)__executable_start >> 16) <= x &&
              x <= (int)(((intptr_t)_end - 1) >> 16)) {
     return "image";
@@ -66,7 +59,6 @@ static const char *GetFrameName(int x) {
 }
 
 const char *(DescribeFrame)(char buf[32], int x) {
-  char *p;
   if (IsShadowFrame(x)) {
     ksnprintf(buf, 32, "%s %s %.8x", GetFrameName(x),
               GetFrameName(FRAME(UNSHADOW(ADDR_32_TO_48(x)))),

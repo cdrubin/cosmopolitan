@@ -971,6 +971,8 @@ reset_jobserver (void)
 int
 main (int argc, char **argv, char **envp)
 {
+  ShowCrashReports();
+
   static char *stdin_nm = 0;
   int makefile_status = MAKE_SUCCESS;
   struct goaldep *read_files;
@@ -978,6 +980,10 @@ main (int argc, char **argv, char **envp)
   unsigned int restarts = 0;
   unsigned int syncing = 0;
   int argv_slots;
+
+  // [jart] workaround to prevent make -j fork bomb
+  default_load_average = __get_cpu_count();
+  max_load_average = default_load_average;
 
   /* Useful for attaching debuggers, etc.  */
   SPIN ("main-entry");
@@ -1035,6 +1041,10 @@ main (int argc, char **argv, char **envp)
   FATAL_SIG (SIGPIPE); /* [jart] handle case of piped into less */
 
 #undef  FATAL_SIG
+
+#ifndef NDEBUG
+  ShowCrashReports();
+#endif
 
   /* Do not ignore the child-death signal.  This must be done before
      any children could possibly be created; otherwise, the wait
@@ -1658,7 +1668,10 @@ main (int argc, char **argv, char **envp)
           p = quote_for_env (p, eval_strings->list[i]);
           *(p++) = ' ';
         }
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wstringop-overflow" /* wut */
       p[-1] = '\0';
+#pragma GCC pop_options
 
       define_variable_cname ("-*-eval-flags-*-", value, o_automatic, 0);
     }

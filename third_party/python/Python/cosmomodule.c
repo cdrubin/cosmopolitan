@@ -67,7 +67,6 @@ This module exposes low-level utilities from the Cosmopolitan library.\n\
 Static objects:\n\
 \n\
 MODE -- make build mode, e.g. \"\", \"tiny\", \"opt\", \"rel\", etc.\n\
-IMAGE_BASE_VIRTUAL -- base address of actually portable executable image\n\
 kernel -- o/s platform, e.g. \"linux\", \"xnu\", \"metal\", \"nt\", etc.\n\
 kStartTsc -- the rdtsc() value at process creation.");
 
@@ -100,12 +99,12 @@ cosmo_rdtsc(PyObject *self, PyObject *noargs)
     return PyLong_FromUnsignedLong(rdtsc());
 }
 
+#ifdef __x86_64__
+
 PyDoc_STRVAR(getcpucore_doc,
 "getcpucore($module)\n\
 --\n\n\
 Returns 0-indexed CPU core on which process is currently scheduled.");
-
-#ifdef __x86_64__
 
 static PyObject *
 cosmo_getcpucore(PyObject *self, PyObject *noargs)
@@ -137,7 +136,6 @@ Similar to zlib.crc32().");
 static PyObject *
 cosmo_crc32c(PyObject *self, PyObject *args)
 {
-    Py_ssize_t n;
     Py_buffer data;
     unsigned crc, init = 0;
     if (!PyArg_ParseTuple(args, "y*|I:crc32c", &data, &init)) return 0;
@@ -283,8 +281,6 @@ cosmo_exit1(PyObject *self, PyObject *args)
     _Exit(1);
 }
 
-static bool ftrace_installed = 0;
-
 typedef struct {
     PyObject_HEAD
 } FtracerObject;
@@ -327,6 +323,7 @@ static PyTypeObject FtracerType = {
     .tp_methods = FtracerObject_methods,
 };
 
+#ifdef FTRACE
 PyDoc_STRVAR(ftrace_doc,
 "ftrace($module)\n\
 --\n\n\
@@ -337,6 +334,7 @@ Enables logging of C function calls to stderr, e.g.\n\
 \n\
 Please be warned this prints massive amount of text. In order for it\n\
 to work, the concomitant .com.dbg binary needs to be present.");
+#endif
 
 static PyObject *
 cosmo_ftrace(PyObject *self, PyObject *noargs)
@@ -403,7 +401,6 @@ PyInit_cosmo(void)
     if (PyType_Ready(&FtracerType) < 0) return 0;
     if (!(m = PyModule_Create(&cosmomodule))) return 0;
     PyModule_AddStringConstant(m, "MODE", MODE);
-    PyModule_AddIntConstant(m, "IMAGE_BASE_VIRTUAL", IMAGE_BASE_VIRTUAL);
     PyModule_AddStringConstant(m, "kernel", GetKernelName());
     PyModule_AddIntConstant(m, "kStartTsc", kStartTsc);
 

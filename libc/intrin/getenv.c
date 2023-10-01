@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/_getenv.internal.h"
+#include "libc/intrin/getenv.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/runtime/runtime.h"
 
@@ -26,13 +26,13 @@
  * Environment variables can store empty string on Unix but not Windows.
  *
  * @return pointer to value of `environ` entry, or null if not found
+ * @threadunsafe
  */
 char *getenv(const char *s) {
   char **p;
   struct Env e;
-  if (!s) return 0;
   if (!(p = environ)) return 0;
-  e = _getenv(p, s);
+  e = __getenv(p, s);
 #if SYSDEBUG
   // if (!(s[0] == 'T' && s[1] == 'Z' && !s[2])) {
   // TODO(jart): memoize TZ or something

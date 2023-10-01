@@ -30,8 +30,9 @@
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 
-STATIC_YOINK("strerror_wr");
+__static_yoink("strerror_wr");
 
 /**
  * Handles failure of CHECK_xx() macros.
@@ -46,7 +47,6 @@ relegated void __check_fail(const char *suffix,   //
                             int line,             //
                             const char *fmt,      //
                             ...) {
-  char *p;
   size_t i;
   va_list va;
   char hostname[32];
@@ -70,11 +70,10 @@ relegated void __check_fail(const char *suffix,   //
     va_end(va);
     kprintf("\n");
   }
-  kprintf("\t%m\n\t%s%s", SUBTLE, program_invocation_name);
+  kprintf("\t%s\n\t%s%s", strerror(errno), SUBTLE, program_invocation_name);
   for (i = 1; i < __argc; ++i) {
     kprintf(" %s", __argv[i]);
   }
   kprintf("%s\n", RESET);
   __die();
-  __builtin_unreachable();
 }

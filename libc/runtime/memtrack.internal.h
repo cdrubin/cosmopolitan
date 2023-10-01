@@ -2,7 +2,6 @@
 #define COSMOPOLITAN_LIBC_RUNTIME_MEMTRACK_H_
 #include "ape/sections.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/nopl.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/version.h"
 #include "libc/runtime/runtime.h"
@@ -12,19 +11,17 @@
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-#define kAutomapStart         0x100080040000
-#define kAutomapSize          (kMemtrackStart - kAutomapStart)
-#define kMemtrackStart        0x1fe7fffc0000
-#define kMemtrackSize         (0x1ffffffc0000 - kMemtrackStart)
-#define kFixedmapStart        0x300000040000
-#define kFixedmapSize         (0x400000040000 - kFixedmapStart)
-#define kMemtrackFdsStart     0x6fe000040000
-#define kMemtrackFdsSize      (0x6feffffc0000 - kMemtrackFdsStart)
-#define kMemtrackZiposStart   0x6fd000040000
-#define kMemtrackZiposSize    (0x6fdffffc0000 - kMemtrackZiposStart)
-#define kMemtrackKmallocStart 0x6fc000040000
-#define kMemtrackKmallocSize  (0x6fcffffc0000 - kMemtrackKmallocStart)
-#define kMemtrackGran         (!IsAsan() ? FRAMESIZE : FRAMESIZE * 8)
+#define kAutomapStart       0x100080040000
+#define kAutomapSize        (kMemtrackStart - kAutomapStart)
+#define kMemtrackStart      0x1fe7fffc0000
+#define kMemtrackSize       (0x1ffffffc0000 - kMemtrackStart)
+#define kFixedmapStart      0x300000040000
+#define kFixedmapSize       (0x400000040000 - kFixedmapStart)
+#define kMemtrackFdsStart   0x6fe000040000
+#define kMemtrackFdsSize    (0x6feffffc0000 - kMemtrackFdsStart)
+#define kMemtrackZiposStart 0x6fd000040000
+#define kMemtrackZiposSize  (0x6fdffffc0000 - kMemtrackZiposStart)
+#define kMemtrackGran       (!IsAsan() ? FRAMESIZE : FRAMESIZE * 8)
 
 struct MemoryInterval {
   int x;
@@ -41,35 +38,25 @@ struct MemoryInterval {
 struct MemoryIntervals {
   size_t i, n;
   struct MemoryInterval *p;
-  struct MemoryInterval s[OPEN_MAX];
+  struct MemoryInterval s[16];
 };
 
 extern struct MemoryIntervals _mmi;
 
-void __mmi_init(void);
 void __mmi_lock(void);
 void __mmi_unlock(void);
-void __mmi_funlock(void);
 bool IsMemtracked(int, int);
 void PrintSystemMappings(int);
-unsigned FindMemoryInterval(const struct MemoryIntervals *, int) nosideeffect;
-bool AreMemoryIntervalsOk(const struct MemoryIntervals *) nosideeffect;
+unsigned __find_memory(const struct MemoryIntervals *, int) nosideeffect;
+bool __check_memtrack(const struct MemoryIntervals *) nosideeffect;
 void PrintMemoryIntervals(int, const struct MemoryIntervals *);
-int TrackMemoryInterval(struct MemoryIntervals *, int, int, long, int, int,
-                        bool, bool, long, long);
-int ReleaseMemoryIntervals(struct MemoryIntervals *, int, int,
-                           void (*)(struct MemoryIntervals *, int, int));
-void ReleaseMemoryNt(struct MemoryIntervals *, int, int);
-int UntrackMemoryIntervals(void *, size_t);
-size_t GetMemtrackSize(struct MemoryIntervals *);
-
-#ifdef _NOPL0
-#define __mmi_lock()   _NOPL0("__threadcalls", __mmi_lock)
-#define __mmi_unlock() _NOPL0("__threadcalls", __mmi_unlock)
-#else
-#define __mmi_lock()   (__threaded ? __mmi_lock() : 0)
-#define __mmi_unlock() (__threaded ? __mmi_unlock() : 0)
-#endif
+int __track_memory(struct MemoryIntervals *, int, int, long, int, int, bool,
+                   bool, long, long);
+int __untrack_memory(struct MemoryIntervals *, int, int,
+                     void (*)(struct MemoryIntervals *, int, int));
+void __release_memory_nt(struct MemoryIntervals *, int, int);
+int __untrack_memories(void *, size_t);
+size_t __get_memtrack_size(struct MemoryIntervals *);
 
 #ifdef __x86_64__
 /*
@@ -132,17 +119,8 @@ forceinline pureconst bool IsZiposFrame(int x) {
          x <= (int)((kMemtrackZiposStart + kMemtrackZiposSize - 1) >> 16);
 }
 
-forceinline pureconst bool IsKmallocFrame(int x) {
-  return (int)(kMemtrackKmallocStart >> 16) <= x &&
-         x <= (int)((kMemtrackKmallocStart + kMemtrackKmallocSize - 1) >> 16);
-}
-
 forceinline pureconst bool IsShadowFrame(int x) {
   return 0x7fff <= x && x < 0x10008000;
-}
-
-forceinline pureconst bool IsArenaFrame(int x) {
-  return 0x5004 <= x && x <= 0x7ffb;
 }
 
 forceinline pureconst bool IsStaticStackFrame(int x) {
@@ -158,19 +136,16 @@ forceinline pureconst bool IsStackFrame(int x) {
 }
 
 forceinline pureconst bool IsOldStack(const void *x) {
-  /* openbsd uses 4mb stack by default */
-  /* freebsd uses 512mb stack by default */
-  /* most systems use 8mb stack by default */
-  size_t foss_stack_size = 1ul * 1024 * 1024;
-  uintptr_t top = ROUNDUP(__oldstack + 1, foss_stack_size);
-  uintptr_t bot = ROUNDDOWN(__oldstack, foss_stack_size);
+  size_t foss_stack_size = 8ul * 1024 * 1024;
+  uintptr_t top = __oldstack + foss_stack_size;
+  uintptr_t bot = __oldstack - foss_stack_size;
   return bot <= (uintptr_t)x && (uintptr_t)x < top;
 }
 
 forceinline pureconst bool IsOldStackFrame(int x) {
-  size_t foss_stack_size = 1ul * 1024 * 1024;
-  uintptr_t top = ROUNDUP(__oldstack + 1, foss_stack_size);
-  uintptr_t bot = ROUNDDOWN(__oldstack, foss_stack_size);
+  size_t foss_stack_size = 8ul * 1024 * 1024;
+  uintptr_t top = __oldstack + foss_stack_size;
+  uintptr_t bot = __oldstack - foss_stack_size;
   return (int)(bot >> 16) <= x && x <= (int)((top >> 16) - 1);
 }
 
@@ -186,19 +161,6 @@ forceinline pureconst bool OverlapsImageSpace(const void *p, size_t n) {
     EndA = BegA + (n - 1);
     BegB = __executable_start;
     EndB = _end - 1;
-    return MAX(BegA, BegB) < MIN(EndA, EndB);
-  } else {
-    return 0;
-  }
-}
-
-forceinline pureconst bool OverlapsArenaSpace(const void *p, size_t n) {
-  intptr_t BegA, EndA, BegB, EndB;
-  if (n) {
-    BegA = (intptr_t)p;
-    EndA = BegA + (n - 1);
-    BegB = 0x50000000;
-    EndB = 0x7ffdffff;
     return MAX(BegA, BegB) < MIN(EndA, EndB);
   } else {
     return 0;

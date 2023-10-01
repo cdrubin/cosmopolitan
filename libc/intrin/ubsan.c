@@ -22,6 +22,7 @@
 #include "libc/intrin/pushpop.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/limits.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/internal.h"
 #include "libc/log/libfatal.internal.h"
@@ -204,9 +205,9 @@ static wontreturn void __ubsan_unreachable(void) {
 
 static void __ubsan_exit(void) {
   kprintf("your ubsan runtime needs\n"
-          "\tSTATIC_YOINK(\"__die\");\n"
+          "\t__static_yoink(\"__die\");\n"
           "in order to show you backtraces\n");
-  _Exitr(99);
+  _Exit(99);
 }
 
 static char *__ubsan_stpcpy(char *d, const char *s) {
@@ -218,7 +219,7 @@ static char *__ubsan_stpcpy(char *d, const char *s) {
   }
 }
 
-dontdiscard static __ubsan_die_f *__ubsan_die(void) {
+__wur static __ubsan_die_f *__ubsan_die(void) {
   if (_weaken(__die)) {
     return _weaken(__die);
   } else {
@@ -232,8 +233,8 @@ static void __ubsan_warning(const struct UbsanSourceLocation *loc,
           loc->line, SUBTLE, description, RESET);
 }
 
-dontdiscard __ubsan_die_f *__ubsan_abort(const struct UbsanSourceLocation *loc,
-                                         const char *description) {
+__wur __ubsan_die_f *__ubsan_abort(const struct UbsanSourceLocation *loc,
+                                   const char *description) {
   kprintf("\n%s:%d: %subsan error%s: %s (tid %d)\n", loc->file, loc->line, RED2,
           RESET, description, gettid());
   return __ubsan_die();

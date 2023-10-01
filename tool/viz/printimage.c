@@ -26,6 +26,7 @@
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -45,7 +46,7 @@
 #include "third_party/stb/stb_image.h"
 #include "tool/viz/lib/graphic.h"
 
-STATIC_YOINK("__zipos_get");
+__static_yoink("__zipos_get");
 
 static struct Flags {
   const char *out;
@@ -177,8 +178,8 @@ static void GetOpts(int *argc, char *argv[]) {
   g_winsize.ws_col = 80;
   g_winsize.ws_row = 24;
   if (!g_flags.full && (!g_flags.width || !g_flags.height)) {
-    tcgetwinsize(STDIN_FILENO, &g_winsize) != -1 ||
-        tcgetwinsize(STDOUT_FILENO, &g_winsize);
+    (void)(tcgetwinsize(STDIN_FILENO, &g_winsize) != -1 ||
+           tcgetwinsize(STDOUT_FILENO, &g_winsize));
   }
   ttyquantsetup(g_flags.quant, kTtyQuantRgb, g_flags.blocks);
 }
@@ -219,11 +220,10 @@ static void PrintImageImpl(long syn, long sxn, unsigned char RGB[3][syn][sxn],
                            long y0, long yn, long x0, long xn, long dy,
                            long dx) {
   long y, x;
-  bool didhalfy, didfirstx;
+  bool didhalfy;
   unsigned char a[3], b[3];
   didhalfy = false;
   for (y = y0; y < yn; y += dy) {
-    didfirstx = false;
     if (y) printf("\e[0m\n");
     for (x = x0; x < xn; x += dx) {
       a[0] = RGB[0][y][x];
@@ -238,7 +238,6 @@ static void PrintImageImpl(long syn, long sxn, unsigned char RGB[3][syn][sxn],
       }
       printf("\e[48;2;%d;%d;%d;38;2;%d;%d;%dm%lc", a[0], a[1], a[2], b[0], b[1],
              b[2], dy > 1 ? u'▄' : u'▐');
-      didfirstx = true;
     }
     printf("\e[0m");
     if (g_flags.ruler) {
@@ -362,7 +361,7 @@ static void ProcessImage(long yn, long xn, unsigned char RGB[3][yn][xn]) {
 void WithImageFile(const char *path,
                    void fn(long yn, long xn, unsigned char RGB[3][yn][xn])) {
   struct stat st;
-  void *map, *data, *data2;
+  void *map, *data;
   int fd, yn, xn, cn, dyn, dxn, syn, sxn, wyn, wxn;
   CHECK_NE(-1, (fd = open(path, O_RDONLY)), "%s", path);
   CHECK_NE(-1, fstat(fd, &st));

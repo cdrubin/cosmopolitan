@@ -27,6 +27,7 @@
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
@@ -319,7 +320,7 @@ static void ProcessImage(long yn, long xn, unsigned char RGB[3][yn][xn]) {
 void WithImageFile(const char *path,
                    void fn(long yn, long xn, unsigned char RGB[3][yn][xn])) {
   struct stat st;
-  void *map, *data, *data2;
+  void *map, *data;
   int fd, yn, xn, cn, dyn, dxn, syn, sxn;
   CHECK_NE(-1, (fd = open(path, O_RDONLY)), "%s", path);
   CHECK_NE(-1, fstat(fd, &st));

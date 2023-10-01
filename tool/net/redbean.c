@@ -51,14 +51,13 @@
 #include "libc/math.h"
 #include "libc/mem/alloca.h"
 #include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
-#include "libc/nexgen32e/nt2sysv.h"
 #include "libc/nexgen32e/rdtsc.h"
 #include "libc/nexgen32e/vendor.internal.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nt/enum/fileflagandattributes.h"
-#include "libc/nt/thread.h"
 #include "libc/runtime/clktck.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
@@ -101,7 +100,6 @@
 #include "libc/sysv/consts/timer.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/thread/spawn.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 #include "libc/x/x.h"
@@ -139,19 +137,15 @@
 #include "tool/net/luacheck.h"
 #include "tool/net/sandbox.h"
 
-STATIC_STACK_SIZE(0x80000);
+#pragma GCC diagnostic ignored "-Wunused-variable"
 
-STATIC_YOINK("zipos");
+STATIC_STACK_ALIGN(GetStackSize());
+
+__static_yoink("zipos");
 
 #ifdef USE_BLINK
-STATIC_YOINK("blink_linux_aarch64");  // for raspberry pi
-STATIC_YOINK("blink_xnu_aarch64");    // is apple silicon
-#endif
-
-#if !IsTiny()
-#ifdef __x86_64__
-STATIC_YOINK("ShowCrashReportsEarly");
-#endif
+__static_yoink("blink_linux_aarch64");  // for raspberry pi
+__static_yoink("blink_xnu_aarch64");    // is apple silicon
 #endif
 
 /**
@@ -440,7 +434,6 @@ static bool daemonize;
 static bool logrusage;
 static bool logbodies;
 static bool requiressl;
-static bool isterminal;
 static bool sslcliused;
 static bool loglatency;
 static bool terminated;
@@ -448,7 +441,6 @@ static bool uniprocess;
 static bool invalidated;
 static bool logmessages;
 static bool isinitialized;
-static bool checkedmethod;
 static bool sslinitialized;
 static bool sslfetchverify;
 static bool selfmodifiable;
@@ -465,7 +457,6 @@ static bool ishandlingrequest;
 static bool listeningonport443;
 static bool hasonprocesscreate;
 static bool hasonprocessdestroy;
-static bool loggednetworkorigin;
 static bool ishandlingconnection;
 static bool hasonclientconnection;
 static bool evadedragnetsurveillance;
@@ -486,6 +477,7 @@ static int sslticketlifetime;
 static uint32_t clientaddrsize;
 static atomic_int terminatemonitor;
 
+static char *brand;
 static size_t zsize;
 static lua_State *GL;
 static lua_State *YL;
@@ -493,32 +485,28 @@ static uint8_t *zmap;
 static uint8_t *zcdir;
 static size_t hdrsize;
 static size_t amtread;
-static char *replstack;
 static reader_f reader;
 static writer_f writer;
 static char *extrahdrs;
 static const char *zpath;
-static const char *brand;
-static char *monitorstack;
+static char *serverheader;
 static char gzip_footer[8];
 static long maxpayloadsize;
 static const char *pidpath;
 static const char *logpath;
 static uint32_t *interfaces;
-static const char *histpath;
 static struct pollfd *polls;
 static size_t payloadlength;
 static int64_t cacheseconds;
-static const char *cachedirective;
+static char *cachedirective;
 static const char *monitortty;
-static const char *serverheader;
 static struct Strings stagedirs;
 static struct Strings hidepaths;
 static const char *launchbrowser;
 static const char ctIdx = 'c';  // a pseudo variable to get address of
 
-static struct spawn replth;
-static struct spawn monitorth;
+static pthread_t replth;
+static pthread_t monitorth;
 static struct Buffer inbuf_actual;
 static struct Buffer inbuf;
 static struct Buffer oldin;
@@ -664,7 +652,7 @@ static char *MergePaths(const char *p, size_t n, const char *q, size_t m,
 }
 
 static long FindRedirect(const char *s, size_t n) {
-  int c, m, l, r, z;
+  int c, m, l, r;
   l = 0;
   r = redirects.n - 1;
   while (l <= r) {
@@ -941,7 +929,6 @@ static bool IsTrustedIp(uint32_t ip) {
 
 static void DescribeAddress(char buf[40], uint32_t addr, uint16_t port) {
   char *p;
-  const char *s;
   p = buf;
   p = FormatUint32(p, (addr & 0xFF000000) >> 030), *p++ = '.';
   p = FormatUint32(p, (addr & 0x00FF0000) >> 020), *p++ = '.';
@@ -965,7 +952,6 @@ static inline int GetClientAddr(uint32_t *ip, uint16_t *port) {
 }
 
 static inline int GetRemoteAddr(uint32_t *ip, uint16_t *port) {
-  char str[40];
   GetClientAddr(ip, port);
   if (HasHeader(kHttpXForwardedFor)) {
     if (IsTrustedIp(*ip)) {
@@ -1051,7 +1037,7 @@ static void ProgramTimeout(long ms) {
 
 static void ProgramCache(long x, const char *s) {
   cacheseconds = x;
-  if (s) cachedirective = s;
+  if (s) cachedirective = strdup(s);
 }
 
 static void SetDefaults(void) {
@@ -1084,15 +1070,28 @@ static bool HasString(struct Strings *l, const char *s, size_t n) {
   return false;
 }
 
+const char *DEFAULTLUAPATH = "/zip/.lua/?.lua;/zip/.lua/?/init.lua";
+
 static void UpdateLuaPath(const char *s) {
 #ifndef STATIC
   lua_State *L = GL;
+  char *curpath = "";
+  char *respath = 0;
+  char *t;
   int n = lua_gettop(L);
   lua_getglobal(L, "package");
   if (lua_istable(L, -1)) {
     lua_getfield(L, -1, "path");
-    lua_pushstring(L, _gc(xasprintf("%s;%s/.lua/?.lua;%s/.lua/?/init.lua",
-                                    luaL_optstring(L, -1, ""), s, s)));
+    curpath = (void *)luaL_optstring(L, -1, "");
+    if ((t = strstr(curpath, DEFAULTLUAPATH))) {
+      // if the DEFAULT path is found, prepend the path in front of it
+      respath = xasprintf("%.*s%s/.lua/?.lua;%s/.lua/?/init.lua;%s",
+                          t - curpath, curpath, s, s, t);
+    } else {
+      // if the DEFAULT path is not found, append to the end
+      respath = xasprintf("%s;%s/.lua/?.lua;%s/.lua/?/init.lua", curpath, s, s);
+    }
+    lua_pushstring(L, _gc(respath));
     lua_setfield(L, -3, "path");
   }
   lua_settop(L, n);
@@ -1114,7 +1113,7 @@ static void ProgramDirectory(const char *path) {
 }
 
 static void ProgramHeader(const char *s) {
-  char *p, *v, *h;
+  char *p, *v;
   if ((p = strchr(s, ':')) && IsValidHttpToken(s, p - s) &&
       (v = EncodeLatin1(p + 1, -1, 0, kControlC0 | kControlC1 | kControlWs))) {
     switch (GetHttpHeader(s, p - s)) {
@@ -1189,7 +1188,7 @@ static void Daemonize(void) {
   umask(0);
 }
 
-static void LogLuaError(char *hook, char *err) {
+static void LogLuaError(const char *hook, const char *err) {
   ERRORF("(lua) failed to run %s: %s", hook, err);
 }
 
@@ -1498,7 +1497,7 @@ static int TlsFlush(struct TlsBio *bio, const unsigned char *buf, size_t len) {
   if (len || bio->c > 0) {
     v[0].iov_base = bio->u;
     v[0].iov_len = MAX(0, bio->c);
-    v[1].iov_base = buf;
+    v[1].iov_base = (void *)buf;
     v[1].iov_len = len;
     if (WritevAll(bio->fd, v, 2) != -1) {
       if (bio->c > 0) bio->c = 0;
@@ -1520,7 +1519,6 @@ static int TlsFlush(struct TlsBio *bio, const unsigned char *buf, size_t len) {
 
 static int TlsSend(void *ctx, const unsigned char *buf, size_t len) {
   int rc;
-  struct iovec v[2];
   struct TlsBio *bio = ctx;
   if (bio->c >= 0 && bio->c + len <= sizeof(bio->u)) {
     memcpy(bio->u + bio->c, buf, len);
@@ -1533,7 +1531,6 @@ static int TlsSend(void *ctx, const unsigned char *buf, size_t len) {
 
 static int TlsRecvImpl(void *ctx, unsigned char *p, size_t n, uint32_t o) {
   int r;
-  ssize_t s;
   struct iovec v[2];
   struct TlsBio *bio = ctx;
   if ((r = TlsFlush(bio, 0, 0)) < 0) return r;
@@ -1567,7 +1564,6 @@ static int TlsRecvImpl(void *ctx, unsigned char *p, size_t n, uint32_t o) {
 
 static int TlsRecv(void *ctx, unsigned char *buf, size_t len, uint32_t tmo) {
   int rc;
-  struct TlsBio *bio = ctx;
   if (oldin.n) {
     rc = MIN(oldin.n, len);
     memcpy(buf, oldin.p, rc);
@@ -1698,7 +1694,6 @@ static void CertsDestroy(void) {
 }
 
 static void WipeServingKeys(void) {
-  size_t i;
   if (uniprocess) return;
   mbedtls_ssl_ticket_free(&ssltick);
   mbedtls_ssl_key_cert_free(conf.key_cert), conf.key_cert = 0;
@@ -1893,9 +1888,8 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
   const char *s;
   bool isduplicate;
   size_t i, j, k, nsan;
-  struct HostsTxt *htxt;
   struct mbedtls_san *san;
-  const mbedtls_x509_name *xname;
+  const struct HostsTxt *htxt;
   char *name, *subject, *issuer, notbefore[16], notafter[16], hbuf[256];
   san = 0;
   nsan = 0;
@@ -1909,7 +1903,7 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
       if (ips.p[j] == READ32BE(htxt->entries.p[i].ip)) {
         isduplicate = false;
         s = htxt->strings.p + htxt->entries.p[i].name;
-        if (!name) name = s;
+        if (!name) name = (void *)s;
         for (k = 0; k < nsan; ++k) {
           if (san[k].tag == MBEDTLS_X509_SAN_DNS_NAME &&
               !strcasecmp(s, san[k].val)) {
@@ -2134,6 +2128,10 @@ static void FreeStrings(struct Strings *l) {
   l->n = 0;
 }
 
+static unsigned long roundup2pow(unsigned long x) {
+  return x > 1 ? 2ul << _bsrl(x - 1) : x ? 1 : 0;
+}
+
 static void IndexAssets(void) {
   uint64_t cf;
   struct Asset *p;
@@ -2145,7 +2143,7 @@ static void IndexAssets(void) {
   CHECK(READ32LE(zcdir) == kZipCdir64HdrMagic ||
         READ32LE(zcdir) == kZipCdirHdrMagic);
   n = GetZipCdirRecords(zcdir);
-  m = _roundup2pow(MAX(1, n) * HASH_LOAD_FACTOR);
+  m = roundup2pow(MAX(1, n) * HASH_LOAD_FACTOR);
   p = xcalloc(m, sizeof(struct Asset));
   for (cf = GetZipCdirOffset(zcdir); n--; cf += ZIP_CFILE_HDRSIZE(zmap + cf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zmap + cf));
@@ -2158,7 +2156,7 @@ static void IndexAssets(void) {
     hash = Hash(ZIP_CFILE_NAME(zmap + cf), ZIP_CFILE_NAMESIZE(zmap + cf));
     step = 0;
     do {
-      i = (hash + (step * (step + 1)) >> 1) & (m - 1);
+      i = (hash + ((step * (step + 1)) >> 1)) & (m - 1);
       ++step;
     } while (p[i].hash);
     GetZipCfileTimestamps(zmap + cf, &lm, 0, 0, gmtoff);
@@ -2176,8 +2174,8 @@ static void IndexAssets(void) {
 static bool OpenZip(bool force) {
   int fd;
   size_t n;
+  uint8_t *m, *d;
   struct stat st;
-  uint8_t *m, *d, *p;
   if (stat(zpath, &st) != -1) {
     if (force || st.st_ino != zst.st_ino || st.st_size > zst.st_size) {
       if (st.st_ino == zst.st_ino) {
@@ -2224,7 +2222,7 @@ static struct Asset *GetAssetZip(const char *path, size_t pathlen) {
   if (pathlen > 1 && path[0] == '/') ++path, --pathlen;
   hash = Hash(path, pathlen);
   for (step = 0;; ++step) {
-    i = (hash + (step * (step + 1)) >> 1) & (assets.n - 1);
+    i = (hash + ((step * (step + 1)) >> 1)) & (assets.n - 1);
     if (!assets.p[i].hash) return NULL;
     if (hash == assets.p[i].hash &&
         pathlen == ZIP_CFILE_NAMESIZE(zmap + assets.p[i].cf) &&
@@ -2258,7 +2256,6 @@ static struct Asset *GetAssetFile(const char *path, size_t pathlen) {
 }
 
 static struct Asset *GetAsset(const char *path, size_t pathlen) {
-  char *path2;
   struct Asset *a;
   if (!(a = GetAssetFile(path, pathlen))) {
     if (!(a = GetAssetZip(path, pathlen))) {
@@ -2280,11 +2277,11 @@ static char *AppendHeader(char *p, const char *k, const char *v) {
 static char *AppendContentType(char *p, const char *ct) {
   p = stpcpy(p, "Content-Type: ");
   p = stpcpy(p, ct);
-  if ((cpm.istext = _startswith(ct, "text/"))) {
+  if ((cpm.istext = startswith(ct, "text/"))) {
     if (!strchr(ct + 5, ';')) {
       p = stpcpy(p, "; charset=utf-8");
     }
-    if (!cpm.referrerpolicy && _startswith(ct + 5, "html")) {
+    if (!cpm.referrerpolicy && startswith(ct + 5, "html")) {
       cpm.referrerpolicy = "no-referrer-when-downgrade";
     }
   }
@@ -2369,7 +2366,6 @@ static void *Deflate(const void *data, size_t size, size_t *out_size) {
 }
 
 static void *LoadAsset(struct Asset *a, size_t *out_size) {
-  int mode;
   size_t size;
   uint8_t *data;
   if (S_ISDIR(GetMode(a))) {
@@ -2640,11 +2636,9 @@ static int LuaCallWithYield(lua_State *L) {
 static ssize_t DeflateGenerator(struct iovec v[3]) {
   int i, rc;
   size_t no;
-  void *res;
-  int level;
   i = 0;
   if (!dg.t) {
-    v[0].iov_base = kGzipHeader;
+    v[0].iov_base = (void *)kGzipHeader;
     v[0].iov_len = sizeof(kGzipHeader);
     ++dg.t;
     ++i;
@@ -2696,7 +2690,6 @@ static ssize_t DeflateGenerator(struct iovec v[3]) {
 
 static char *ServeAssetCompressed(struct Asset *a) {
   char *p;
-  uint32_t crc;
   LockInc(&shared->c.deflates);
   LockInc(&shared->c.compressedresponses);
   DEBUGF("(srvr) ServeAssetCompressed()");
@@ -2722,7 +2715,6 @@ static char *ServeAssetCompressed(struct Asset *a) {
 static ssize_t InflateGenerator(struct iovec v[3]) {
   int i, rc;
   size_t no;
-  void *res;
   i = 0;
   if (!dg.t) {
     ++dg.t;
@@ -2760,7 +2752,6 @@ static ssize_t InflateGenerator(struct iovec v[3]) {
 static char *ServeAssetDecompressed(struct Asset *a) {
   char *p;
   size_t size;
-  uint32_t crc;
   LockInc(&shared->c.inflates);
   LockInc(&shared->c.decompressedresponses);
   size = GetZipCfileUncompressedSize(zmap + a->cf);
@@ -2836,12 +2827,13 @@ static char *ServeAssetRange(struct Asset *a) {
 }
 
 static char *GetAssetPath(uint8_t *zcf, size_t *out_size) {
-  char *p1, *p2;
+  char *p2;
   size_t n1, n2;
+  const char *p1;
   p1 = ZIP_CFILE_NAME(zcf);
   n1 = ZIP_CFILE_NAMESIZE(zcf);
-  p2 = xmalloc(1 + n1 + 1);
   n2 = 1 + n1 + 1;
+  p2 = xmalloc(n2);
   p2[0] = '/';
   memcpy(p2 + 1, p1, n1);
   p2[1 + n1] = '\0';
@@ -2920,7 +2912,7 @@ static void LaunchBrowser(const char *path) {
       sigaction(SIGINT, &saveint, 0);
       sigaction(SIGQUIT, &savequit, 0);
       sigprocmask(SIG_SETMASK, &savemask, 0);
-      execv(prog, (char *const[]){prog, u, 0});
+      execv(prog, (char *const[]){(char *)prog, (char *)u, 0});
       _Exit(127);
     }
     while (wait4(pid, &ws, 0, 0) == -1) {
@@ -2971,12 +2963,11 @@ static char *ServeListing(void) {
   int w[3];
   uint8_t *zcf;
   struct tm tm;
+  char *p, *path;
   const char *and;
-  struct rusage ru;
-  char *p, *q, *path;
   struct timespec lastmod;
+  size_t n, pathlen, rn[6];
   char rb[8], tb[20], *rp[6];
-  size_t i, n, pathlen, rn[6];
   LockInc(&shared->c.listingrequests);
   if (cpm.msg.method != kHttpGet && cpm.msg.method != kHttpHead)
     return BadMethod();
@@ -3255,7 +3246,7 @@ static char *ServeLua(struct Asset *a, const char *s, size_t n) {
   size_t codelen;
   lua_State *L = GL;
   LockInc(&shared->c.dynamicrequests);
-  effectivepath.p = s;
+  effectivepath.p = (void *)s;
   effectivepath.n = n;
   if ((code = FreeLater(LoadAsset(a, &codelen)))) {
     int status =
@@ -3429,9 +3420,10 @@ static int LuaServeIndex(lua_State *L) {
 }
 
 static int LuaServeRedirect(lua_State *L) {
-  size_t loclen;
-  const char *location, *eval;
   int code;
+  char *eval;
+  size_t loclen;
+  const char *location;
   OnlyCallDuringRequest(L, "ServeRedirect");
 
   code = luaL_checkinteger(L, 1);
@@ -3622,16 +3614,15 @@ static void GetDosLocalTime(int64_t utcunixts, uint16_t *out_time,
   *out_date = DOS_DATE(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday + 1);
 }
 
-static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
-                       int mode) {
+static void StoreAsset(const char *path, size_t pathlen, const char *data,
+                       size_t datalen, int mode) {
   int64_t ft;
-  int i;
   uint32_t crc;
   char *comp, *p;
   struct timespec now;
   struct Asset *a;
   struct iovec v[13];
-  uint8_t *cdir, era;
+  uint8_t era;
   const char *use;
   uint16_t gflags, iattrs, mtime, mdate, dosmode, method, disk;
   size_t oldcdirsize, oldcdiroffset, records, cdiroffset, cdirsize, complen,
@@ -3641,8 +3632,8 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   }
   INFOF("(srvr) storing asset %`'s", path);
   disk = gflags = iattrs = 0;
-  if (_isutf8(path, pathlen)) gflags |= kZipGflagUtf8;
-  if (_istext(data, datalen)) iattrs |= kZipIattrText;
+  if (isutf8(path, pathlen)) gflags |= kZipGflagUtf8;
+  if (istext(data, datalen)) iattrs |= kZipIattrText;
   crc = crc32_z(0, data, datalen);
   if (datalen < 100) {
     method = kZipCompressionNone;
@@ -3705,10 +3696,10 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   p = WRITE16LE(p, pathlen);
   p = WRITE16LE(p, v[2].iov_len);
   v[1].iov_len = pathlen;
-  v[1].iov_base = path;
+  v[1].iov_base = (void *)path;
   // file data
   v[3].iov_len = uselen;
-  v[3].iov_base = use;
+  v[3].iov_base = (void *)use;
   // old central directory entries
   oldcdirsize = GetZipCdirSize(zcdir);
   oldcdiroffset = GetZipCdirOffset(zcdir);
@@ -3771,7 +3762,7 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   p = WRITE16LE(p, mode);
   p = WRITE32LE(p, MIN(zsize, 0xffffffff));
   v[7].iov_len = pathlen;
-  v[7].iov_base = path;
+  v[7].iov_base = (void *)path;
   // zip64 end of central directory
   cdiroffset =
       zsize + v[0].iov_len + v[1].iov_len + v[2].iov_len + v[3].iov_len;
@@ -3800,7 +3791,7 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
     v[10].iov_base = 0;
   }
   // end of central directory
-  v[12].iov_base = GetZipCdirComment(zcdir);
+  v[12].iov_base = (void *)GetZipCdirComment(zcdir);
   v[12].iov_len = GetZipCdirCommentSize(zcdir);
   v[11].iov_base = p = alloca((v[11].iov_len = kZipCdirHdrMinSize));
   p = WRITE32LE(p, kZipCdirHdrMagic);
@@ -3819,12 +3810,12 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   free(comp);
 }
 
-static void StoreFile(char *path) {
+static void StoreFile(const char *path) {
   char *p;
-  size_t plen, tlen;
   struct stat st;
-  char *target = path;
-  if (_startswith(target, "./")) target += 2;
+  size_t plen, tlen;
+  const char *target = path;
+  if (startswith(target, "./")) target += 2;
   tlen = strlen(target);
   if (!IsReasonablePath(target, tlen))
     FATALF("(cfg) error: can't store %`'s: contains '.' or '..' segments",
@@ -3840,8 +3831,9 @@ static void StorePath(const char *dirpath) {
   DIR *d;
   char *path;
   struct dirent *e;
-  if (!isdirectory(dirpath) && !_endswith(dirpath, "/"))
+  if (!isdirectory(dirpath) && !endswith(dirpath, "/")) {
     return StoreFile(dirpath);
+  }
   if (!(d = opendir(dirpath))) FATALF("(cfg) error: can't open %`'s", dirpath);
   while ((e = readdir(d))) {
     if (strcmp(e->d_name, ".") == 0) continue;
@@ -4120,10 +4112,9 @@ static int LuaGetUser(lua_State *L) {
   OnlyCallDuringRequest(L, "GetUser");
   if (url.user.p) {
     LuaPushUrlView(L, &url.user);
-  } else if ((p = GetBasicAuthorization(&n))) {
+  } else if ((p = gc(GetBasicAuthorization(&n)))) {
     if (!(q = memchr(p, ':', n))) q = p + n;
     lua_pushlstring(L, p, q - p);
-    free(p);
   } else {
     lua_pushnil(L);
   }
@@ -4136,13 +4127,12 @@ static int LuaGetPass(lua_State *L) {
   OnlyCallDuringRequest(L, "GetPass");
   if (url.user.p) {
     LuaPushUrlView(L, &url.pass);
-  } else if ((p = GetBasicAuthorization(&n))) {
+  } else if ((p = gc(GetBasicAuthorization(&n)))) {
     if ((q = memchr(p, ':', n))) {
       lua_pushlstring(L, q + 1, p + n - (q + 1));
     } else {
       lua_pushnil(L);
     }
-    free(p);
   } else {
     lua_pushnil(L);
   }
@@ -4228,10 +4218,10 @@ static int LuaGetHeaders(lua_State *L) {
 
 static int LuaSetHeader(lua_State *L) {
   int h;
-  ssize_t rc;
+  char *eval;
   char *p, *q;
-  const char *key, *val, *eval;
-  size_t i, keylen, vallen, evallen;
+  const char *key, *val;
+  size_t keylen, vallen, evallen;
   OnlyCallDuringRequest(L, "SetHeader");
   key = luaL_checklstring(L, 1, &keylen);
   val = luaL_optlstring(L, 2, 0, &vallen);
@@ -4348,7 +4338,7 @@ static int LuaSetCookie(lua_State *L) {
         expires =
             FormatUnixHttpDateTime(FreeLater(xmalloc(30)), lua_tonumber(L, -1));
       } else {
-        expires = lua_tostring(L, -1);
+        expires = (void *)lua_tostring(L, -1);
         if (!ParseHttpDateTime(expires, -1)) {
           luaL_argerror(L, 3, "invalid data format in Expires");
           __builtin_unreachable();
@@ -4367,7 +4357,7 @@ static int LuaSetCookie(lua_State *L) {
 
     if (lua_getfield(L, 3, "samesite") == LUA_TSTRING ||
         lua_getfield(L, 3, "SameSite") == LUA_TSTRING) {
-      samesite = lua_tostring(L, -1);  // also used in the Secure check
+      samesite = (void *)lua_tostring(L, -1);  // also used in the Secure check
       appends(&buf, "; SameSite=");
       appends(&buf, samesite);
     }
@@ -4570,6 +4560,12 @@ static int LuaProgramBrand(lua_State *L) {
 }
 
 static int LuaProgramDirectory(lua_State *L) {
+  struct stat st;
+  const char *path = luaL_checkstring(L, 1);
+  // check to raise a Lua error, to allow it to be handled
+  if (stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
+    return luaL_argerror(L, 1, "not a directory");
+  }
   return LuaProgramString(L, ProgramDirectory);
 }
 
@@ -4614,7 +4610,7 @@ static int LuaProgramSslPresharedKey(lua_State *L) {
 }
 
 static int LuaProgramSslCiphersuite(lua_State *L) {
-  mbedtls_ssl_ciphersuite_t *suite;
+  const mbedtls_ssl_ciphersuite_t *suite;
   OnlyCallFromInitLua(L, "ProgramSslCiphersuite");
   if (!(suite = GetCipherSuite(luaL_checkstring(L, 1)))) {
     luaL_argerror(L, 1, "unsupported or unknown ciphersuite");
@@ -4718,7 +4714,7 @@ static int LuaGetZipPaths(lua_State *L) {
   char *path;
   uint8_t *zcf;
   size_t i, n, pathlen, prefixlen;
-  char *prefix = luaL_optlstring(L, 1, "", &prefixlen);
+  const char *prefix = luaL_optlstring(L, 1, "", &prefixlen);
   lua_newtable(L);
   i = 0;
   n = GetZipCdirRecords(zcdir);
@@ -4726,7 +4722,7 @@ static int LuaGetZipPaths(lua_State *L) {
        zcf += ZIP_CFILE_HDRSIZE(zcf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zcf));
     path = GetAssetPath(zcf, &pathlen);
-    if (prefixlen == 0 || _startswith(path, prefix)) {
+    if (prefixlen == 0 || startswith(path, prefix)) {
       lua_pushlstring(L, path, pathlen);
       lua_seti(L, -2, ++i);
     }
@@ -4948,19 +4944,19 @@ static int LuaProgramTokenBucket(lua_State *L) {
   tokenbucket.ban = ban;
   tokenbucket.replenish = timespec_fromnanos(1 / replenish * 1e9);
   int pid = fork();
-  _npassert(pid != -1);
+  npassert(pid != -1);
   if (!pid) Replenisher();
   return 0;
 }
 
 static const char *GetContentTypeExt(const char *path, size_t n) {
-  char *r, *e;
+  const char *r, *e;
   int top;
   lua_State *L = GL;
   if ((r = FindContentType(path, n))) return r;
 
   // extract the last .; use the entire path if none is present
-  if (e = strrchr(path, '.')) path = e + 1;
+  if ((e = strrchr(path, '.'))) path = e + 1;
   top = lua_gettop(L);
   lua_pushlightuserdata(L, (void *)&ctIdx);  // push address as unique key
   CHECK_EQ(lua_gettable(L, LUA_REGISTRYINDEX), LUA_TTABLE);
@@ -5032,7 +5028,7 @@ static bool LuaRunAsset(const char *path, bool mandatory) {
   if ((a = GetAsset(path, pathlen))) {
     if ((code = FreeLater(LoadAsset(a, &codelen)))) {
       lua_State *L = GL;
-      effectivepath.p = path;
+      effectivepath.p = (void *)path;
       effectivepath.n = pathlen;
       DEBUGF("(lua) LuaRunAsset(%`'s)", path);
       status = luaL_loadbuffer(
@@ -5335,22 +5331,11 @@ static void LuaSetConstant(lua_State *L, const char *s, long x) {
   lua_setglobal(L, s);
 }
 
-static char *GetDefaultLuaPath(void) {
-  char *s;
-  size_t i;
-  for (s = 0, i = 0; i < stagedirs.n; ++i) {
-    appendf(&s, "%s/.lua/?.lua;%s/.lua/?/init.lua;", stagedirs.p[i].s,
-            stagedirs.p[i].s);
-  }
-  appends(&s, "/zip/.lua/?.lua;/zip/.lua/?/init.lua");
-  return s;
-}
-
 static void LuaStart(void) {
 #ifndef STATIC
   size_t i;
   lua_State *L = GL = luaL_newstate();
-  g_lua_path_default = GetDefaultLuaPath();
+  g_lua_path_default = DEFAULTLUAPATH;
   luaL_openlibs(L);
   for (i = 0; i < ARRAYLEN(kLuaLibs); ++i) {
     luaL_requiref(L, kLuaLibs[i].name, kLuaLibs[i].func, 1);
@@ -5408,7 +5393,6 @@ static void HandleCompletions(const char *p, linenoiseCompletions *c) {
 static void LuaPrint(lua_State *L) {
   int i, n;
   char *b = 0;
-  const char *s;
   n = lua_gettop(L);
   if (n > 0) {
     for (i = 1; i <= n; i++) {
@@ -5500,7 +5484,6 @@ static void LuaDestroy(void) {
 #ifndef STATIC
   lua_State *L = GL;
   lua_close(L);
-  free(g_lua_path_default);
 #endif
 }
 
@@ -5518,6 +5501,7 @@ static void MemDestroy(void) {
   Free(&cpm.outbuf);
   FreeStrings(&stagedirs);
   FreeStrings(&hidepaths);
+  Free(&cachedirective);
   Free(&launchbrowser);
   Free(&serverheader);
   Free(&trustedips.p);
@@ -5556,11 +5540,20 @@ static void LuaInit(void) {
 #endif
 }
 
-static void LuaReload(void) {
+static void LuaOnServerReload(bool reindex) {
 #ifndef STATIC
   if (!LuaRunAsset("/.reload.lua", false)) {
     DEBUGF("(srvr) no /.reload.lua defined");
   }
+
+  lua_State *L = GL;
+  lua_getglobal(L, "OnServerReload");
+  lua_pushboolean(L, reindex);
+  if (LuaCallWithTrace(L, 1, 0, NULL) != LUA_OK) {
+    LogLuaError("OnServerReload", lua_tostring(L, -1));
+    lua_pop(L, 1);  // pop error
+  }
+  AssertLuaStackIsAt(L, 0);
 #endif
 }
 
@@ -5588,7 +5581,7 @@ static ssize_t SendString(const char *s) {
   ssize_t rc;
   struct iovec iov;
   n = strlen(s);
-  iov.iov_base = s;
+  iov.iov_base = (void *)s;
   iov.iov_len = n;
   if (logmessages) {
     LogMessage("sending", s, n);
@@ -5750,13 +5743,12 @@ static void HandleFrag(size_t got) {
 
 static void HandleReload(void) {
   LockInc(&shared->c.reloads);
-  Reindex();
-  LuaReload();
+  LuaOnServerReload(Reindex());
+  invalidated = false;
 }
 
 static void HandleHeartbeat(void) {
   size_t i;
-  sigset_t mask;
   UpdateCurrentDate(timespec_real());
   Reindex();
   getrusage(RUSAGE_SELF, &shared->server);
@@ -6042,7 +6034,6 @@ static char *Route(const char *host, size_t hostlen, const char *path,
 static char *RoutePath(const char *path, size_t pathlen) {
   int m;
   long r;
-  char *p;
   struct Asset *a;
   DEBUGF("(srvr) RoutePath(%`'.*s)", pathlen, path);
   if ((a = GetAsset(path, pathlen))) {
@@ -6146,7 +6137,6 @@ static bool IsNotModified(struct Asset *a) {
 
 static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
   char *p;
-  uint32_t crc;
   const char *ct;
   ct = GetContentType(a, path, pathlen);
   if (IsNotModified(a)) {
@@ -6180,7 +6170,7 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
                ClientAcceptsGzip() && !ShouldAvoidGzip() &&
                !(a->file &&
                  IsNoCompressExt(a->file->path.s, a->file->path.n)) &&
-               ((cpm.contentlength >= 100 && _startswithi(ct, "text/")) ||
+               ((cpm.contentlength >= 100 && startswithi(ct, "text/")) ||
                 (cpm.contentlength >= 1000 &&
                  MeasureEntropy(cpm.content, 1000) < 7))) {
       VERBOSEF("serving compressed asset");
@@ -6254,7 +6244,7 @@ static bool TransmitResponse(char *p) {
     iovlen = 1;
     if (!MustNotIncludeMessageBody()) {
       if (cpm.gzipped) {
-        iov[iovlen].iov_base = kGzipHeader;
+        iov[iovlen].iov_base = (void *)kGzipHeader;
         iov[iovlen].iov_len = sizeof(kGzipHeader);
         ++iovlen;
       }
@@ -6418,10 +6408,10 @@ static bool IsSsl(unsigned char c) {
 }
 
 static void HandleMessages(void) {
-  char *p;
   bool once;
   ssize_t rc;
   size_t got;
+  (void)once;
   for (once = false;;) {
     InitRequest();
     startread = timespec_real();
@@ -6502,7 +6492,6 @@ static void HandleMessages(void) {
       }
       if (invalidated) {
         HandleReload();
-        invalidated = false;
       }
     }
     if (cpm.msgsize == amtread) {
@@ -6533,7 +6522,6 @@ static void HandleMessages(void) {
     CollectGarbage();
     if (invalidated) {
       HandleReload();
-      invalidated = false;
     }
   }
 }
@@ -6552,7 +6540,10 @@ static int ExitWorker(void) {
   }
   if (monitortty) {
     terminatemonitor = true;
-    _join(&monitorth);
+    if (monitorth) {
+      pthread_join(monitorth, 0);
+      monitorth = 0;
+    }
   }
   _Exit(0);
 }
@@ -6585,18 +6576,18 @@ static int EnableSandbox(void) {
   }
 }
 
-static int MemoryMonitor(void *arg, int tid) {
+static void *MemoryMonitor(void *arg) {
   static struct termios oldterm;
   static int tty;
   sigset_t ss;
-  bool done, ok;
+  bool ok;
   size_t intervals;
   struct winsize ws;
   unsigned char rez;
   struct termios term;
-  char *b, *addr, title[128];
+  char *b, *addr;
   struct MemoryInterval *mi, *mi2;
-  long i, j, k, n, x, y, pi, gen, pages;
+  long i, j, gen, pages;
   int rc, id, color, color2, workers;
   id = atomic_load_explicit(&shared->workers, memory_order_relaxed);
   DEBUGF("(memv) started for pid %d on tid %d", getpid(), gettid());
@@ -6671,13 +6662,14 @@ static int MemoryMonitor(void *arg, int tid) {
         appendr(&b, 0);
         appends(&b, "\e[H\e[1m");
 
-        for (pi = k = x = y = i = 0; i < intervals; ++i) {
+        for (i = 0; i < intervals; ++i) {
           addr = (char *)((int64_t)((uint64_t)mi[i].x << 32) >> 16);
           color = 0;
           appendf(&b, "\e[0m%lx", addr);
-          pages = (mi[i].size + PAGESIZE - 1) / PAGESIZE;
+          int pagesz = getauxval(AT_PAGESZ);
+          pages = (mi[i].size + pagesz - 1) / pagesz;
           for (j = 0; j < pages; ++j) {
-            rc = mincore(addr + j * PAGESIZE, PAGESIZE, &rez);
+            rc = mincore(addr + j * pagesz, pagesz, &rez);
             if (!rc) {
               if (rez & 1) {
                 if (mi[i].flags & MAP_SHARED) {
@@ -6740,8 +6732,9 @@ static int MemoryMonitor(void *arg, int tid) {
 }
 
 static void MonitorMemory(void) {
-  if (_spawn(MemoryMonitor, 0, &monitorth) == -1) {
-    WARNF("(memv) failed to start memory monitor %m");
+  errno_t err;
+  if ((err = pthread_create(&monitorth, 0, MemoryMonitor, 0))) {
+    WARNF("(memv) failed to start memory monitor %s", strerror(err));
   }
 }
 
@@ -6915,16 +6908,14 @@ static int HandleConnection(size_t i) {
 static void MakeExecutableModifiable(void) {
 #ifdef __x86_64__
   int ft;
-  size_t n;
-  extern char ape_rom_vaddr[] __attribute__((__weak__));
   if (!(SUPPORT_VECTOR & (_HOSTMETAL | _HOSTWINDOWS | _HOSTXNU))) return;
   if (IsWindows()) return;  // TODO
   if (IsOpenbsd()) return;  // TODO
   if (IsNetbsd()) return;   // TODO
-  if (_endswith(zpath, ".com.dbg")) return;
+  if (endswith(zpath, ".com.dbg")) return;
   close(zfd);
   ft = ftrace_enabled(0);
-  if ((zfd = _OpenExecutable()) == -1) {
+  if ((zfd = __open_executable()) == -1) {
     WARNF("(srvr) can't open executable for modification: %m");
   }
   if (ft > 0) {
@@ -7009,14 +7000,8 @@ static int HandlePoll(int ms) {
 #ifndef STATIC
     } else if (__replmode) {
       // handle refresh repl line
-      if (!IsWindows()) {
-        rc = HandleReadline();
-        if (rc < 0) return rc;
-      } else {
-        strace_enabled(-1);
-        linenoiseRefreshLine(lua_repl_linenoise);
-        strace_enabled(+1);
-      }
+      rc = HandleReadline();
+      if (rc < 0) return rc;
 #endif
     }
   } else {
@@ -7136,7 +7121,6 @@ int EventLoop(int ms) {
       lua_repl_lock();
       HandleReload();
       lua_repl_unlock();
-      invalidated = false;
     } else if (meltdown) {
       lua_repl_lock();
       EnterMeltdownMode();
@@ -7165,31 +7149,6 @@ static void ReplEventLoop(void) {
   lua_freerepl();
   lua_settop(L, 0);  // clear stack
   polls[0].fd = -1;
-}
-
-static int WindowsReplThread(void *arg, int tid) {
-  int sig;
-  lua_State *L = GL;
-  DEBUGF("(repl) started windows thread");
-  lua_repl_blocking = true;
-  lua_repl_completions_callback = HandleCompletions;
-  lua_initrepl(L);
-  EnableRawMode();
-  while (!terminated) {
-    if (HandleReadline() == -1) {
-      break;
-    }
-  }
-  DisableRawMode();
-  lua_freerepl();
-  lua_repl_lock();
-  lua_settop(L, 0);  // clear stack
-  lua_repl_unlock();
-  if ((sig = linenoiseGetInterrupt())) {
-    raise(sig);
-  }
-  DEBUGF("(repl) terminating windows thread");
-  return 0;
 }
 
 static void InstallSignalHandler(int sig, void *handler) {
@@ -7266,8 +7225,8 @@ static void TlsInit(void) {
   }
   mbedtls_ssl_set_bio(&ssl, &g_bio, TlsSend, 0, TlsRecv);
   conf.disable_compression = confcli.disable_compression = true;
-  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&conf, kAlpn));
-  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&confcli, kAlpn));
+  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&conf, (void *)kAlpn));
+  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&confcli, (void *)kAlpn));
   DCHECK_EQ(0, mbedtls_ssl_setup(&ssl, &conf));
   DCHECK_EQ(0, mbedtls_ssl_setup(&sslcli, &confcli));
 #endif
@@ -7472,9 +7431,6 @@ void RedBean(int argc, char *argv[]) {
   GetResolvConf();  // for effect
   if (daemonize || uniprocess || !linenoiseIsTerminal()) {
     EventLoop(timespec_tomillis(heartbeatinterval));
-  } else if (IsWindows()) {
-    CHECK_NE(-1, _spawn(WindowsReplThread, 0, &replth));
-    EventLoop(100);
   } else {
     ReplEventLoop();
   }
@@ -7482,10 +7438,16 @@ void RedBean(int argc, char *argv[]) {
   if (!isexitingworker) {
     if (!IsTiny()) {
       terminatemonitor = true;
-      _join(&monitorth);
+      if (monitorth) {
+        pthread_join(monitorth, 0);
+        monitorth = 0;
+      }
     }
 #ifndef STATIC
-    _join(&replth);
+    if (replth) {
+      pthread_join(replth, 0);
+      replth = 0;
+    }
 #endif
     HandleShutdown();
     CallSimpleHookIfDefined("OnServerStop");
@@ -7498,7 +7460,7 @@ void RedBean(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-#if !IsTiny() && !defined(__x86_64__)
+#if !IsTiny()
   ShowCrashReports();
 #endif
   LoadZipArgs(&argc, &argv);
@@ -7509,12 +7471,10 @@ int main(int argc, char *argv[]) {
   // 2. unwound worker exit
   if (IsModeDbg()) {
     if (isexitingworker) {
-      if (IsWindows()) {
-        // TODO(jart): Get windows worker leak detector working again.
-        return 0;
-        CloseServerFds();
+      if (replth) {
+        pthread_join(replth, 0);
+        replth = 0;
       }
-      _join(&replth);
       linenoiseDisableRawMode();
       linenoiseHistoryFree();
     }

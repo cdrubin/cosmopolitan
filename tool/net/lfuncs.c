@@ -21,6 +21,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/rusage.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/dns/dns.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
@@ -51,6 +52,7 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/rusage.h"
 #include "libc/sysv/consts/sock.h"
+#include "libc/thread/thread.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
 #include "net/http/escape.h"
@@ -106,7 +108,8 @@ int LuaBin(lua_State *L) {
 }
 
 int LuaGetTime(lua_State *L) {
-  lua_pushnumber(L, nowl());
+  struct timespec now = timespec_real();
+  lua_pushnumber(L, now.tv_sec + now.tv_nsec * 1e-9);
   return 1;
 }
 
@@ -131,7 +134,7 @@ int LuaGetCpuCore(lua_State *L) {
 }
 
 int LuaGetCpuCount(lua_State *L) {
-  lua_pushinteger(L, _getcpucount());
+  lua_pushinteger(L, __get_cpu_count());
   return 1;
 }
 
@@ -358,7 +361,6 @@ int LuaBsf(lua_State *L) {
 }
 
 int LuaHighwayHash64(lua_State *L) {
-  long i;
   size_t n;
   uint64_t k[4];
   const char *p;
@@ -390,8 +392,8 @@ int LuaCrc32c(lua_State *L) {
 }
 
 int LuaIndentLines(lua_State *L) {
-  void *p;
   size_t n, j;
+  const void *p;
   if (!lua_isnoneornil(L, 1)) {
     p = luaL_checklstring(L, 1, &n);
     j = luaL_optinteger(L, 2, 1);
@@ -399,9 +401,9 @@ int LuaIndentLines(lua_State *L) {
       luaL_argerror(L, 2, "not in range 0..65535");
       __builtin_unreachable();
     }
-    p = IndentLines(p, n, &n, j);
-    lua_pushlstring(L, p, n);
-    free(p);
+    char *q = IndentLines(p, n, &n, j);
+    lua_pushlstring(L, q, n);
+    free(q);
     return 1;
   } else {
     return lua_gettop(L);
@@ -493,8 +495,8 @@ int LuaSlurp(lua_State *L) {
 //     ├─→ true
 //     └─→ nil, unix.Errno
 int LuaBarf(lua_State *L) {
-  char *data;
   ssize_t rc;
+  const char *data;
   lua_Number offset;
   size_t i, n, wrote;
   int fd, mode, flags, olderr;
@@ -588,13 +590,14 @@ int LuaHasControlCodes(lua_State *L) {
 
 int LuaEncodeLatin1(lua_State *L) {
   int f;
-  char *p;
+  char *q;
   size_t n;
+  const char *p;
   p = luaL_checklstring(L, 1, &n);
   f = LuaCheckControlFlags(L, 2);
-  if ((p = EncodeLatin1(p, n, &n, f))) {
-    lua_pushlstring(L, p, n);
-    free(p);
+  if ((q = EncodeLatin1(p, n, &n, f))) {
+    lua_pushlstring(L, q, n);
+    free(q);
     return 1;
   } else {
     luaL_error(L, "out of memory");
@@ -659,11 +662,10 @@ int LuaGetHttpReason(lua_State *L) {
 int LuaGetCryptoHash(lua_State *L) {
   size_t hl, pl, kl;
   uint8_t d[64];
-  mbedtls_md_context_t ctx;
   // get hash name, payload, and key
-  void *h = luaL_checklstring(L, 1, &hl);
-  void *p = luaL_checklstring(L, 2, &pl);
-  void *k = luaL_optlstring(L, 3, "", &kl);
+  const void *h = luaL_checklstring(L, 1, &hl);
+  const void *p = luaL_checklstring(L, 2, &pl);
+  const void *k = luaL_optlstring(L, 3, "", &kl);
   const mbedtls_md_info_t *digest = mbedtls_md_info_from_string(h);
   if (!digest) return luaL_argerror(L, 1, "unknown hash type");
   if (kl == 0) {
@@ -707,13 +709,14 @@ int LuaIsAcceptablePort(lua_State *L) {
 
 static dontinline int LuaCoderImpl(lua_State *L,
                                    char *C(const char *, size_t, size_t *)) {
-  void *p;
+  void *q;
   size_t n;
+  const void *p;
   if (!lua_isnoneornil(L, 1)) {
     p = luaL_checklstring(L, 1, &n);
-    if ((p = C(p, n, &n))) {
-      lua_pushlstring(L, p, n);
-      free(p);
+    if ((q = C(p, n, &n))) {
+      lua_pushlstring(L, q, n);
+      free(q);
     } else {
       luaL_error(L, "out of memory");
       __builtin_unreachable();
@@ -782,12 +785,13 @@ int LuaEscapeFragment(lua_State *L) {
 }
 
 int LuaEscapeLiteral(lua_State *L) {
-  char *p, *q = 0;
+  const char *p;
+  char *z, *q = 0;
   size_t n, y = 0;
   p = luaL_checklstring(L, 1, &n);
-  if ((p = EscapeJsStringLiteral(&q, &y, p, n, &n))) {
-    lua_pushlstring(L, p, n);
-    free(q);
+  if ((z = EscapeJsStringLiteral(&q, &y, p, n, &n))) {
+    lua_pushlstring(L, z, n);
+    free(z);
     return 1;
   } else {
     luaL_error(L, "out of memory");
@@ -801,9 +805,9 @@ int LuaVisualizeControlCodes(lua_State *L) {
 
 static dontinline int LuaHasherImpl(lua_State *L, size_t k,
                                     int H(const void *, size_t, uint8_t *)) {
-  void *p;
   size_t n;
   uint8_t d[64];
+  const void *p;
   if (!lua_isnoneornil(L, 1)) {
     p = luaL_checklstring(L, 1, &n);
     H(p, n, d);
@@ -884,7 +888,7 @@ int LuaBenchmark(lua_State *L) {
   uint64_t t1, t2;
   int64_t interrupts;
   double avgticks, overhead;
-  int core, iter, count, tries, attempts, maxattempts;
+  int core, iter, count, attempts, maxattempts;
   luaL_checktype(L, 1, LUA_TFUNCTION);
   count = luaL_optinteger(L, 2, 100);
   maxattempts = luaL_optinteger(L, 3, 10);
@@ -893,7 +897,7 @@ int LuaBenchmark(lua_State *L) {
 
   for (attempts = 0;;) {
     lua_gc(L, LUA_GCCOLLECT);
-    sched_yield();
+    pthread_yield();
     core = TSC_AUX_CORE(Rdpid());
     interrupts = GetInterrupts();
     for (avgticks = iter = 1; iter < count; ++iter) {
@@ -915,7 +919,7 @@ int LuaBenchmark(lua_State *L) {
 
   for (attempts = 0;;) {
     lua_gc(L, LUA_GCCOLLECT);
-    sched_yield();
+    pthread_yield();
     core = TSC_AUX_CORE(Rdpid());
     interrupts = GetInterrupts();
     for (avgticks = iter = 1; iter < count; ++iter) {
@@ -936,7 +940,7 @@ int LuaBenchmark(lua_State *L) {
   avgticks = MAX(avgticks - overhead, 0);
 
   lua_gc(L, LUA_GCRESTART);
-  lua_pushinteger(L, ConvertTicksToNanos(round(avgticks)));
+  lua_pushinteger(L, avgticks / 3);
   lua_pushinteger(L, round(avgticks));
   lua_pushinteger(L, round(overhead));
   lua_pushinteger(L, attempts);

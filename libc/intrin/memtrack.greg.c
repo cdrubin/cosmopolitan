@@ -23,8 +23,6 @@
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/directmap.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/likely.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
@@ -37,20 +35,10 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
 
-#if IsModeDbg()
-#define ASSERT_MEMTRACK()          \
-  if (!AreMemoryIntervalsOk(mm)) { \
-    PrintMemoryIntervals(2, mm);   \
-    notpossible;                   \
-  }
-#else
-#define ASSERT_MEMTRACK()
-#endif
-
-static void *MoveMemoryIntervals(struct MemoryInterval *d,
-                                 const struct MemoryInterval *s, int n) {
+static void *__shove_memory(struct MemoryInterval *d,
+                            const struct MemoryInterval *s, int n) {
   int i;
-  _unassert(n >= 0);
+  unassert(n >= 0);
   if (d > s) {
     for (i = n; i--;) {
       d[i] = s[i];
@@ -63,14 +51,14 @@ static void *MoveMemoryIntervals(struct MemoryInterval *d,
   return d;
 }
 
-static void RemoveMemoryIntervals(struct MemoryIntervals *mm, int i, int n) {
-  _unassert(i >= 0);
-  _unassert(i + n <= mm->i);
-  MoveMemoryIntervals(mm->p + i, mm->p + i + n, mm->i - (i + n));
+static void __remove_memory(struct MemoryIntervals *mm, int i, int n) {
+  unassert(i >= 0);
+  unassert(i + n <= mm->i);
+  __shove_memory(mm->p + i, mm->p + i + n, mm->i - (i + n));
   mm->i -= n;
 }
 
-static bool ExtendMemoryIntervals(struct MemoryIntervals *mm) {
+static bool __extend_memory(struct MemoryIntervals *mm) {
   int prot, flags;
   char *base, *shad;
   size_t gran, size;
@@ -79,7 +67,6 @@ static bool ExtendMemoryIntervals(struct MemoryIntervals *mm) {
   base = (char *)kMemtrackStart;
   prot = PROT_READ | PROT_WRITE;
   flags = MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED;
-  // TODO(jart): These map handles should not leak across NT fork()
   if (mm->p == mm->s) {
     // TODO(jart): How can we detect ASAN mode under GREG?
     if (1 || IsAsan()) {
@@ -89,7 +76,7 @@ static bool ExtendMemoryIntervals(struct MemoryIntervals *mm) {
     }
     dm = sys_mmap(base, gran, prot, flags, -1, 0);
     if (!dm.addr) return false;
-    MoveMemoryIntervals(dm.addr, mm->p, mm->i);
+    __shove_memory(dm.addr, mm->p, mm->i);
     mm->p = dm.addr;
     mm->n = gran / sizeof(*mm->p);
   } else {
@@ -104,21 +91,20 @@ static bool ExtendMemoryIntervals(struct MemoryIntervals *mm) {
     if (!dm.addr) return false;
     mm->n = (size + gran) / sizeof(*mm->p);
   }
-  ASSERT_MEMTRACK();
   return true;
 }
 
-int CreateMemoryInterval(struct MemoryIntervals *mm, int i) {
-  _unassert(i >= 0);
-  _unassert(i <= mm->i);
-  _unassert(mm->n >= 0);
-  if (UNLIKELY(mm->i == mm->n) && !ExtendMemoryIntervals(mm)) return enomem();
-  MoveMemoryIntervals(mm->p + i + 1, mm->p + i, mm->i++ - i);
+static int __mint_memory(struct MemoryIntervals *mm, int i) {
+  unassert(i >= 0);
+  unassert(i <= mm->i);
+  unassert(mm->n >= 0);
+  if (mm->i == mm->n && !__extend_memory(mm)) return enomem();
+  __shove_memory(mm->p + i + 1, mm->p + i, mm->i++ - i);
   return 0;
 }
 
-static int PunchHole(struct MemoryIntervals *mm, int x, int y, int i) {
-  if (CreateMemoryInterval(mm, i) == -1) return -1;
+static int __punch_memory(struct MemoryIntervals *mm, int x, int y, int i) {
+  if (__mint_memory(mm, i) == -1) return -1;
   mm->p[i + 0].size -= (size_t)(mm->p[i + 0].y - (x - 1)) * FRAMESIZE;
   mm->p[i + 0].y = x - 1;
   mm->p[i + 1].size -= (size_t)((y + 1) - mm->p[i + 1].x) * FRAMESIZE;
@@ -126,22 +112,21 @@ static int PunchHole(struct MemoryIntervals *mm, int x, int y, int i) {
   return 0;
 }
 
-int ReleaseMemoryIntervals(struct MemoryIntervals *mm, int x, int y,
-                           void wf(struct MemoryIntervals *, int, int)) {
+int __untrack_memory(struct MemoryIntervals *mm, int x, int y,
+                     void wf(struct MemoryIntervals *, int, int)) {
   unsigned l, r;
-  ASSERT_MEMTRACK();
-  _unassert(y >= x);
+  unassert(y >= x);
   if (!mm->i) return 0;
   // binary search for the lefthand side
-  l = FindMemoryInterval(mm, x);
+  l = __find_memory(mm, x);
   if (l == mm->i) return 0;
   if (y < mm->p[l].x) return 0;
 
   // binary search for the righthand side
-  r = FindMemoryInterval(mm, y);
+  r = __find_memory(mm, y);
   if (r == mm->i || (r > l && y < mm->p[r].x)) --r;
-  _unassert(r >= l);
-  _unassert(x <= mm->p[r].y);
+  unassert(r >= l);
+  unassert(x <= mm->p[r].y);
 
   // remove the middle of an existing map
   //
@@ -152,7 +137,7 @@ int ReleaseMemoryIntervals(struct MemoryIntervals *mm, int x, int y,
   // this isn't possible on windows because we track each
   // 64kb segment on that platform using a separate entry
   if (l == r && x > mm->p[l].x && y < mm->p[l].y) {
-    return PunchHole(mm, x, y, l);
+    return __punch_memory(mm, x, y, l);
   }
 
   // trim the right side of the lefthand map
@@ -162,11 +147,11 @@ int ReleaseMemoryIntervals(struct MemoryIntervals *mm, int x, int y,
   // ----|mmmm|----------------- after
   //
   if (x > mm->p[l].x && x <= mm->p[l].y) {
-    _unassert(y >= mm->p[l].y);
+    unassert(y >= mm->p[l].y);
     if (IsWindows()) return einval();
     mm->p[l].size -= (size_t)(mm->p[l].y - (x - 1)) * FRAMESIZE;
     mm->p[l].y = x - 1;
-    _unassert(mm->p[l].x <= mm->p[l].y);
+    unassert(mm->p[l].x <= mm->p[l].y);
     ++l;
   }
 
@@ -177,11 +162,11 @@ int ReleaseMemoryIntervals(struct MemoryIntervals *mm, int x, int y,
   // ---------------|mm|-------- after
   //
   if (y >= mm->p[r].x && y < mm->p[r].y) {
-    _unassert(x <= mm->p[r].x);
+    unassert(x <= mm->p[r].x);
     if (IsWindows()) return einval();
     mm->p[r].size -= (size_t)((y + 1) - mm->p[r].x) * FRAMESIZE;
     mm->p[r].x = y + 1;
-    _unassert(mm->p[r].x <= mm->p[r].y);
+    unassert(mm->p[r].x <= mm->p[r].y);
     --r;
   }
 
@@ -189,18 +174,17 @@ int ReleaseMemoryIntervals(struct MemoryIntervals *mm, int x, int y,
     if (IsWindows() && wf) {
       wf(mm, l, r);
     }
-    RemoveMemoryIntervals(mm, l, r - l + 1);
+    __remove_memory(mm, l, r - l + 1);
   }
   return 0;
 }
 
-int TrackMemoryInterval(struct MemoryIntervals *mm, int x, int y, long h,
-                        int prot, int flags, bool readonlyfile, bool iscow,
-                        long offset, long size) {
+int __track_memory(struct MemoryIntervals *mm, int x, int y, long h, int prot,
+                   int flags, bool readonlyfile, bool iscow, long offset,
+                   long size) {
   unsigned i;
-  ASSERT_MEMTRACK();
-  _unassert(y >= x);
-  i = FindMemoryInterval(mm, x);
+  unassert(y >= x);
+  i = __find_memory(mm, x);
 
   // try to extend the righthand side of the lefthand entry
   // we can't do that if we're tracking independent handles
@@ -216,7 +200,7 @@ int TrackMemoryInterval(struct MemoryIntervals *mm, int x, int y, long h,
         prot == mm->p[i].prot && flags == mm->p[i].flags) {
       mm->p[i - 1].y = mm->p[i].y;
       mm->p[i - 1].size += mm->p[i].size;
-      RemoveMemoryIntervals(mm, i, 1);
+      __remove_memory(mm, i, 1);
     }
   }
 
@@ -231,7 +215,7 @@ int TrackMemoryInterval(struct MemoryIntervals *mm, int x, int y, long h,
 
   // otherwise, create a new entry and memmove the items
   else {
-    if (CreateMemoryInterval(mm, i) == -1) return -1;
+    if (__mint_memory(mm, i) == -1) return -1;
     mm->p[i].x = x;
     mm->p[i].y = y;
     mm->p[i].h = h;

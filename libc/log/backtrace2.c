@@ -49,11 +49,14 @@ static int PrintBacktraceUsingAddr2line(int fd, const struct StackFrame *bp) {
   ssize_t got;
   intptr_t addr;
   size_t i, j, gi;
+  char *p1, *p2, *p3;
   int ws, pid, pipefds[2];
   struct Garbages *garbage;
   const struct StackFrame *frame;
-  char *debugbin, *p1, *p2, *p3, *addr2line;
+  const char *debugbin, *addr2line;
   char buf[kBacktraceBufSize], *argv[kBacktraceMaxFrames];
+
+  (void)gi;
 
   // DWARF is a weak standard. Platforms that use LLVM or old GNU
   // usually can't be counted upon to print backtraces correctly.
@@ -95,7 +98,7 @@ static int PrintBacktraceUsingAddr2line(int fd, const struct StackFrame *bp) {
   argv[i++] = "addr2line";
   argv[i++] = "-a"; /* filter out w/ shell script wrapper for old versions */
   argv[i++] = "-pCife";
-  argv[i++] = debugbin;
+  argv[i++] = (char *)debugbin;
   garbage = __tls_enabled ? __get_tls()->tib_garbages : 0;
   gi = garbage ? garbage->i : 0;
   for (frame = bp; frame && i < kBacktraceMaxFrames - 1; frame = frame->next) {
@@ -148,11 +151,11 @@ static int PrintBacktraceUsingAddr2line(int fd, const struct StackFrame *bp) {
                        strlen(" (discriminator ") - 1)) &&
           (p3 = memchr(p2, '\n', got - (p2 - p1)))) {
         if (p3 > p2 && p3[-1] == '\r') --p3;
-        _klog(p1, p2 - p1);
+        klog(p1, p2 - p1);
         got -= p3 - p1;
         p1 += p3 - p1;
       } else {
-        _klog(p1, got);
+        klog(p1, got);
         break;
       }
     }

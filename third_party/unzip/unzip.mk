@@ -24,7 +24,6 @@ THIRD_PARTY_UNZIP_A_DIRECTDEPS =						\
 	LIBC_STR								\
 	LIBC_SYSV								\
 	LIBC_TIME								\
-	LIBC_ZIPOS								\
 	THIRD_PARTY_BZIP2
 
 THIRD_PARTY_UNZIP_A_DEPS :=							\
@@ -51,6 +50,7 @@ o/$(MODE)/third_party/unzip/unzip.com.dbg:					\
 
 $(THIRD_PARTY_UNZIP_A_OBJS): private						\
 		CPPFLAGS +=							\
+			-w							\
 			-DUSE_BZIP2						\
 			-DUNICODE_SUPPORT					\
 			-DHAVE_UNLINK						\

@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/limits.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
 #ifndef __aarch64__
@@ -35,12 +36,11 @@ static inline const unsigned char *memrchr_pure(const unsigned char *s,
   return 0;
 }
 
-#ifdef __x86_64__
-noasan static inline const unsigned char *memrchr_sse(const unsigned char *s,
-                                                      unsigned char c,
-                                                      size_t n) {
+#if defined(__x86_64__) && !defined(__chibicc__)
+static inline const unsigned char *memrchr_sse(const unsigned char *s,
+                                               unsigned char c, size_t n) {
   size_t i;
-  unsigned k, m;
+  unsigned m;
   xmm_t v, t = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
   for (i = n; i >= 16;) {
     v = *(const xmm_t *)(s + (i -= 16));
@@ -69,13 +69,13 @@ noasan static inline const unsigned char *memrchr_sse(const unsigned char *s,
  * @asyncsignalsafe
  */
 void *memrchr(const void *s, int c, size_t n) {
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__chibicc__)
   const void *r;
   if (IsAsan()) __asan_verify(s, n);
   r = memrchr_sse(s, c, n);
   return (void *)r;
 #else
-  return memrchr_pure(s, c, n);
+  return (void *)memrchr_pure(s, c, n);
 #endif
 }
 

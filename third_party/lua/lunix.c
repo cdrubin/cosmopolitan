@@ -38,6 +38,7 @@
 #include "libc/calls/struct/timeval.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/ucontext.h"
+#include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/dns/dns.h"
 #include "libc/errno.h"
@@ -66,7 +67,6 @@
 #include "libc/sock/syslog.h"
 #include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
-#include "libc/str/path.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/at.h"
@@ -202,8 +202,8 @@ static dontinline int ReturnString(lua_State *L, const char *x) {
 }
 
 int LuaUnixSysretErrno(lua_State *L, const char *call, int olderr) {
+  int unixerr, winerr;
   struct UnixErrno *ep;
-  int i, unixerr, winerr;
   unixerr = errno;
   winerr = IsWindows() ? GetLastError() : 0;
   if (!IsTiny() && !(0 < unixerr && unixerr < (!IsWindows() ? 4096 : 65536))) {
@@ -590,7 +590,7 @@ static int LuaUnixExecve(lua_State *L) {
       return LuaUnixSysretErrno(L, "execve", olderr);
     }
   } else {
-    ezargs[0] = prog;
+    ezargs[0] = (char *)prog;
     ezargs[1] = 0;
     argv = ezargs;
     envp = environ;
@@ -735,7 +735,7 @@ static int LuaUnixWait(lua_State *L) {
 //     └─→ nil, unix.Errno
 static int LuaUnixFcntl(lua_State *L) {
   struct flock lock;
-  int rc, fd, cmd, olderr = errno;
+  int fd, cmd, olderr = errno;
   fd = luaL_checkinteger(L, 1);
   cmd = luaL_checkinteger(L, 2);
   if (cmd == F_SETLK || cmd == F_SETLKW || cmd == F_GETLK) {
@@ -919,7 +919,6 @@ static int LuaUnixSetresgid(lua_State *L) {
 //     ├─→ 0
 //     └─→ nil, unix.Errno
 static int LuaUnixUtimensat(lua_State *L) {
-  struct timespec ts;
   int olderr = errno;
   return SysretInteger(
       L, "utimensat", olderr,
@@ -936,7 +935,6 @@ static int LuaUnixUtimensat(lua_State *L) {
 //     ├─→ 0
 //     └─→ nil, unix.Errno
 static int LuaUnixFutimens(lua_State *L) {
-  struct timespec ts;
   int olderr = errno;
   return SysretInteger(
       L, "futimens", olderr,
@@ -952,7 +950,7 @@ static int LuaUnixFutimens(lua_State *L) {
 //     └─→ nil, unix.Errno
 static int LuaUnixGettime(lua_State *L) {
   struct timespec ts;
-  int rc, olderr = errno;
+  int olderr = errno;
   if (!clock_gettime(luaL_optinteger(L, 1, CLOCK_REALTIME), &ts)) {
     lua_pushinteger(L, ts.tv_sec);
     lua_pushinteger(L, ts.tv_nsec);
@@ -1177,14 +1175,14 @@ static bool IsSockoptBool(int l, int x) {
            x == SO_KEEPALIVE ||   //
            x == SO_ACCEPTCONN ||  //
            x == SO_DONTROUTE;     //
-  } else if (l = SOL_TCP) {
+  } else if (l == SOL_TCP) {
     return x == TCP_NODELAY ||           //
            x == TCP_CORK ||              //
            x == TCP_QUICKACK ||          //
            x == TCP_SAVE_SYN ||          //
            x == TCP_FASTOPEN_CONNECT ||  //
            x == TCP_DEFER_ACCEPT;        //
-  } else if (l = SOL_IP) {
+  } else if (l == SOL_IP) {
     return x == IP_HDRINCL;  //
   } else {
     return false;
@@ -1197,7 +1195,7 @@ static bool IsSockoptInt(int l, int x) {
            x == SO_RCVBUF ||    //
            x == SO_RCVLOWAT ||  //
            x == SO_SNDLOWAT;    //
-  } else if (l = SOL_TCP) {
+  } else if (l == SOL_TCP) {
     return x == TCP_FASTOPEN ||       //
            x == TCP_KEEPCNT ||        //
            x == TCP_MAXSEG ||         //
@@ -1206,7 +1204,7 @@ static bool IsSockoptInt(int l, int x) {
            x == TCP_WINDOW_CLAMP ||   //
            x == TCP_KEEPIDLE ||       //
            x == TCP_KEEPINTVL;        //
-  } else if (l = SOL_IP) {
+  } else if (l == SOL_IP) {
     return x == IP_TOS ||  //
            x == IP_MTU ||  //
            x == IP_TTL;    //
@@ -1229,7 +1227,7 @@ static int LuaUnixSetsockopt(lua_State *L) {
   struct linger l;
   uint32_t optsize;
   struct timeval tv;
-  int rc, fd, level, optname, optint, olderr = errno;
+  int fd, level, optname, optint, olderr = errno;
   fd = luaL_checkinteger(L, 1);
   level = luaL_checkinteger(L, 2);
   optname = luaL_checkinteger(L, 3);
@@ -1280,7 +1278,7 @@ static int LuaUnixGetsockopt(lua_State *L) {
   uint32_t size;
   struct linger l;
   struct timeval tv;
-  int rc, fd, level, optname, optval, olderr = errno;
+  int fd, level, optname, optval, olderr = errno;
   fd = luaL_checkinteger(L, 1);
   level = luaL_checkinteger(L, 2);
   optname = luaL_checkinteger(L, 3);
@@ -1546,7 +1544,7 @@ static int LuaUnixPoll(lua_State *L) {
   struct sigset *mask;
   struct timespec ts, *tsp;
   struct pollfd *fds, *fds2;
-  int i, fd, events, olderr = errno;
+  int i, events, olderr = errno;
   luaL_checktype(L, 1, LUA_TTABLE);
   if (!lua_isnoneornil(L, 2)) {
     ts = timespec_frommillis(luaL_checkinteger(L, 2));
@@ -1632,7 +1630,7 @@ static int LuaUnixRecv(lua_State *L) {
   size_t got;
   ssize_t rc;
   lua_Integer bufsiz;
-  int fd, flags, pushed, olderr = errno;
+  int fd, flags, olderr = errno;
   fd = luaL_checkinteger(L, 1);
   bufsiz = luaL_optinteger(L, 2, 1500);
   bufsiz = MIN(bufsiz, 0x7ffff000);
@@ -1654,9 +1652,8 @@ static int LuaUnixRecv(lua_State *L) {
 //     ├─→ sent:int
 //     └─→ nil, unix.Errno
 static int LuaUnixSend(lua_State *L) {
-  char *data;
-  ssize_t rc;
-  size_t sent, size;
+  size_t size;
+  const char *data;
   int fd, flags, olderr = errno;
   fd = luaL_checkinteger(L, 1);
   data = luaL_checklstring(L, 2, &size);
@@ -1669,9 +1666,9 @@ static int LuaUnixSend(lua_State *L) {
 //     ├─→ sent:int
 //     └─→ nil, unix.Errno
 static int LuaUnixSendto(lua_State *L) {
-  char *data;
   size_t size;
   uint32_t salen;
+  const char *data;
   struct sockaddr_storage ss;
   int i, fd, flags, olderr = errno;
   fd = luaL_checkinteger(L, 1);
@@ -1696,7 +1693,6 @@ static int LuaUnixShutdown(lua_State *L) {
 //     ├─→ oldmask:unix.Sigset
 //     └─→ nil, unix.Errno
 static int LuaUnixSigprocmask(lua_State *L) {
-  uint64_t imask;
   int olderr = errno;
   struct sigset oldmask;
   if (!sigprocmask(luaL_checkinteger(L, 1),
@@ -2016,7 +2012,7 @@ static int LuaUnixTiocgwinsz(lua_State *L) {
 
 // unix.sched_yield()
 static int LuaUnixSchedYield(lua_State *L) {
-  sched_yield();
+  pthread_yield();
   return 0;
 }
 
@@ -2733,7 +2729,7 @@ static int LuaUnixMemoryWrite(lua_State *L) {
   if (lua_isnoneornil(L, b)) {
     // unix.Memory:write(data:str[, offset:int])
     // writes binary data, plus a nul terminator
-    if (i < n < m->size) {
+    if (i < n && n < m->size) {
       // include lua string's implicit nul so this round trips with
       // unix.Memory:read(offset:int) even when we're overwriting a
       // larger string that was previously inserted
@@ -2841,7 +2837,7 @@ static int LuaUnixMemoryXor(lua_State *L) {
 static int LuaUnixMemoryWait(lua_State *L) {
   lua_Integer expect;
   int rc, olderr = errno;
-  struct timespec ts, now, *deadline;
+  struct timespec ts, *deadline;
   expect = luaL_checkinteger(L, 3);
   if (!(INT32_MIN <= expect && expect <= INT32_MAX)) {
     luaL_argerror(L, 3, "must be an int32_t");
@@ -2869,7 +2865,7 @@ static int LuaUnixMemoryWake(lua_State *L) {
   count = luaL_optinteger(L, 3, INT_MAX);
   woken = nsync_futex_wake_((atomic_int *)GetWord(L), count,
                             PTHREAD_PROCESS_SHARED);
-  _npassert(woken >= 0);
+  npassert(woken >= 0);
   return ReturnInteger(L, woken);
 }
 
@@ -2886,7 +2882,7 @@ static int LuaUnixMemoryGc(lua_State *L) {
   struct Memory *m;
   m = luaL_checkudata(L, 1, "unix.Memory");
   if (m->u.bytes) {
-    _npassert(!munmap(m->map, m->mapsize));
+    npassert(!munmap(m->map, m->mapsize));
     m->u.bytes = 0;
   }
   return 0;
@@ -3350,7 +3346,8 @@ static const luaL_Reg kLuaUnix[] = {
     {0},                                  //
 };
 
-static void LoadMagnums(lua_State *L, struct MagnumStr *ms, const char *pfx) {
+static void LoadMagnums(lua_State *L, const struct MagnumStr *ms,
+                        const char *pfx) {
   int i;
   char b[64], *p;
   p = stpcpy(b, pfx);
@@ -3531,7 +3528,7 @@ int LuaUnix(lua_State *L) {
   LuaSetIntField(L, "RUSAGE_CHILDREN", RUSAGE_CHILDREN);
   LuaSetIntField(L, "RUSAGE_BOTH", RUSAGE_BOTH);
 
-  LuaSetIntField(L, "ARG_MAX", __arg_max());
+  LuaSetIntField(L, "ARG_MAX", __get_arg_max());
   LuaSetIntField(L, "BUFSIZ", BUFSIZ);
   LuaSetIntField(L, "CLK_TCK", CLK_TCK);
   LuaSetIntField(L, "NAME_MAX", _NAME_MAX);

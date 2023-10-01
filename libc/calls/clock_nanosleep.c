@@ -19,6 +19,7 @@
 #include "libc/assert.h"
 #include "libc/calls/asan.internal.h"
 #include "libc/calls/blockcancel.internal.h"
+#include "libc/calls/blocksigs.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/clock_gettime.internal.h"
 #include "libc/calls/cp.internal.h"
@@ -78,19 +79,19 @@ static struct timespec GetNanosleepLatency(void) {
   clock_gettime_f *cgt;
   struct timespec x, y, w = {0, 1};
   if (!(nanos = g_nanosleep_latency)) {
-    BLOCK_CANCELLATIONS;
+    BLOCK_SIGNALS;
     for (cgt = __clock_gettime_get(0);;) {
-      _npassert(!cgt(CLOCK_REALTIME_PRECISE, &x));
+      npassert(!cgt(CLOCK_REALTIME_PRECISE, &x));
       rc = sys_clock_nanosleep(CLOCK_REALTIME, 0, &w, 0);
-      _npassert(!rc || rc == EINTR);
+      npassert(!rc || rc == EINTR);
       if (!rc) {
-        _npassert(!cgt(CLOCK_REALTIME_PRECISE, &y));
+        npassert(!cgt(CLOCK_REALTIME_PRECISE, &y));
         nanos = timespec_tonanos(timespec_sub(y, x));
         g_nanosleep_latency = nanos;
         break;
       }
     }
-    ALLOW_CANCELLATIONS;
+    ALLOW_SIGNALS;
   }
   return timespec_fromnanos(nanos);
 }
@@ -115,10 +116,10 @@ static errno_t SpinNanosleep(int clock, int flags, const struct timespec *req,
     return rc;
   }
   cgt = __clock_gettime_get(0);
-  _npassert(!cgt(CLOCK_REALTIME, &start));
+  npassert(!cgt(CLOCK_REALTIME, &start));
   for (;;) {
-    sched_yield();
-    _npassert(!cgt(CLOCK_REALTIME, &now));
+    pthread_yield();
+    npassert(!cgt(CLOCK_REALTIME, &now));
     if (flags & TIMER_ABSTIME) {
       if (timespec_cmp(now, *req) >= 0) {
         return 0;
@@ -242,13 +243,11 @@ static bool ShouldUseSpinNanosleep(int clock, int flags,
 errno_t clock_nanosleep(int clock, int flags, const struct timespec *req,
                         struct timespec *rem) {
   int rc;
+  // threads on win32 stacks call this so we can't asan check *ts
   LOCKTRACE("clock_nanosleep(%s, %s, %s) → ...", DescribeClockName(clock),
             DescribeSleepFlags(flags), DescribeTimespec(0, req));
   if (IsMetal()) {
     rc = ENOSYS;
-  } else if (!req || (IsAsan() && (!__asan_is_valid_timespec(req) ||
-                                   (rem && !__asan_is_valid_timespec(rem))))) {
-    rc = EFAULT;
   } else if (clock == 127 ||              //
              (flags & ~TIMER_ABSTIME) ||  //
              req->tv_sec < 0 ||           //

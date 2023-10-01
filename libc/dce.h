@@ -1,5 +1,6 @@
 #ifndef COSMOPOLITAN_LIBC_DCE_H_
 #define COSMOPOLITAN_LIBC_DCE_H_
+#ifdef _COSMO_SOURCE
 /*─────────────────────────────────────────────────────────────────────────────╗
 │ cosmopolitan § autotune » dead code elimination                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
@@ -66,6 +67,18 @@
 #define IsXnuSilicon() 0
 #endif
 
+#if defined(__x86_64__)
+#define _ARCH_NAME "amd64"
+#elif defined(__aarch64__)
+#define _ARCH_NAME "arm64"
+#elif defined(__powerpc64__)
+#define _ARCH_NAME "ppc64"
+#elif defined(__s390x__)
+#define _ARCH_NAME "s390x"
+#elif defined(__riscv)
+#define _ARCH_NAME "riscv"
+#endif
+
 #define SupportsLinux()   ((SUPPORT_VECTOR & _HOSTLINUX) == _HOSTLINUX)
 #define SupportsMetal()   ((SUPPORT_VECTOR & _HOSTMETAL) == _HOSTMETAL)
 #define SupportsWindows() ((SUPPORT_VECTOR & _HOSTWINDOWS) == _HOSTWINDOWS)
@@ -107,11 +120,12 @@ COSMOPOLITAN_C_START_
 extern const int __hostos;
 
 #ifdef __x86_64__
-bool IsWsl1(void);
+bool __iswsl1(void);
 #else
-#define IsWsl1() false
+#define __iswsl1() false
 #endif
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
+#endif /* _COSMO_SOURCE */
 #endif /* COSMOPOLITAN_LIBC_DCE_H_ */

@@ -29,6 +29,7 @@ TEST_LIBC_RUNTIME_DIRECTDEPS =						\
 	LIBC_LOG							\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
+	LIBC_PROC							\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
@@ -37,9 +38,9 @@ TEST_LIBC_RUNTIME_DIRECTDEPS =						\
 	LIBC_TESTLIB							\
 	LIBC_TINYMATH							\
 	LIBC_X								\
-	LIBC_ZIPOS							\
 	TOOL_BUILD_LIB							\
-	THIRD_PARTY_XED
+	THIRD_PARTY_XED							\
+	THIRD_PARTY_ZLIB
 
 TEST_LIBC_RUNTIME_DEPS :=						\
 	$(call uniq,$(foreach x,$(TEST_LIBC_RUNTIME_DIRECTDEPS),$($(x))))
@@ -82,10 +83,15 @@ o/$(MODE)/test/libc/runtime/itsatrap_test.o: private			\
 			-fno-sanitize=all				\
 			-ftrapv
 
+ifeq ($(ARCH), aarch64)
+FTRACEASM_LDSCRIPT = o/$(MODE)/ape/aarch64.lds
+endif
+
 o/$(MODE)/test/libc/runtime/prog/ftraceasm.elf:				\
 		$(TEST_LIBC_RUNTIME_DEPS)				\
 		o/$(MODE)/test/libc/runtime/prog/ftraceasm.o		\
-		o/$(MODE)/test/libc/runtime/runtime.pkg
+		o/$(MODE)/test/libc/runtime/runtime.pkg			\
+		$(FTRACEASM_LDSCRIPT)
 	@$(ELFLINK)
 o/$(MODE)/test/libc/runtime/prog/ftraceasm.txt:				\
 		o/$(MODE)/test/libc/runtime/prog/ftraceasm.elf

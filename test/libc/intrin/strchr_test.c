@@ -72,7 +72,6 @@ TEST(strchrnul, notFound_returnsPointerToNulByte) {
 }
 
 char *strchr_pure(const char *s, int c) {
-  char *r;
   for (c &= 0xff;; ++s) {
     if ((*s & 0xff) == c) return (char *)s;
     if (!*s) return NULL;
@@ -93,21 +92,22 @@ TEST(strchr, fuzz) {
 }
 
 BENCH(strchr, bench) {
-  EZBENCH2("strchr 0", donothing, EXPROPRIATE(strchr(VEIL("r", ""), 0)));
-  EZBENCH2("strchr 5", donothing, EXPROPRIATE(strchr(VEIL("r", "hello"), 'o')));
+  EZBENCH2("strchr 0", donothing, __expropriate(strchr(__veil("r", ""), 0)));
+  EZBENCH2("strchr 5", donothing,
+           __expropriate(strchr(__veil("r", "hello"), 'o')));
   EZBENCH2("strchr 8", donothing,
-           EXPROPRIATE(strchr(VEIL("r", "hellzzzo"), 'o')));
+           __expropriate(strchr(__veil("r", "hellzzzo"), 'o')));
   EZBENCH2("strchr 17", donothing,
-           EXPROPRIATE(strchr(VEIL("r", "hellzzzhellzzzeeo"), 'o')));
+           __expropriate(strchr(__veil("r", "hellzzzhellzzzeeo"), 'o')));
   EZBENCH2("strchr 34", donothing,
-           EXPROPRIATE(
-               strchr(VEIL("r", "hellzzzhellzzzeeAhellzzzhellzzzeeo"), 'o')));
+           __expropriate(
+               strchr(__veil("r", "hellzzzhellzzzeeAhellzzzhellzzzeeo"), 'o')));
 }
 
 char *memchr_pure(const char *m, int c, size_t n) {
   const unsigned char *p, *pe;
   for (c &= 0xff, p = (const unsigned char *)m, pe = p + n; p < pe; ++p) {
-    if (*p == c) return p;
+    if (*p == c) return (void *)p;
   }
   return NULL;
 }
@@ -126,10 +126,9 @@ TEST(memchr, fuzz) {
 }
 
 char *strchrnul_pure(const char *s, int c) {
-  char *r;
   for (c &= 0xff;; ++s) {
     if ((*s & 0xff) == c) return (char *)s;
-    if (!*s) return s;
+    if (!*s) return (void *)s;
   }
 }
 
@@ -149,7 +148,7 @@ TEST(strchrnul, fuzz) {
 void *rawmemchr_pure(const void *m, int c) {
   const unsigned char *s;
   for (c &= 255, s = m;; ++s) {
-    if (*s == c) return s;
+    if (*s == c) return (void *)s;
   }
 }
 

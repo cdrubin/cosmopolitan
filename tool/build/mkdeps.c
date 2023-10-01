@@ -20,6 +20,7 @@
 #include "libc/errno.h"
 #include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/bits.h"
+#include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/alg.h"
 #include "libc/mem/mem.h"
@@ -206,8 +207,8 @@ static void Crunch(void) {
   free(sources.p);
   sources.p = 0;
   sources.i = j;
-  if (!radix_sort_int64((const long *)sauces, sources.i) ||
-      !radix_sort_int64((const long *)edges.p, edges.i)) {
+  if (radix_sort_int64((long *)sauces, sources.i) == -1 ||
+      radix_sort_int64((long *)edges.p, edges.i) == -1) {
     DieOom();
   }
 }
@@ -266,7 +267,7 @@ static void LoadRelationships(int argc, char *argv[]) {
   char *map;
   ssize_t rc;
   struct GetArgs ga;
-  size_t i, n, size, inclen;
+  size_t n, size, inclen;
   unsigned srcid, dependency;
   const char *p, *pe, *src, *path, *pathend;
   getargs_init(&ga, argv + optind);
@@ -362,13 +363,12 @@ static const char *StripExt(char pathbuf[PATH_MAX + 1], const char *s) {
 static bool IsObjectSource(const char *name) {
   int i;
   for (i = 0; i < ARRAYLEN(kSourceExts); ++i) {
-    if (_endswith(name, kSourceExts[i])) return true;
+    if (endswith(name, kSourceExts[i])) return true;
   }
   return false;
 }
 
 __funline bool Bts(uint32_t *p, size_t i) {
-  bool r;
   uint32_t k;
   k = 1u << (i & 31);
   if (p[i >> 5] & k) return true;
@@ -399,7 +399,7 @@ static char *Explore(void) {
     path = names + sauces[i].name;
     if (!IsObjectSource(path)) continue;
     Appendw(&makefile, '\n');
-    if (!_startswith(path, "o/")) {
+    if (!startswith(path, "o/")) {
       Appends(&makefile, buildroot);
     }
     Appends(&makefile, StripExt(buf, path));

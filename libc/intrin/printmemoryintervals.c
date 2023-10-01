@@ -27,14 +27,13 @@ static bool IsNoteworthyHole(unsigned i, const struct MemoryIntervals *mm) {
   // gaps between shadow frames aren't interesting
   // the chasm from heap to stack ruins statistics
   return !(
-      (IsArenaFrame(mm->p[i].y) && !IsArenaFrame(mm->p[i + 1].x)) ||
       (IsShadowFrame(mm->p[i].y) || IsShadowFrame(mm->p[i + 1].x)) ||
       (!IsStaticStackFrame(mm->p[i].y) && IsStaticStackFrame(mm->p[i + 1].x)));
 }
 
 void PrintMemoryIntervals(int fd, const struct MemoryIntervals *mm) {
-  char *p, mappingbuf[8], framebuf[64], sb[16];
   long i, w, frames, maptally = 0;
+  char mappingbuf[8], framebuf[64], sb[16];
   for (w = i = 0; i < mm->i; ++i) {
     w = MAX(w, LengthInt64Thousands(mm->p[i].y + 1 - mm->p[i].x));
   }

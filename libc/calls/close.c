@@ -23,11 +23,12 @@
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 /**
  * Closes file descriptor.
@@ -56,11 +57,11 @@
  */
 int close(int fd) {
   int rc;
-  if (fd == -1) {
-    rc = 0;
-  } else if (fd < 0) {
+  if (fd < 0) {
     rc = ebadf();
   } else {
+    // helps guarantee stderr log gets duplicated before user closes
+    if (_weaken(kloghandle)) _weaken(kloghandle)();
     // for performance reasons we want to avoid holding __fds_lock()
     // while sys_close() is happening. this leaves the kernel / libc
     // having a temporarily inconsistent state. routines that obtain

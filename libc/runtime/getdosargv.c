@@ -16,12 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
+#include "libc/nt/enum/fileflagandattributes.h"
+#include "libc/nt/files.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/runtime/internal.h"
 #include "libc/str/str.h"
 #include "libc/str/utf16.h"
+
+__msabi extern typeof(GetFileAttributes) *const __imp_GetFileAttributesW;
 
 struct DosArgv {
   const char16_t *s;
@@ -30,7 +35,7 @@ struct DosArgv {
   wint_t wc;
 };
 
-textwindows noasan void DecodeDosArgv(int ignore, struct DosArgv *st) {
+textwindows void DecodeDosArgv(int ignore, struct DosArgv *st) {
   wint_t x, y;
   for (;;) {
     if (!(x = *st->s++)) break;
@@ -46,16 +51,16 @@ textwindows noasan void DecodeDosArgv(int ignore, struct DosArgv *st) {
   st->wc = x;
 }
 
-static textwindows noasan void AppendDosArgv(wint_t wc, struct DosArgv *st) {
+static textwindows void AppendDosArgv(wint_t wc, struct DosArgv *st) {
   uint64_t w;
-  w = _tpenc(wc);
+  w = tpenc(wc);
   do {
     if (st->p >= st->pe) break;
     *st->p++ = w & 0xff;
   } while (w >>= 8);
 }
 
-static textwindows noasan int Count(int c, struct DosArgv *st) {
+static textwindows int Count(int c, struct DosArgv *st) {
   int ignore, n = 0;
   asm("" : "=g"(ignore));
   while (st->wc == c) {
@@ -82,8 +87,8 @@ static textwindows noasan int Count(int c, struct DosArgv *st) {
 // @see test/libc/dosarg_test.c
 // @see libc/runtime/ntspawn.c
 // @note kudos to Simon Tatham for figuring out quoting behavior
-textwindows noasan int GetDosArgv(const char16_t *cmdline, char *buf,
-                                  size_t size, char **argv, size_t max) {
+textwindows int GetDosArgv(const char16_t *cmdline, char *buf, size_t size,
+                           char **argv, size_t max) {
   bool inquote;
   int i, argc, slashes, quotes, ignore;
   static struct DosArgv st_;

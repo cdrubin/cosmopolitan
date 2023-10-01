@@ -16,10 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/cp.internal.h"
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/getenv.internal.h"
 #include "libc/intrin/promises.internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
@@ -31,7 +32,7 @@
 #define kBufSize 1024
 #define kPid     "TracerPid:\t"
 
-static textwindows noasan bool IsBeingDebugged(void) {
+static textwindows bool IsBeingDebugged(void) {
   return !!NtGetPeb()->BeingDebugged;
 }
 
@@ -45,13 +46,13 @@ int IsDebuggerPresent(bool force) {
   int e, fd, res;
   char *p, buf[1024];
   if (!force && IsGenuineBlink()) return 0;
-  if (!force && __getenv(environ, "HEISENDEBUG")) return 0;
+  if (!force && __getenv(environ, "HEISENDEBUG").s) return 0;
   if (IsWindows()) return IsBeingDebugged();
   if (__isworker) return false;
   if (!PLEDGED(RPATH)) return false;
   res = 0;
   e = errno;
-  BEGIN_CANCELLATION_POINT;
+  BLOCK_CANCELLATIONS;
   if ((fd = __sys_openat(AT_FDCWD, "/proc/self/status", O_RDONLY, 0)) >= 0) {
     if ((got = sys_read(fd, buf, sizeof(buf) - 1)) > 0) {
       buf[got] = '\0';
@@ -62,7 +63,7 @@ int IsDebuggerPresent(bool force) {
     }
     sys_close(fd);
   }
-  END_CANCELLATION_POINT;
+  ALLOW_CANCELLATIONS;
   errno = e;
   return res;
 }

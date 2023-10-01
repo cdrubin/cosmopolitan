@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/fmt/fmt.h"
 #include "libc/mem/mem.h"
+#include "libc/stdio/stdio.h"
 
 /**
  * Formats string w/ dynamic memory allocation.
@@ -43,7 +43,7 @@ int vasprintf(char **strp, const char *fmt, va_list va) {
       if ((p2 = realloc(p, size))) {
         p = p2;
         wrote = vsnprintf(p, size, fmt, vb);
-        _unassert(wrote == size - 1);
+        unassert(wrote == size - 1);
         rc = wrote;
       }
     }

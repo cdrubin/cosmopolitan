@@ -12,8 +12,8 @@ COSMOPOLITAN_C_START_
  * Test cases are guaranteed by the linker to be run in order, sorted by
  * the (SUITE, NAME) tuple passed here.
  */
-#define TEST(SUITE, NAME)           \
-  STATIC_YOINK("__testcase_start"); \
+#define TEST(SUITE, NAME)             \
+  __static_yoink("__testcase_start"); \
   __TEST_PROTOTYPE(SUITE, NAME, __TEST_ARRAY, )
 
 /**
@@ -25,20 +25,9 @@ COSMOPOLITAN_C_START_
  * temorarilly by the runtime while calling fixture functions. Fixtures
  * are also guaranteed by the linker to be run in sorted order.
  */
-#define FIXTURE(SUITE, NAME)       \
-  STATIC_YOINK("__fixture_start"); \
+#define FIXTURE(SUITE, NAME)         \
+  __static_yoink("__fixture_start"); \
   __FIXTURE("fixture", SUITE, NAME)
-
-/**
- * Registers explosive fixture with linker.
- *
- * All tests will run an additional time for each set of entries in the
- * Cartesian product of groups. That makes this similar to fixture, but
- * more appropriate for testing pure code (i.e. no syscalls) like math.
- */
-#define COMBO(GROUP, ENTRY)      \
-  STATIC_YOINK("__combo_start"); \
-  __FIXTURE("combo", GROUP, ENTRY)
 
 /**
  * Declares benchmark function.
@@ -49,8 +38,8 @@ COSMOPOLITAN_C_START_
  *
  * @see EZBENCH()
  */
-#define BENCH(SUITE, NAME)       \
-  STATIC_YOINK("__bench_start"); \
+#define BENCH(SUITE, NAME)         \
+  __static_yoink("__bench_start"); \
   __TEST_PROTOTYPE(SUITE, NAME, __BENCH_ARRAY, optimizespeed)
 
 #define ASSERT_GE(C, X) _TEST2("ASSERT_GE", C, >=, (X), #C, " ≥ ", #X, 1)
@@ -104,13 +93,10 @@ COSMOPOLITAN_C_START_
 /**
  * Enables setup and teardown of test directories.
  *
- * If the linker says this symbol exists then, regardless of its value,
- * a unique test directory will be created at the start of each test,
- * the test will be run with that directory as its working directory,
- * and if the test succeeds it'll be removed along with any contents.
+ * These should be called from SetUpOnce().
  */
-extern char testlib_enable_tmp_setup_teardown;
-extern char testlib_enable_tmp_setup_teardown_once;
+void testlib_enable_tmp_setup_teardown(void);
+void testlib_enable_tmp_setup_teardown_once(void);
 
 /**
  * User-defined test setup function.
@@ -223,11 +209,12 @@ void TearDownOnce(void);
 
 #define EXPECT_SYS(ERRNO, WANT, GOT, ...)                                  \
   do {                                                                     \
-    testlib_seterrno(0);                                                   \
+    int e = testlib_geterrno();                                            \
     __TEST_EQ(expect, __FILE__, __LINE__, __FUNCTION__, #WANT, #GOT, WANT, \
               GOT, __VA_ARGS__);                                           \
     __TEST_EQ(expect, __FILE__, __LINE__, __FUNCTION__, #ERRNO,            \
               testlib_strerror(), ERRNO, testlib_geterrno(), __VA_ARGS__); \
+    testlib_seterrno(e);                                                   \
   } while (0)
 
 #define EXPECT_FALSE(X) _TEST2("EXPECT_FALSE", false, ==, (X), #X, "", "", 0)
@@ -347,8 +334,6 @@ struct TestFixture {
 };
 
 extern char g_fixturename[256];
-extern char g_testlib_olddir[PATH_MAX];
-extern char g_testlib_tmpdir[PATH_MAX];
 extern bool g_testlib_shoulddebugbreak;     /* set by testmain */
 extern _Atomic(unsigned) g_testlib_ran;     /* set by wrappers */
 extern _Atomic(unsigned) g_testlib_failed;  /* set by wrappers */
@@ -358,7 +343,6 @@ extern const char *testlib_showerror_func;  /* set by macros */
 extern const testfn_t __bench_start[], __bench_end[];
 extern const testfn_t __testcase_start[], __testcase_end[];
 extern const struct TestFixture __fixture_start[], __fixture_end[];
-extern const struct TestFixture __combo_start[], __combo_end[];
 
 void testlib_showerror_assert_eq(int, const char *, const char *, char *,
                                  char *, const char *, ...) wontreturn;
@@ -389,10 +373,9 @@ void testlib_runalltests(void);
 const char *testlib_strerror(void);
 void testlib_runallbenchmarks(void);
 bool testlib_memoryexists(const void *);
-void testlib_runtestcases(testfn_t *, testfn_t *, testfn_t);
-void testlib_runcombos(testfn_t *, testfn_t *, const struct TestFixture *,
-                       const struct TestFixture *);
-void testlib_runfixtures(testfn_t *, testfn_t *, const struct TestFixture *,
+void testlib_runtestcases(const testfn_t *, const testfn_t *, testfn_t);
+void testlib_runfixtures(const testfn_t *, const testfn_t *,
+                         const struct TestFixture *,
                          const struct TestFixture *);
 int testlib_countfixtures(const struct TestFixture *,
                           const struct TestFixture *);

@@ -16,8 +16,11 @@ CHIBICC = o/$(MODE)/third_party/chibicc/chibicc.com
 CHIBICC_FLAGS =								\
 	-fno-common							\
 	-include libc/integral/normalize.inc				\
-	-DIMAGE_BASE_VIRTUAL=$(IMAGE_BASE_VIRTUAL)			\
 	-DMODE='"$(MODE)"'
+
+o/$(MODE)/%.chibicc.o: private .UNSANDBOXED = true
+o/$(MODE)/%.chibicc.o: %.c $(CHIBICC)
+	@$(COMPILE) $(CHIBICC) $(OBJECTIFY.c.flags) -c $< $(OUTPUT_OPTION)
 
 PKGS += THIRD_PARTY_CHIBICC
 THIRD_PARTY_CHIBICC_ARTIFACTS += THIRD_PARTY_CHIBICC_A
@@ -51,6 +54,7 @@ THIRD_PARTY_CHIBICC_A_DIRECTDEPS =					\
 	LIBC_LOG							\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
+	LIBC_PROC							\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
@@ -101,7 +105,7 @@ o/$(MODE)/third_party/chibicc/as.com.dbg:				\
 	@$(APELINK)
 
 o/$(MODE)/third_party/chibicc/chibicc.o: private			\
-		CPPFLAGS += $(THIRD_PARTY_CHIBICC_DEFINES	)
+		CPPFLAGS += $(THIRD_PARTY_CHIBICC_DEFINES)
 
 THIRD_PARTY_CHIBICC_LIBS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)))
 THIRD_PARTY_CHIBICC_SRCS = $(foreach x,$(THIRD_PARTY_CHIBICC_ARTIFACTS),$($(x)_SRCS))

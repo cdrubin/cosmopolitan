@@ -86,13 +86,11 @@ o/$(MODE)/libc/str/windowstimetotimespec.o: private		\
 		CFLAGS +=					\
 			-O2
 
-# we can't use compiler magic because:
-#   kprintf() depends on these functions
-o/$(MODE)/libc/fmt/strsignal.greg.o: private			\
-		CFLAGS +=					\
-			-fpie					\
-			-ffreestanding				\
-			$(NO_MAGIC)
+$(LIBC_STR_A_OBJS): private					\
+		COPTS +=					\
+			-fno-sanitize=all			\
+			-Wframe-larger-than=4096		\
+			-Walloca-larger-than=4096
 
 o/$(MODE)/libc/str/eastasianwidth.bin:				\
 		libc/str/eastasianwidth.txt			\

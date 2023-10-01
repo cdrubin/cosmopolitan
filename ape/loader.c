@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/ape.h"
 
 /**
  * @fileoverview APE Loader for GNU/Systemd/XNU/FreeBSD/NetBSD/OpenBSD
@@ -98,6 +99,18 @@
 #define IsOpenbsd() (SupportsOpenbsd() && os == OPENBSD)
 #define IsNetbsd()  (SupportsNetbsd() && os == NETBSD)
 
+#ifdef __aarch64__
+#define IsAarch64() 1
+#else
+#define IsAarch64() 0
+#endif
+
+#ifdef __cplusplus
+#define EXTERN_C extern "C"
+#else
+#define EXTERN_C
+#endif
+
 #define O_RDONLY           0
 #define PROT_NONE          0
 #define PROT_READ          1
@@ -111,6 +124,7 @@
 #define ELFCLASS32         1
 #define ELFDATA2LSB        1
 #define EM_NEXGEN32E       62
+#define EM_AARCH64         183
 #define ET_EXEC            2
 #define ET_DYN             3
 #define PT_LOAD            1
@@ -151,7 +165,7 @@
   {                                         \
     char ibuf[19] = {0};                    \
     Utox(ibuf, VAR);                        \
-    Print(os, 2, #VAR " ", ibuf, "\n", 0l); \
+    Print(os, 2, ibuf, " " #VAR, "\n", 0l); \
   }
 
 struct ElfEhdr {
@@ -189,11 +203,12 @@ union ElfEhdrBuf {
 
 union ElfPhdrBuf {
   struct ElfPhdr phdr;
-  char buf[4096];
+  char buf[1024];
 };
 
 struct PathSearcher {
   int os;
+  int literally;
   const char *name;
   const char *syspath;
   unsigned long namelen;
@@ -201,14 +216,13 @@ struct PathSearcher {
 };
 
 struct ApeLoader {
-  union ElfEhdrBuf ehdr;
   union ElfPhdrBuf phdr;
   struct PathSearcher ps;
   char path[1024];
 };
 
-long SystemCall(long, long, long, long, long, long, long, int);
-void Launch(void *, long, void *, int) __attribute__((__noreturn__));
+EXTERN_C long SystemCall(long, long, long, long, long, long, long, int);
+EXTERN_C void Launch(void *, long, void *, int) __attribute__((__noreturn__));
 
 extern char __executable_start[];
 extern char _end[];
@@ -227,6 +241,19 @@ static int StrCmp(const char *l, const char *r) {
   unsigned long i = 0;
   while (l[i] == r[i] && r[i]) ++i;
   return (l[i] & 255) - (r[i] & 255);
+}
+
+static const char *BaseName(const char *s) {
+  int c;
+  const char *b = "";
+  if (s) {
+    while ((c = *s++)) {
+      if (c == '/') {
+        b = s;
+      }
+    }
+  }
+  return b;
 }
 
 static void Bzero(void *a, unsigned long n) {
@@ -354,42 +381,76 @@ __attribute__((__noinline__)) static long CallSystem(long arg1, long arg2,
 }
 
 __attribute__((__noreturn__)) static void Exit(long rc, int os) {
-  CallSystem(rc, 0, 0, 0, 0, 0, 0, IsLinux() ? 60 : 1, os);
+  int numba;
+  if (IsLinux()) {
+    if (IsAarch64()) {
+      numba = 94;
+    } else {
+      numba = 60;
+    }
+  } else {
+    numba = 1;
+  }
+  CallSystem(rc, 0, 0, 0, 0, 0, 0, numba, os);
   __builtin_unreachable();
 }
 
 static int Close(int fd, int os) {
-  return CallSystem(fd, 0, 0, 0, 0, 0, 0, IsLinux() ? 3 : 6, os);
+  int numba;
+  if (IsLinux()) {
+    if (IsAarch64()) {
+      numba = 57;
+    } else {
+      numba = 3;
+    }
+  } else {
+    numba = 6;
+  }
+  return CallSystem(fd, 0, 0, 0, 0, 0, 0, numba, os);
 }
 
 static long Pread(int fd, void *data, unsigned long size, long off, int os) {
-  long magi;
+  long numba;
   if (IsLinux()) {
-    magi = 0x011;
+    if (IsAarch64()) {
+      numba = 0x043;
+    } else {
+      numba = 0x011;
+    }
   } else if (IsXnu()) {
-    magi = 0x2000099;
+    numba = 0x2000099;
   } else if (IsFreebsd()) {
-    magi = 0x1db;
+    numba = 0x1db;
   } else if (IsOpenbsd()) {
-    magi = 0x0a9; /* OpenBSD v7.3+ */
+    numba = 0x0a9; /* OpenBSD v7.3+ */
   } else if (IsNetbsd()) {
-    magi = 0x0ad;
+    numba = 0x0ad;
   } else {
     __builtin_unreachable();
   }
-  return SystemCall(fd, (long)data, size, off, off, 0, 0, magi);
+  return SystemCall(fd, (long)data, size, off, off, 0, 0, numba);
 }
 
 static long Write(int fd, const void *data, unsigned long size, int os) {
-  return CallSystem(fd, (long)data, size, 0, 0, 0, 0, IsLinux() ? 1 : 4, os);
-}
-
-static int Execve(const char *prog, char **argv, char **envp, int os) {
-  return CallSystem((long)prog, (long)argv, (long)envp, 0, 0, 0, 0, 59, os);
+  int numba;
+  if (IsLinux()) {
+    if (IsAarch64()) {
+      numba = 64;
+    } else {
+      numba = 1;
+    }
+  } else {
+    numba = 4;
+  }
+  return CallSystem(fd, (long)data, size, 0, 0, 0, 0, numba, os);
 }
 
 static int Access(const char *path, int mode, int os) {
-  return CallSystem((long)path, mode, 0, 0, 0, 0, 0, IsLinux() ? 21 : 33, os);
+  if (IsLinux() && IsAarch64()) {
+    return SystemCall(-100, (long)path, mode, 0, 0, 0, 0, 48);
+  } else {
+    return CallSystem((long)path, mode, 0, 0, 0, 0, 0, IsLinux() ? 21 : 33, os);
+  }
 }
 
 static int Msyscall(long p, unsigned long n, int os) {
@@ -401,31 +462,49 @@ static int Msyscall(long p, unsigned long n, int os) {
 }
 
 static int Open(const char *path, int flags, int mode, int os) {
-  return CallSystem((long)path, flags, mode, 0, 0, 0, 0, IsLinux() ? 2 : 5, os);
+  if (IsLinux() && IsAarch64()) {
+    return SystemCall(-100, (long)path, flags, mode, 0, 0, 0, 56);
+  } else {
+    return CallSystem((long)path, flags, mode, 0, 0, 0, 0, IsLinux() ? 2 : 5,
+                      os);
+  }
 }
 
 static int Mprotect(void *addr, unsigned long size, int prot, int os) {
-  return CallSystem((long)addr, size, prot, 0, 0, 0, 0, IsLinux() ? 10 : 74,
-                    os);
+  int numba;
+  if (IsLinux()) {
+    if (IsAarch64()) {
+      numba = 226;
+    } else {
+      numba = 10;
+    }
+  } else {
+    numba = 74;
+  }
+  return CallSystem((long)addr, size, prot, 0, 0, 0, 0, numba, os);
 }
 
 static long Mmap(void *addr, unsigned long size, int prot, int flags, int fd,
                  long off, int os) {
-  long magi;
+  long numba;
   if (IsLinux()) {
-    magi = 9;
+    if (IsAarch64()) {
+      numba = 222;
+    } else {
+      numba = 9;
+    }
   } else if (IsXnu()) {
-    magi = 0x2000000 | 197;
+    numba = 0x2000000 | 197;
   } else if (IsFreebsd()) {
-    magi = 477;
+    numba = 477;
   } else if (IsOpenbsd()) {
-    magi = 49; /* OpenBSD v7.3+ */
+    numba = 49; /* OpenBSD v7.3+ */
   } else if (IsNetbsd()) {
-    magi = 197;
+    numba = 197;
   } else {
     __builtin_unreachable();
   }
-  return SystemCall((long)addr, size, prot, flags, fd, off, off, magi);
+  return SystemCall((long)addr, size, prot, flags, fd, off, off, numba);
 }
 
 static long Print(int os, int fd, const char *s, ...) {
@@ -510,10 +589,27 @@ static char SearchPath(struct PathSearcher *ps, const char *suffix) {
 }
 
 static char FindCommand(struct PathSearcher *ps, const char *suffix) {
+  ps->path[0] = 0;
+
+  /* paths are always 100% taken literally when a slash exists
+       $ ape foo/bar.com arg1 arg2 */
   if (MemChr(ps->name, '/', ps->namelen)) {
-    ps->path[0] = 0;
     return AccessCommand(ps, suffix, 0);
   }
+
+  /* we don't run files in the current directory
+       $ ape foo.com arg1 arg2
+     unless $PATH has an empty string entry, e.g.
+       $ expert PATH=":/bin"
+       $ ape foo.com arg1 arg2
+     however we will execute this
+       $ ape - foo.com foo.com arg1 arg2
+     because cosmo's execve needs it */
+  if (ps->literally && AccessCommand(ps, suffix, 0)) {
+    return 1;
+  }
+
+  /* otherwise search for name on $PATH */
   return SearchPath(ps, suffix);
 }
 
@@ -550,7 +646,6 @@ __attribute__((__noreturn__)) static void Spawn(int os, const char *exe, int fd,
   found_code = 0;
   found_entry = 0;
   virtmin = virtmax = 0;
-  if (!pagesz) pagesz = 4096;
   if (pagesz & (pagesz - 1)) {
     Pexit(os, exe, 0, "AT_PAGESZ isn't two power");
   }
@@ -626,6 +721,8 @@ __attribute__((__noreturn__)) static void Spawn(int os, const char *exe, int fd,
 
   /* load elf */
   for (i = 0; i < e->e_phnum; ++i) {
+    void *addr;
+    unsigned long size;
     if (p[i].p_type != PT_LOAD) continue;
 
     /* configure mapping */
@@ -635,38 +732,49 @@ __attribute__((__noreturn__)) static void Spawn(int os, const char *exe, int fd,
     if (p[i].p_flags & PF_W) prot |= PROT_WRITE;
     if (p[i].p_flags & PF_X) prot |= PROT_EXEC;
 
-    /* load from file */
     if (p[i].p_filesz) {
-      void *addr;
+      /* load from file */
       int prot1, prot2;
-      unsigned long size;
+      unsigned long wipe;
       prot1 = prot;
       prot2 = prot;
+      /* when we ask the system to map the interval [vaddr,vaddr+filesz)
+         it might schlep extra file content into memory on both the left
+         and the righthand side. that's because elf doesn't require that
+         either side of the interval be aligned on the system page size.
+         normally we can get away with ignoring these junk bytes. but if
+         the segment defines bss memory (i.e. memsz > filesz) then we'll
+         need to clear the extra bytes in the page, if they exist. since
+         we can't do that if we're mapping a read-only page, we can just
+         map it with write permissions and call mprotect on it afterward */
       a = p[i].p_vaddr + p[i].p_filesz; /* end of file content */
       b = (a + (pagesz - 1)) & -pagesz; /* first pure bss page */
       c = p[i].p_vaddr + p[i].p_memsz;  /* end of segment data */
-      if (b > c) b = c;
-      if (c > b && (~prot1 & PROT_WRITE)) {
+      wipe = MIN(b - a, c - a);
+      if (wipe && (~prot1 & PROT_WRITE)) {
         prot1 = PROT_READ | PROT_WRITE;
       }
       addr = (void *)(dynbase + (p[i].p_vaddr & -pagesz));
       size = (p[i].p_vaddr & (pagesz - 1)) + p[i].p_filesz;
       rc = Mmap(addr, size, prot1, flags, fd, p[i].p_offset & -pagesz, os);
       if (rc < 0) Pexit(os, exe, rc, "prog mmap");
-      if (c > b) Bzero((void *)(dynbase + a), b - a);
+      if (wipe) Bzero((void *)(dynbase + a), wipe);
       if (prot2 != prot1) {
         rc = Mprotect(addr, size, prot2, os);
         if (rc < 0) Pexit(os, exe, rc, "prog mprotect");
       }
-    }
-
-    /* allocate extra bss */
-    a = p[i].p_vaddr + p[i].p_filesz;
-    a = (a + (pagesz - 1)) & -pagesz;
-    b = p[i].p_vaddr + p[i].p_memsz;
-    if (b > a) {
+      /* allocate extra bss */
+      if (c > b) {
+        flags |= MAP_ANONYMOUS;
+        rc = Mmap((void *)(dynbase + b), c - b, prot, flags, -1, 0, os);
+        if (rc < 0) Pexit(os, exe, rc, "extra bss mmap");
+      }
+    } else {
+      /* allocate pure bss */
+      addr = (void *)(dynbase + (p[i].p_vaddr & -pagesz));
+      size = (p[i].p_vaddr & (pagesz - 1)) + p[i].p_memsz;
       flags |= MAP_ANONYMOUS;
-      rc = Mmap((void *)(dynbase + a), b - a, prot, flags, -1, 0, os);
+      rc = Mmap(addr, size, prot, flags, -1, 0, os);
       if (rc < 0) Pexit(os, exe, rc, "bss mmap");
     }
   }
@@ -679,8 +787,9 @@ __attribute__((__noreturn__)) static void Spawn(int os, const char *exe, int fd,
   Launch(IsFreebsd() ? sp : 0, dynbase + e->e_entry, sp, os);
 }
 
-static const char *TryElf(struct ApeLoader *M, const char *exe, int fd,
-                          long *sp, long *auxv, unsigned long pagesz, int os) {
+static const char *TryElf(struct ApeLoader *M, union ElfEhdrBuf *ebuf,
+                          const char *exe, int fd, long *sp, long *auxv,
+                          unsigned long pagesz, int os) {
   long i, rc;
   unsigned size;
   struct ElfEhdr *e;
@@ -693,8 +802,8 @@ static const char *TryElf(struct ApeLoader *M, const char *exe, int fd,
   }
 
   /* validate elf header */
-  e = &M->ehdr.ehdr;
-  if (READ32(M->ehdr.buf) != READ32("\177ELF")) {
+  e = &ebuf->ehdr;
+  if (READ32(ebuf->buf) != READ32("\177ELF")) {
     return "didn't embed ELF magic";
   }
   if (e->e_ident[EI_CLASS] == ELFCLASS32) {
@@ -703,9 +812,15 @@ static const char *TryElf(struct ApeLoader *M, const char *exe, int fd,
   if (e->e_type != ET_EXEC && e->e_type != ET_DYN) {
     return "ELF not ET_EXEC or ET_DYN";
   }
+#ifdef __aarch64__
+  if (e->e_machine != EM_AARCH64) {
+    return "couldn't find ELF header with AARCH64 machine type";
+  }
+#else
   if (e->e_machine != EM_NEXGEN32E) {
     return "couldn't find ELF header with x86-64 machine type";
   }
+#endif
   if (e->e_phentsize != sizeof(struct ElfPhdr)) {
     Pexit(os, exe, 0, "e_phentsize is wrong");
   }
@@ -792,11 +907,11 @@ static const char *TryElf(struct ApeLoader *M, const char *exe, int fd,
   Spawn(os, exe, fd, sp, pagesz, e, p);
 }
 
-static __attribute__((__noreturn__)) void ShowUsage(int os, int fd, int rc) {
+__attribute__((__noreturn__)) static void ShowUsage(int os, int fd, int rc) {
   Print(os, fd,
         "NAME\n"
         "\n"
-        "  actually portable executable loader version 1.4\n"
+        "  actually portable executable loader version " APE_VERSION_STR "\n"
         "  copyright 2023 justine alexandra roberts tunney\n"
         "  https://justine.lol/ape.html\n"
         "\n"
@@ -814,15 +929,18 @@ static __attribute__((__noreturn__)) void ShowUsage(int os, int fd, int rc) {
   Exit(rc, os);
 }
 
-__attribute__((__noreturn__)) void ApeLoader(long di, long *sp, char dl) {
-  int rc;
-  unsigned i, n;
-  int usetheforce;
+EXTERN_C __attribute__((__noreturn__)) void ApeLoader(long di, long *sp,
+                                                      char dl) {
+  int rc, n;
+  unsigned i;
+  char literally;
+  const char *ape;
   int c, fd, os, argc;
   struct ApeLoader *M;
   unsigned long pagesz;
-  long *auxv, *ap, *ew;
-  char *p, *pe, *exe, *ape, *prog, **argv, **envp;
+  union ElfEhdrBuf *ebuf;
+  long *auxv, *ap, *endp, *sp2;
+  char *p, *pe, *exe, *prog, **argv, **envp;
 
   (void)Utox;
 
@@ -840,7 +958,7 @@ __attribute__((__noreturn__)) void ApeLoader(long di, long *sp, char dl) {
   argc = *sp;
   argv = (char **)(sp + 1);
   envp = (char **)(sp + 1 + argc + 1);
-  auxv = (long *)(sp + 1 + argc + 1);
+  auxv = sp + 1 + argc + 1;
   for (;;) {
     if (!*auxv++) {
       break;
@@ -865,28 +983,22 @@ __attribute__((__noreturn__)) void ApeLoader(long di, long *sp, char dl) {
       os = NETBSD;
     }
   }
-  ew = ap + 1;
+  if (!pagesz) {
+    pagesz = 4096;
+  }
+  endp = ap + 1;
 
-  /* allocate loader memory */
-  n = sizeof(*M) / sizeof(long);
-  MemMove(sp - n, sp, (char *)ew - (char *)sp);
-  sp -= n, argv -= n, envp -= n, auxv -= n;
-  M = (struct ApeLoader *)(ew - n);
-
-  /* default operating system */
+  /* the default operating system */
   if (!os) {
     os = LINUX;
   }
 
   /* parse flags */
-  usetheforce = 0;
   while (argc > 1) {
     if (argv[1][0] != '-') break; /* normal argument */
     if (!argv[1][1]) break;       /* hyphen argument */
     if (!StrCmp(argv[1], "-h") || !StrCmp(argv[1], "--help")) {
       ShowUsage(os, 1, 0);
-    } else if (!StrCmp(argv[1], "-f")) {
-      usetheforce = 1;
     } else {
       Print(os, 2, ape, ": invalid flag (pass -h for help)\n", 0l);
       Exit(1, os);
@@ -896,7 +1008,7 @@ __attribute__((__noreturn__)) void ApeLoader(long di, long *sp, char dl) {
   }
 
   /* we can load via shell, shebang, or binfmt_misc */
-  if (argc >= 3 && !StrCmp(argv[1], "-")) {
+  if ((literally = argc >= 3 && !StrCmp(argv[1], "-"))) {
     /* if the first argument is a hyphen then we give the user the
        power to change argv[0] or omit it entirely. most operating
        systems don't permit the omission of argv[0] but we do, b/c
@@ -913,42 +1025,60 @@ __attribute__((__noreturn__)) void ApeLoader(long di, long *sp, char dl) {
     argv = (char **)((sp += 1) + 1);
   }
 
+  /* allocate loader memory in program's arg block */
+  n = sizeof(struct ApeLoader);
+  M = (struct ApeLoader *)__builtin_alloca(n);
+  M->ps.literally = literally;
+
+  /* create new bottom of stack for spawned program
+     system v abi aligns this on a 16-byte boundary
+     grows down the alloc by poking the guard pages */
+  n = (endp - sp + 1) * sizeof(long);
+  sp2 = (long *)__builtin_alloca(n);
+  if ((long)sp2 & 15) ++sp2;
+  for (; n > 0; n -= pagesz) {
+    ((char *)sp2)[n - 1] = 0;
+  }
+  MemMove(sp2, sp, (endp - sp) * sizeof(long));
+  argv = (char **)(sp2 + 1);
+  envp = (char **)(sp2 + 1 + argc + 1);
+  auxv = sp2 + (auxv - sp);
+  sp = sp2;
+
+  /* allocate ephemeral memory for reading file */
+  n = sizeof(union ElfEhdrBuf);
+  ebuf = (union ElfEhdrBuf *)__builtin_alloca(n);
+  for (; n > 0; n -= pagesz) {
+    ((char *)ebuf)[n - 1] = 0;
+  }
+
   /* resolve path of executable and read its first page */
   if (!(exe = Commandv(&M->ps, os, prog, GetEnv(envp, "PATH")))) {
     Pexit(os, prog, 0, "not found (maybe chmod +x or ./ needed)");
   } else if ((fd = Open(exe, O_RDONLY, 0, os)) < 0) {
     Pexit(os, exe, fd, "open");
-  } else if ((rc = Pread(fd, M->ehdr.buf, sizeof(M->ehdr.buf), 0, os)) < 0) {
+  } else if ((rc = Pread(fd, ebuf->buf, sizeof(ebuf->buf), 0, os)) < 0) {
     Pexit(os, exe, rc, "read");
-  } else if ((unsigned long)rc < sizeof(M->ehdr.ehdr)) {
+  } else if ((unsigned long)rc < sizeof(ebuf->ehdr)) {
     Pexit(os, exe, 0, "too small");
   }
-  pe = M->ehdr.buf + rc;
+  pe = ebuf->buf + rc;
 
   /* change argv[0] to resolved path if it's ambiguous */
-  if (argc > 0 && *prog != '/' && *exe == '/' && !StrCmp(prog, argv[0])) {
+  if (argc > 0 && ((*prog != '/' && *exe == '/' && !StrCmp(prog, argv[0])) ||
+                   !StrCmp(BaseName(prog), argv[0]))) {
     argv[0] = exe;
   }
 
   /* ape intended behavior
-     1. if file is a native executable, try to run it natively
-     2. if ape, will scan shell script for elf printf statements
-     3. shell script may have multiple lines producing elf headers
-     4. all elf printf lines must exist in the first 8192 bytes of file
-     5. elf program headers may appear anywhere in the binary */
-  if (!usetheforce &&
-      ((IsXnu() && READ32(M->ehdr.buf) == 0xFEEDFACE + 1) ||
-       (!IsXnu() && READ32(M->ehdr.buf) == READ32("\177ELF")))) {
-    Close(fd, os);
-    Execve(exe, argv, envp, os);
-    if ((fd = Open(exe, O_RDONLY, 0, os)) < 0) {
-      Pexit(os, exe, rc, "execve and open failed");
-    }
-  }
-  if (READ64(M->ehdr.buf) == READ64("MZqFpD='") ||
-      READ64(M->ehdr.buf) == READ64("jartsr='") ||
-      READ64(M->ehdr.buf) == READ64("APEDBG='")) {
-    for (p = M->ehdr.buf; p < pe; ++p) {
+     1. if ape, will scan shell script for elf printf statements
+     2. shell script may have multiple lines producing elf headers
+     3. all elf printf lines must exist in the first 8192 bytes of file
+     4. elf program headers may appear anywhere in the binary */
+  if (READ64(ebuf->buf) == READ64("MZqFpD='") ||
+      READ64(ebuf->buf) == READ64("jartsr='") ||
+      READ64(ebuf->buf) == READ64("APEDBG='")) {
+    for (p = ebuf->buf; p < pe; ++p) {
       if (READ64(p) != READ64("printf '")) {
         continue;
       }
@@ -966,15 +1096,15 @@ __attribute__((__noreturn__)) void ApeLoader(long di, long *sp, char dl) {
             }
           }
         }
-        M->ehdr.buf[i++] = c;
-        if (i >= sizeof(M->ehdr.buf)) {
+        ebuf->buf[i++] = c;
+        if (i >= sizeof(ebuf->buf)) {
           break;
         }
       }
-      if (i >= sizeof(M->ehdr.ehdr)) {
-        TryElf(M, exe, fd, sp, auxv, pagesz, os);
+      if (i >= sizeof(ebuf->ehdr)) {
+        TryElf(M, ebuf, exe, fd, sp, auxv, pagesz, os);
       }
     }
   }
-  Pexit(os, exe, 0, TryElf(M, exe, fd, sp, auxv, pagesz, os));
+  Pexit(os, exe, 0, TryElf(M, ebuf, exe, fd, sp, auxv, pagesz, os));
 }

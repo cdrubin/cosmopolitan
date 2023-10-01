@@ -31,9 +31,10 @@
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/bits.h"
 #include "libc/intrin/bsf.h"
+#include "libc/intrin/bsr.h"
 #include "libc/intrin/hilbert.h"
-#include "libc/intrin/morton.h"
 #include "libc/intrin/safemacros.internal.h"
+#include "libc/limits.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
@@ -188,6 +189,10 @@ static void LeaveScreen(void) {
   Write("\e[H\e[J");
 }
 
+static unsigned long rounddown2pow(unsigned long x) {
+  return x ? 1ul << _bsrl(x) : 0;
+}
+
 static void GetTtySize(void) {
   struct winsize wsize;
   wsize.ws_row = tyn + 1;
@@ -195,8 +200,8 @@ static void GetTtySize(void) {
   tcgetwinsize(out, &wsize);
   tyn = MAX(2, wsize.ws_row) - 1;
   txn = MAX(17, wsize.ws_col) - 16;
-  tyn = _rounddown2pow(tyn);
-  txn = _rounddown2pow(txn);
+  tyn = rounddown2pow(tyn);
+  txn = rounddown2pow(txn);
   tyn = MIN(tyn, txn);
 }
 
@@ -257,7 +262,6 @@ static void SetExtent(long lo, long hi) {
 }
 
 static void Open(void) {
-  int err;
   if ((fd = open(path, O_RDONLY)) == -1) {
     FailPath("open() failed", errno);
   }
@@ -278,9 +282,28 @@ static void SetupCanvas(void) {
   }
   displaysize = ROUNDUP(ROUNDUP((tyn * txn) << zoom, 16), 1ul << zoom);
   canvassize = ROUNDUP(displaysize, FRAMESIZE);
-  buffersize = ROUNDUP(tyn * txn * 16 + PAGESIZE, FRAMESIZE);
+  buffersize = ROUNDUP(tyn * txn * 16 + 4096, FRAMESIZE);
   canvas = Allocate(canvassize);
   buffer = Allocate(buffersize);
+}
+
+/**
+ * Interleaves bits.
+ * @see https://en.wikipedia.org/wiki/Z-order_curve
+ * @see unmorton()
+ */
+static unsigned long morton(unsigned long y, unsigned long x) {
+  x = (x | x << 020) & 0x0000FFFF0000FFFF;
+  x = (x | x << 010) & 0x00FF00FF00FF00FF;
+  x = (x | x << 004) & 0x0F0F0F0F0F0F0F0F;
+  x = (x | x << 002) & 0x3333333333333333;
+  x = (x | x << 001) & 0x5555555555555555;
+  y = (y | y << 020) & 0x0000FFFF0000FFFF;
+  y = (y | y << 010) & 0x00FF00FF00FF00FF;
+  y = (y | y << 004) & 0x0F0F0F0F0F0F0F0F;
+  y = (y | y << 002) & 0x3333333333333333;
+  y = (y | y << 001) & 0x5555555555555555;
+  return x | y << 1;
 }
 
 static long IndexSquare(long y, long x) {
@@ -308,12 +331,12 @@ static long Index(long y, long x) {
 }
 
 static void PreventBufferbloat(void) {
-  long double now, rate;
-  static long double last;
-  now = nowl();
-  rate = 1. / fps;
-  if (now - last < rate) {
-    dsleep(rate - (now - last));
+  struct timespec now, rate;
+  static struct timespec last;
+  now = timespec_real();
+  rate = timespec_frommicros(1. / fps * 1e6);
+  if (timespec_cmp(timespec_sub(now, last), rate) < 0) {
+    timespec_sleep(timespec_sub(rate, timespec_sub(now, last)));
   }
   last = now;
 }
@@ -682,7 +705,7 @@ static void LoadRanges(void) {
         case 0:
           if (isxdigit(b[i])) {
             range.a <<= 4;
-            range.a += hextoint(b[i]);
+            range.a += kHexToInt[b[i] & 255];
           } else if (b[i] == '-') {
             t = 1;
           }
@@ -690,7 +713,7 @@ static void LoadRanges(void) {
         case 1:
           if (isxdigit(b[i])) {
             range.b <<= 4;
-            range.b += hextoint(b[i]);
+            range.b += kHexToInt[b[i] & 255];
           } else if (b[i] == ' ') {
             t = 2;
           }
@@ -748,7 +771,7 @@ static void Render(void) {
         p = FormatInt64(p, fg);
         *p++ = 'm';
       }
-      w = _tpenc(kCp437[c]);
+      w = tpenc(kCp437[c]);
       do {
         *p++ = w & 0xff;
         w >>= 8;

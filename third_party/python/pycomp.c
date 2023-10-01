@@ -44,7 +44,7 @@
 #include "tool/build/lib/stripcomponents.h"
 /* clang-format off */
 
-STATIC_YOINK("_PyUnicode_GetCode");
+__static_yoink("_PyUnicode_GetCode");
 
 #define MANUAL "\
 SYNOPSIS\n\
@@ -77,7 +77,6 @@ void
 GetOpts(int argc, char *argv[])
 {
     int opt;
-    char *outdir;
     while ((opt = getopt(argc, argv, "hnO:o:")) != -1) {
         switch (opt) {
         case 'O':
@@ -114,7 +113,7 @@ main(int argc, char *argv[])
     ssize_t rc;
     size_t i, n;
     struct stat st;
-    char *s, *p, m[12];
+    char *p, m[12];
     PyObject *code, *marshalled;
     ShowCrashReports();
     GetOpts(argc, argv);

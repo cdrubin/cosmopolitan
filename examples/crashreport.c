@@ -11,6 +11,7 @@
 #include "libc/math.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
+#include "libc/stdio/stdio.h"
 
 /**
  * @fileoverview How to print backtraces and cpu state on crash.
@@ -25,7 +26,7 @@
  *     o//examples/crashreport.com
  */
 
-noubsan int main(int argc, char *argv[]) {
+dontubsan int main(int argc, char *argv[]) {
   kprintf("----------------\n");
   kprintf(" THIS IS A TEST \n");
   kprintf("SIMULATING CRASH\n");
@@ -36,7 +37,9 @@ noubsan int main(int argc, char *argv[]) {
   volatile double a = 0;
   volatile double b = 23;
   volatile double c = exp(b) / a;
+  (void)c;
 
-  volatile int64_t x;
-  return 1 / (x = 0);
+  volatile int x = 0;
+  volatile int y = 1 / x;
+  return y;
 }

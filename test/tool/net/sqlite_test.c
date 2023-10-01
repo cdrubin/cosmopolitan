@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
@@ -28,9 +27,8 @@
 #include "libc/thread/thread.h"
 #include "third_party/sqlite3/sqlite3.h"
 
-char testlib_enable_tmp_setup_teardown;
-
 void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
   sqlite3_initialize();
 }
 

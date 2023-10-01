@@ -30,7 +30,6 @@
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/bits.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
@@ -52,7 +51,7 @@
 #define MRS_TPIDR_EL0     0xd53bd040u
 #define MOV_REG(DST, SRC) (0xaa0003e0u | (SRC) << 16 | (DST))
 
-static const unsigned char kFatNops[8][8] = {
+const unsigned char kFatNops[8][8] = {
     {},                                          //
     {0x90},                                      // nop
     {0x66, 0x90},                                // xchg %ax,%ax
@@ -69,9 +68,9 @@ static char *symstrs;
 static char *secstrs;
 static ssize_t esize;
 static Elf64_Sym *syms;
+static Elf64_Ehdr *elf;
 static const char *epath;
 static Elf64_Xword symcount;
-static const Elf64_Ehdr *elf;
 
 static wontreturn void Die(const char *reason) {
   tinyprint(2, epath, ": ", reason, "\n", NULL);
@@ -140,11 +139,10 @@ static void GetOpts(int argc, char *argv[]) {
 }
 
 static void CheckPrivilegedCrossReferences(void) {
-  long i;
   unsigned long x;
-  Elf64_Shdr *shdr;
   const char *secname;
-  Elf64_Rela *rela, *erela;
+  const Elf64_Shdr *shdr;
+  const Elf64_Rela *rela, *erela;
   shdr = FindElfSectionByName(elf, esize, secstrs, ".rela.privileged");
   if (!shdr || !(rela = GetElfSectionAddress(elf, esize, shdr))) return;
   erela = rela + shdr->sh_size / sizeof(*rela);
@@ -171,18 +169,18 @@ static void CheckPrivilegedCrossReferences(void) {
 
 // Modify ARM64 code to use x28 for TLS rather than tpidr_el0.
 static void RewriteTlsCode(void) {
-  int i, dest;
+  int i;
   Elf64_Shdr *shdr;
   uint32_t *p, *pe;
   for (i = 0; i < elf->e_shnum; ++i) {
     if (!(shdr = GetElfSectionHeaderAddress(elf, esize, i))) {
-      Die("elf header overflow");
+      Die("elf header overflow #1");
     }
     if (shdr->sh_type == SHT_PROGBITS &&  //
         (shdr->sh_flags & SHF_ALLOC) &&   //
         (shdr->sh_flags & SHF_EXECINSTR)) {
       if (!(p = GetElfSectionAddress(elf, esize, shdr))) {
-        Die("elf header overflow");
+        Die("elf header overflow #2");
       }
       for (pe = p + shdr->sh_size / 4; p <= pe; ++p) {
         if ((*p & -32) == MRS_TPIDR_EL0) {
@@ -206,18 +204,17 @@ static void RewriteTlsCode(void) {
 static void OptimizePatchableFunctionEntries(void) {
 #ifdef __x86_64__
   long i, n;
-  int nopcount;
   Elf64_Shdr *shdr;
   unsigned char *p, *pe;
   for (i = 0; i < symcount; ++i) {
     if (!syms[i].st_size) continue;
     if (ELF64_ST_TYPE(syms[i].st_info) != STT_FUNC) continue;
     if (!(shdr = GetElfSectionHeaderAddress(elf, esize, syms[i].st_shndx))) {
-      Die("elf header overflow");
+      Die("elf header overflow #3");
     }
     if (shdr->sh_type != SHT_PROGBITS) continue;
     if (!(p = GetElfSectionAddress(elf, esize, shdr))) {
-      Die("elf header overflow");
+      Die("elf header overflow #4");
     }
     if (syms[i].st_value < shdr->sh_addr) {
       Die("elf symbol beneath section");
@@ -366,7 +363,7 @@ static void FixupObject(void) {
 }
 
 int main(int argc, char *argv[]) {
-  int i, opt;
+  int i;
   if (!IsOptimized()) {
     ShowCrashReports();
   }

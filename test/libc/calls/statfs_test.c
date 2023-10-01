@@ -16,13 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
 #include "libc/calls/struct/statfs.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/stat.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/testlib/testlib.h"
 
-char testlib_enable_tmp_setup_teardown;
 struct statfs f;
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 TEST(statfs, testFile) {
   EXPECT_SYS(0, 0, touch("foo", 0644));

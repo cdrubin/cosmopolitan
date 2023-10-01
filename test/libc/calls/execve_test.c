@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/rusage.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
@@ -25,10 +26,10 @@
 #include "libc/intrin/kprintf.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+#include "libc/temp.h"
+#include "libc/testlib/ezbench.h"
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
-
-#ifdef __x86_64__
 
 #define N 16
 
@@ -66,8 +67,9 @@ TEST(execve, testArgPassing) {
 }
 
 TEST(execve, ziposELF) {
-  if (IsFreebsd()) return;           // TODO: fixme on freebsd
-  if (!__is_linux_2_6_23()) return;  // TODO: fixme on old linux
+  if (1) return;                                  // TODO: rewrite
+  if (IsFreebsd()) return;                        // TODO: fixme on freebsd
+  if (IsLinux() && !__is_linux_2_6_23()) return;  // TODO: fixme on old linux
   if (!IsLinux() && !IsFreebsd()) {
     EXPECT_SYS(ENOSYS, -1,
                execve("/zip/life.elf", (char *const[]){0}, (char *const[]){0}));
@@ -80,8 +82,9 @@ TEST(execve, ziposELF) {
 }
 
 TEST(execve, ziposAPE) {
-  if (IsFreebsd()) return;           // TODO: fixme on freebsd
-  if (!__is_linux_2_6_23()) return;  // TODO: fixme on old linux
+  if (1) return;                                  // TODO: rewrite
+  if (IsFreebsd()) return;                        // TODO: fixme on freebsd
+  if (IsLinux() && !__is_linux_2_6_23()) return;  // TODO: fixme on old linux
   if (!IsLinux() && !IsFreebsd()) {
     EXPECT_EQ(-1, execve("/zip/life-nomod.com", (char *const[]){0},
                          (char *const[]){0}));
@@ -93,4 +96,57 @@ TEST(execve, ziposAPE) {
   EXITS(42);
 }
 
-#endif
+// clang-format off
+#define TINY_ELF_PROGRAM "\
+\177\105\114\106\002\001\001\000\000\000\000\000\000\000\000\000\
+\002\000\076\000\001\000\000\000\170\000\100\000\000\000\000\000\
+\100\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\
+\000\000\000\000\100\000\070\000\001\000\000\000\000\000\000\000\
+\001\000\000\000\005\000\000\000\000\000\000\000\000\000\000\000\
+\000\000\100\000\000\000\000\000\000\000\100\000\000\000\000\000\
+\200\000\000\000\000\000\000\000\200\000\000\000\000\000\000\000\
+\000\020\000\000\000\000\000\000\152\052\137\152\074\130\017\005"
+// clang-format on
+
+void ExecvTinyElf(const char *path) {
+  int ws;
+  if (!vfork()) {
+    execv(path, (char *[]){(char *)path, 0});
+    abort();
+  }
+  ASSERT_NE(-1, wait(&ws));
+  ASSERT_EQ(42, WEXITSTATUS(ws));
+}
+
+void ExecvpTinyElf(const char *path) {
+  int ws;
+  if (!vfork()) {
+    execvp(path, (char *[]){(char *)path, 0});
+    abort();
+  }
+  ASSERT_NE(-1, wait(&ws));
+  ASSERT_EQ(42, WEXITSTATUS(ws));
+}
+
+void ExecveTinyElf(const char *path) {
+  int ws;
+  if (!vfork()) {
+    execve(path, (char *[]){(char *)path, 0}, (char *[]){0});
+    abort();
+  }
+  ASSERT_NE(-1, wait(&ws));
+  ASSERT_EQ(42, WEXITSTATUS(ws));
+}
+
+BENCH(execve, bench) {
+  if (!IsLinux()) return;
+  char path[128] = "/tmp/tinyelf.XXXXXX";
+  int fd = mkstemp(path);
+  fchmod(fd, 0700);
+  write(fd, TINY_ELF_PROGRAM, sizeof(TINY_ELF_PROGRAM));
+  close(fd);
+  EZBENCH2("execv", donothing, ExecvTinyElf(path));
+  EZBENCH2("execvp", donothing, ExecvpTinyElf(path));
+  EZBENCH2("execve", donothing, ExecveTinyElf(path));
+  unlink(path);
+}

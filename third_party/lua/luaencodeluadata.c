@@ -22,10 +22,12 @@
 #include "libc/log/rop.internal.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/stdio/append.h"
 #include "libc/stdio/strlist.internal.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/auxv.h"
 #include "libc/x/x.h"
 #include "third_party/double-conversion/wrapper.h"
 #include "third_party/lua/cosmo.h"
@@ -111,7 +113,7 @@ OnError:
 
 static int SerializeNumber(lua_State *L, char **buf, int idx) {
   int64_t x;
-  char ibuf[24];
+  char ibuf[128];
   if (lua_isinteger(L, idx)) {
     x = luaL_checkinteger(L, idx);
     if (x == -9223372036854775807 - 1) {
@@ -190,7 +192,7 @@ static int SerializeString(lua_State *L, char **buf, int idx) {
   size_t i, n;
   const char *s;
   s = lua_tolstring(L, idx, &n);
-  utf8 = _isutf8(s, n);
+  utf8 = isutf8(s, n);
   RETURN_ON_ERROR(appendw(buf, '"'));
   for (i = 0; i < n; i++) {
     switch ((x = kLuaStrXlat[(c = s[i] & 255)])) {
@@ -250,7 +252,6 @@ OnError:
 static int SerializeArray(lua_State *L, char **buf, struct Serializer *z,
                           int depth) {
   size_t i, n;
-  const char *s;
   RETURN_ON_ERROR(appendw(buf, '{'));
   n = lua_rawlen(L, -1);
   for (i = 1; i <= n; i++) {
@@ -267,7 +268,6 @@ OnError:
 
 static int SerializeObject(lua_State *L, char **buf, struct Serializer *z,
                            int depth, bool multi) {
-  int rc;
   size_t n;
   const char *s;
   bool comma = false;
@@ -306,8 +306,8 @@ OnError:
 
 static int SerializeSorted(lua_State *L, char **buf, struct Serializer *z,
                            int depth, bool multi) {
+  int i;
   size_t n;
-  int i, rc;
   const char *s;
   struct StrList sl = {0};
   lua_pushnil(L);
@@ -352,8 +352,7 @@ static int SerializeTable(lua_State *L, char **buf, int idx,
                           struct Serializer *z, int depth) {
   int rc;
   bool multi;
-  intptr_t rsp, bot;
-  if (UNLIKELY(!HaveStackMemory(APE_GUARDSIZE))) {
+  if (UNLIKELY(!HaveStackMemory(getauxval(AT_PAGESZ)))) {
     z->reason = "out of stack";
     return -1;
   }

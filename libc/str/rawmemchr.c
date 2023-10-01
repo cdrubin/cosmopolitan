@@ -31,13 +31,14 @@ static inline const unsigned char *rawmemchr_pure(const unsigned char *s,
   }
 }
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__chibicc__)
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
-noasan static inline const char *rawmemchr_sse(const char *s, unsigned char c) {
+static inline const char *rawmemchr_sse(const char *s,
+                                                 unsigned char c) {
   unsigned k;
   unsigned m;
-  xmm_t v, *p;
-  xmm_t n = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
+  const xmm_t *p;
+  xmm_t v, n = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
   k = (uintptr_t)s & 15;
   p = (const xmm_t *)((uintptr_t)s & -16);
   v = *p;
@@ -53,7 +54,7 @@ noasan static inline const char *rawmemchr_sse(const char *s, unsigned char c) {
 }
 #endif
 
-static inline noasan uint64_t UncheckedAlignedRead64(unsigned char *p) {
+static inline uint64_t UncheckedAlignedRead64(const unsigned char *p) {
   return (uint64_t)p[7] << 070 | (uint64_t)p[6] << 060 | (uint64_t)p[5] << 050 |
          (uint64_t)p[4] << 040 | (uint64_t)p[3] << 030 | (uint64_t)p[2] << 020 |
          (uint64_t)p[1] << 010 | (uint64_t)p[0] << 000;
@@ -67,7 +68,7 @@ static inline noasan uint64_t UncheckedAlignedRead64(unsigned char *p) {
  * @return is pointer to first instance of c
  */
 void *rawmemchr(const void *s, int c) {
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__chibicc__)
   const void *r;
   if (X86_HAVE(SSE)) {
     if (IsAsan()) __asan_verify(s, 1);
@@ -83,7 +84,7 @@ void *rawmemchr(const void *s, int c) {
   c &= 255;
   v = 0x0101010101010101ul * c;
   for (; (uintptr_t)p & 7; ++p) {
-    if (*p == c) return p;
+    if (*p == c) return (void *)p;
   }
   for (;; p += 8) {
     w = UncheckedAlignedRead64(p);
@@ -93,6 +94,6 @@ void *rawmemchr(const void *s, int c) {
     }
   }
   assert(*p == c);
-  return p;
+  return (void *)p;
 #endif
 }

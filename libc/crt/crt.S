@@ -66,24 +66,18 @@ _start:
 	lea	8(%rsp),%rsi			// argv
 	lea	16(%rsp,%rbx,8),%rdx		// envp
 	mov	%rsp,__oldstack(%rip)
+	mov	%rdx,__envp(%rip)
 
-//	setup a stack frame
-//	align stack to GetStackSize() so GetStackAddr() is fast
-	.weak	ape_stack_memsz
-	mov	$ape_stack_memsz,%r9d
-	mov	$16,%r8d
-	test	%r9d,%r9d
-	cmovnz	%r9,%r8
-	neg	%r8
-	and	%r8,%rsp
+//	setup stack
 	xor	%ebp,%ebp
-//	bofram	9f
+	and	$ape_stack_round,%rsp
 
-#if SupportsWindows()
-//	make win32 imps noop
+#if SupportsWindows() && !IsTiny()
+//	make win32 imps crash
 	.weak	ape_idata_iat
 	.weak	ape_idata_iatend
-	ezlea	_missingno,ax
+	.weak	__oops_win32
+	ezlea	__oops_win32,ax
 	ezlea	ape_idata_iat,di
 	ezlea	ape_idata_iatend,cx
 	sub	%rdi,%rcx
@@ -113,6 +107,12 @@ _start:
 	call	cosmo
 9:	.unreachable
 
+//	strongly link main() function (discarded by linker)
+//	libc_runtime had to weakly link, due to package.com
+	.section .yoink
+	call	main
+	.previous
+
 ////////////////////////////////////////////////////////////////////////////////
 #elif defined(__aarch64__)
 
@@ -120,16 +120,13 @@ _start:
 //	this is the first argument to cosmo() below
 	mov	x0,sp
 
-//	align stack to GetStackSize() so GetStackAddr() is fast
-	mov	x1,sp
-	.weak	ape_stack_memsz
-	ldr	x2,=ape_stack_memsz
-	neg	x2,x2
-	and	x1,x2,x1
-	mov	sp,x1
-
-//	setup backtraces
+//	setup the stack
+	mov	x28,#0
 	mov	x29,#0
+	mov	x30,#0
+	ldr	x1,=ape_stack_round
+	and	x1,x0,x1
+	mov	sp,x1
 
 //	second arg shall be struct Syslib passed by ape-m1.c
 //	used to talk to apple's authoritarian libraries
@@ -139,6 +136,12 @@ _start:
 //	switch to c code
 	bl	cosmo
 	.unreachable
+
+//	strongly link main() function (discarded by linker)
+//	libc_runtime had to weakly link, due to package.com
+	.section .yoink
+	bl	main
+	.previous
 
 ////////////////////////////////////////////////////////////////////////////////
 #else

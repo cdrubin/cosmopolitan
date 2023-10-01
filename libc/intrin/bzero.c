@@ -43,7 +43,7 @@ static void bzero128(char *p, size_t n) {
   }
 }
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__chibicc__)
 _Microarchitecture("avx") static void bzero_avx(char *p, size_t n) {
   xmm_t v = {0};
   if (IsAsan()) __asan_verify(p, n);
@@ -139,6 +139,10 @@ void bzero(void *p, size_t n) {
 #ifdef __x86_64__
   asm("xorl\t%k0,%k0" : "=r"(x));
 #else
+  if (1) {
+    memset(p, 0, n);
+    return;
+  }
   x = 0;
 #endif
   if (n <= 16) {
@@ -154,7 +158,7 @@ void bzero(void *p, size_t n) {
         b[--n] = x;
       } while (n);
     }
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__chibicc__)
   } else if (IsTiny()) {
     asm("rep stosb" : "+D"(b), "+c"(n), "=m"(*(char(*)[n])b) : "a"(0));
     return;

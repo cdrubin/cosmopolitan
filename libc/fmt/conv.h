@@ -86,7 +86,7 @@ libcesque nosideeffect;
 │ cosmopolitan § conversion » manipulation                                 ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
-#ifdef COSMO
+#ifdef _COSMO_SOURCE
 char *stripext(char *);
 char *stripexts(char *);
 #endif
@@ -131,7 +131,7 @@ imaxdiv_t imaxdiv(intmax_t, intmax_t) pureconst;
 #endif
 
 #if (__GNUC__ * 100 + __GNUC_MINOR__ >= 406 || defined(__llvm__)) && \
-    !defined(__STRICT_ANSI__)
+    !defined(__STRICT_ANSI__) && defined(_COSMO_SOURCE)
 int128_t i128abs(int128_t)
 libcesque pureconst;
 int128_t strtoi128(const char *, char **, int) paramsnonnull((1));

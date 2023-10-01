@@ -21,14 +21,15 @@
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/cmpxchg.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/nopl.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/stackframe.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
+#include "libc/thread/posixthread.internal.h"
+#include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
-#include "libc/thread/tls2.h"
+#include "libc/thread/tls2.internal.h"
 
 /**
  * @fileoverview Plain-text function call logging.
@@ -48,7 +49,7 @@
 
 static struct CosmoFtrace g_ftrace;
 
-static privileged inline int GetNestingLevelImpl(struct StackFrame *frame) {
+__funline int GetNestingLevelImpl(struct StackFrame *frame) {
   int nesting = -2;
   while (frame) {
     ++nesting;
@@ -57,8 +58,7 @@ static privileged inline int GetNestingLevelImpl(struct StackFrame *frame) {
   return MAX(0, nesting);
 }
 
-static privileged inline int GetNestingLevel(struct CosmoFtrace *ft,
-                                             struct StackFrame *sf) {
+__funline int GetNestingLevel(struct CosmoFtrace *ft, struct StackFrame *sf) {
   int nesting;
   nesting = GetNestingLevelImpl(sf);
   if (nesting < ft->ft_skew) ft->ft_skew = nesting;
@@ -76,30 +76,39 @@ static privileged inline int GetNestingLevel(struct CosmoFtrace *ft,
  * @see ftrace_install()
  */
 privileged void ftracer(void) {
-  uintptr_t fn;
   long stackuse;
+  uintptr_t fn, st;
   struct CosmoTib *tib;
   struct StackFrame *sf;
   struct CosmoFtrace *ft;
+  struct PosixThread *pt;
+  sf = __builtin_frame_address(0);
+  st = (uintptr_t)__argv - sizeof(uintptr_t);
   if (__ftrace <= 0) return;
   if (__tls_enabled) {
     tib = __get_tls_privileged();
     if (tib->tib_ftrace <= 0) return;
     ft = &tib->tib_ftracer;
+    if ((char *)sf >= tib->tib_sigstack_addr &&
+        (char *)sf <= tib->tib_sigstack_addr + tib->tib_sigstack_size) {
+      st = (uintptr_t)tib->tib_sigstack_addr + tib->tib_sigstack_size;
+    } else if ((pt = (struct PosixThread *)tib->tib_pthread) &&
+               pt->attr.__stacksize) {
+      st = (uintptr_t)pt->attr.__stackaddr + pt->attr.__stacksize;
+    }
   } else {
     ft = &g_ftrace;
   }
+  stackuse = st - (intptr_t)sf;
   if (_cmpxchg(&ft->ft_once, false, true)) {
     ft->ft_lastaddr = -1;
-    ft->ft_skew = GetNestingLevelImpl(__builtin_frame_address(0));
+    ft->ft_skew = GetNestingLevelImpl(sf);
   }
   if (_cmpxchg(&ft->ft_noreentry, false, true)) {
-    sf = __builtin_frame_address(0);
     sf = sf->next;
     fn = sf->addr + DETOUR_SKEW;
     if (fn != ft->ft_lastaddr) {
-      stackuse = GetStackAddr() + GetStackSize() - (intptr_t)sf;
-      kprintf("%rFUN %6P %'13T %'*ld %*s%t\n", ftrace_stackdigs, stackuse,
+      kprintf("%rFUN %6P %'16T %'*ld %*s%t\n", ftrace_stackdigs, stackuse,
               GetNestingLevel(ft, sf) * 2, "", fn);
       ft->ft_lastaddr = fn;
     }

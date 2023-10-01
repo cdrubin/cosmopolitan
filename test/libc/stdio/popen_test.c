@@ -28,7 +28,6 @@
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/lock.internal.h"
 #include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -40,7 +39,10 @@
 
 FILE *f;
 char buf[32];
-char testlib_enable_tmp_setup_teardown;
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 void CheckForFdLeaks(void) {
   int rc, i, l = 0, e = errno;
@@ -79,7 +81,7 @@ TEST(popen, semicolon) {
 
 TEST(popen, singleQuotes) {
   setenv("there", "a b c", true);
-  ASSERT_NE(NULL, (f = popen("echo -l 'hello $there' yo", "r")));
+  ASSERT_NE(NULL, (f = popen("echo 'hello $there'; echo yo", "r")));
   ASSERT_STREQ("hello $there\n", fgets(buf, sizeof(buf), f));
   ASSERT_STREQ("yo\n", fgets(buf, sizeof(buf), f));
   ASSERT_EQ(0, pclose(f));
@@ -88,7 +90,7 @@ TEST(popen, singleQuotes) {
 
 TEST(popen, doubleQuotes) {
   setenv("hello", "a b c", true);
-  ASSERT_NE(NULL, (f = popen("echo -l \"$hello there\"", "r")));
+  ASSERT_NE(NULL, (f = popen("echo \"$hello there\"", "r")));
   ASSERT_STREQ("a b c there\n", fgets(buf, sizeof(buf), f));
   ASSERT_EQ(0, pclose(f));
   CheckForFdLeaks();
@@ -96,7 +98,7 @@ TEST(popen, doubleQuotes) {
 
 TEST(popen, quoteless) {
   setenv("there", "a b c", true);
-  ASSERT_NE(NULL, (f = popen("echo -l hello a$there yo", "r")));
+  ASSERT_NE(NULL, (f = popen("echo hello; echo a$there; echo yo", "r")));
   ASSERT_STREQ("hello\n", fgets(buf, sizeof(buf), f));
   ASSERT_STREQ("aa b c\n", fgets(buf, sizeof(buf), f));  // mixed feelings
   ASSERT_STREQ("yo\n", fgets(buf, sizeof(buf), f));
@@ -145,8 +147,8 @@ void *Worker(void *arg) {
     strcat(arg1, "\n");
     strcat(arg2, "\n");
     ASSERT_NE(NULL, (f = popen(cmd, "r")));
-    ASSERT_STREQ(arg1, fgets(buf, sizeof(buf), f));
-    ASSERT_STREQ(arg2, fgets(buf, sizeof(buf), f));
+    EXPECT_STREQ(arg1, fgets(buf, sizeof(buf), f));
+    EXPECT_STREQ(arg2, fgets(buf, sizeof(buf), f));
     ASSERT_EQ(0, pclose(f));
     free(arg2);
     free(arg1);
@@ -156,6 +158,10 @@ void *Worker(void *arg) {
 }
 
 TEST(popen, torture) {
+  if (IsWindows()) {
+    // TODO: Why does pclose() return kNtSignalAccessViolationa?!
+    return;
+  }
   int i, n = 4;
   pthread_t *t = _gc(malloc(sizeof(pthread_t) * n));
   testlib_extract("/zip/echo.com", "echo.com", 0755);

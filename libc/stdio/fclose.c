@@ -47,7 +47,7 @@ int fclose(FILE *f) {
   f->state = EOF;
   if (f->noclose) {
     f->fd = -1;
-  } else if (close(f->fd) == -1) {
+  } else if (f->fd != -1 && close(f->fd) == -1) {
     f->state = errno;
   }
   if (f->state == EOF) {

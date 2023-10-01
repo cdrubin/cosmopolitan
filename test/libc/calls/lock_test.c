@@ -20,7 +20,6 @@
 #include "libc/calls/struct/flock.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/f.h"
@@ -37,7 +36,9 @@
 #define RATIO      3
 #define ITERATIONS 10
 
-char testlib_enable_tmp_setup_teardown;
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 _Thread_local const char *kind;
 

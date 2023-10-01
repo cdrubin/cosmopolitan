@@ -202,11 +202,12 @@
 
         (cosmopolitan-builtin-functions
          '("DebugBreak"
-           "VEIL"
-           "CONCEAL"
-           "EXPROPRIATE"
-           "YOINK"
-           "STATIC_YOINK"
+           "__veil"
+           "__conceal"
+           "__expropriate"
+           "__yoink"
+           "__dll_import"
+           "__static_yoink"
            "PYTHON_YOINK"
            "PYTHON_PROVIDE"
            "STATIC_STACK_ADDR"

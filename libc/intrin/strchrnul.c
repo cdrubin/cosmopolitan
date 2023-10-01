@@ -30,12 +30,13 @@ static inline const char *strchrnul_pure(const char *s, int c) {
   }
 }
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__chibicc__)
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
-noasan static inline const char *strchrnul_sse(const char *s, unsigned char c) {
+static inline const char *strchrnul_sse(const char *s, unsigned char c) {
   unsigned k;
   unsigned m;
-  xmm_t v, *p;
+  const xmm_t *p;
+  xmm_t v;
   xmm_t z = {0};
   xmm_t n = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
   k = (uintptr_t)s & 15;
@@ -52,7 +53,7 @@ noasan static inline const char *strchrnul_sse(const char *s, unsigned char c) {
 }
 #endif
 
-noasan static const char *strchrnul_x64(const char *p, uint64_t c) {
+static const char *strchrnul_x64(const char *p, uint64_t c) {
   unsigned a, b;
   uint64_t w, x, y;
   for (c *= 0x0101010101010101;; p += 8) {
@@ -93,15 +94,15 @@ noasan static const char *strchrnul_x64(const char *p, uint64_t c) {
  *     NUL terminator if c is not found
  */
 char *strchrnul(const char *s, int c) {
-#ifdef __x86_64__
+  if (IsAsan()) __asan_verify_str(s);
+#if defined(__x86_64__) && !defined(__chibicc__)
   const char *r;
   if (X86_HAVE(SSE)) {
-    if (IsAsan()) __asan_verify(s, 1);
     r = strchrnul_sse(s, c);
   } else {
     r = strchrnul_pure(s, c);
   }
-  _unassert((*r & 255) == (c & 255) || !*r);
+  unassert((*r & 255) == (c & 255) || !*r);
   return (char *)r;
 #else
   char *r;

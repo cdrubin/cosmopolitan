@@ -26,7 +26,8 @@ LIBC_RUNTIME_A_SRCS =					\
 
 LIBC_RUNTIME_A_OBJS =					\
 	$(LIBC_RUNTIME_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
-	$(LIBC_RUNTIME_A_SRCS_C:%.c=o/$(MODE)/%.o)
+	$(LIBC_RUNTIME_A_SRCS_C:%.c=o/$(MODE)/%.o)	\
+	o/$(MODE)/libc/runtime/.cosmo.zip.o
 
 LIBC_RUNTIME_A_CHECKS =					\
 	$(LIBC_RUNTIME_A).pkg				\
@@ -44,6 +45,7 @@ LIBC_RUNTIME_A_DIRECTDEPS =				\
 	LIBC_STR					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
+	THIRD_PARTY_NSYNC				\
 	THIRD_PARTY_PUFF				\
 	THIRD_PARTY_XED
 
@@ -66,42 +68,11 @@ $(LIBC_RUNTIME_A).pkg:					\
 o/$(MODE)/libc/runtime/cosmo2.o: private		\
 		CFLAGS += -O0
 
-o/$(MODE)/libc/runtime/ftracer.o: private		\
-		CFLAGS +=				\
-			-x-no-pg			\
-			-ffreestanding			\
-			-fno-sanitize=all
-
-o/$(MODE)/libc/runtime/cosmo2.o				\
-o/$(MODE)/libc/runtime/fork-nt.o			\
-o/$(MODE)/libc/runtime/printmemoryintervals.o		\
-o/$(MODE)/libc/runtime/arememoryintervalsok.o		\
-o/$(MODE)/libc/runtime/findmemoryinterval.o		\
-o/$(MODE)/libc/runtime/sys_mprotect.greg.o		\
-o/$(MODE)/libc/runtime/getdosargv.o			\
-o/$(MODE)/libc/runtime/getdosenviron.o			\
-o/$(MODE)/libc/runtime/hook.greg.o			\
-o/$(MODE)/libc/runtime/ismemtracked.greg.o		\
-o/$(MODE)/libc/runtime/memtracknt.o			\
-o/$(MODE)/libc/runtime/memtrack.greg.o			\
-o/$(MODE)/libc/runtime/metalprintf.greg.o		\
-o/$(MODE)/libc/runtime/printargs.greg.o			\
-o/$(MODE)/libc/runtime/mman.greg.o			\
-o/$(MODE)/libc/runtime/print.greg.o			\
-o/$(MODE)/libc/runtime/stackchkfail.o			\
-o/$(MODE)/libc/runtime/stackchkfaillocal.o		\
-o/$(MODE)/libc/runtime/winmain.greg.o			\
-o/$(MODE)/libc/runtime/opensymboltable.o: private	\
-		CFLAGS +=				\
-			-Os				\
-			-ffreestanding			\
-			$(NO_MAGIC)
-
-# must use alloca()
-# can't use asan or any runtime services
-o/$(MODE)/libc/runtime/fork-nt.o: private		\
-		CPPFLAGS +=				\
-			-DSTACK_FRAME_UNLIMITED
+$(LIBC_RUNTIME_A_OBJS): private				\
+		COPTS +=				\
+			-fno-sanitize=all		\
+			-Wframe-larger-than=4096	\
+			-Walloca-larger-than=4096
 
 o/$(MODE)/libc/runtime/qsort.o: private			\
 		CFLAGS +=				\
@@ -122,35 +93,26 @@ o/$(MODE)/libc/runtime/enable_tls.o: private		\
 			-mcmodel=large
 endif
 
-# privileged functions
-o/$(MODE)/libc/runtime/morph.o				\
-o/$(MODE)/libc/runtime/getsymbol.o			\
-o/$(MODE)/libc/runtime/enable_threads.o			\
-o/$(MODE)/libc/runtime/morph_tls.o: private		\
-		CFLAGS +=				\
-			-ffreestanding			\
-			-fno-sanitize=all		\
-			-fno-stack-protector		\
-			-fpatchable-function-entry=0,0
-
-# TODO(jart): We need a way to avoid WinThreadEntry() being hooked.
-o/$(MODE)/libc/runtime/clone.o: private			\
-		COPTS +=				\
-			-fno-sanitize=all		\
-			-fpatchable-function-entry=0,0
+o/$(MODE)/libc/runtime/.cosmo.zip.o: private		\
+		ZIPOBJ_FLAGS +=				\
+			-B
 
 # these assembly files are safe to build on aarch64
 o/$(MODE)/libc/runtime/init.o: libc/runtime/init.S
 	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 o/$(MODE)/libc/runtime/wipe.o: libc/runtime/wipe.S
 	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
-o/$(MODE)/libc/runtime/vfork.o: libc/runtime/vfork.S
-	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 o/$(MODE)/libc/runtime/clone-linux.o: libc/runtime/clone-linux.S
 	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 o/$(MODE)/libc/runtime/ftrace-hook.o: libc/runtime/ftrace-hook.S
 	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 o/$(MODE)/libc/runtime/dsohandle.o: libc/runtime/dsohandle.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/zipos.o: libc/runtime/zipos.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/switchstacks.o: libc/runtime/switchstacks.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/sigsetjmp.o: libc/runtime/sigsetjmp.S
 	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 LIBC_RUNTIME_LIBS = $(foreach x,$(LIBC_RUNTIME_ARTIFACTS),$($(x)))

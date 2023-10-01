@@ -22,7 +22,9 @@
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/asancodes.h"
+#include "libc/intrin/describebacktrace.internal.h"
 #include "libc/intrin/directmap.internal.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/sysv/consts/map.h"
@@ -37,17 +39,17 @@ static void *_mapframe(void *p, int f) {
   flags = f | MAP_ANONYMOUS | MAP_FIXED;
   if ((dm = sys_mmap(p, G, prot, flags, -1, 0)).addr == p) {
     __mmi_lock();
-    rc = TrackMemoryInterval(&_mmi, (uintptr_t)p >> 16, (uintptr_t)p >> 16,
-                             dm.maphandle, prot, flags, false, false, 0, G);
+    rc = __track_memory(&_mmi, (uintptr_t)p >> 16, (uintptr_t)p >> 16,
+                        dm.maphandle, prot, flags, false, false, 0, G);
     __mmi_unlock();
     if (!rc) {
       return p;
     } else {
-      _unassert(errno == ENOMEM);
+      unassert(errno == ENOMEM);
       return 0;
     }
   } else {
-    _unassert(errno == ENOMEM);
+    unassert(errno == ENOMEM);
     return 0;
   }
 }
@@ -71,14 +73,14 @@ static void *_mapframe(void *p, int f) {
  * @return new value for `e` or null w/ errno
  * @raise ENOMEM if we require more vespene gas
  */
-noasan void *_extend(void *p, size_t n, void *e, int f, intptr_t h) {
+void *_extend(void *p, size_t n, void *e, int f, intptr_t h) {
   char *q;
-  _unassert(!((uintptr_t)SHADOW(p) & (G - 1)));
-  _unassert((uintptr_t)p + (G << kAsanScale) <= h);
+  unassert(!((uintptr_t)SHADOW(p) & (G - 1)));
+  unassert((uintptr_t)p + (G << kAsanScale) <= h);
   // TODO(jart): Make this spin less in non-ASAN mode.
   for (q = e; q < ((char *)p + n); q += 8) {
     if (!((uintptr_t)q & (G - 1))) {
-      _unassert(q + G <= (char *)h);
+      unassert(q + G <= (char *)h);
       if (!_mapframe(q, f)) return 0;
       if (IsAsan()) {
         if (!((uintptr_t)SHADOW(q) & (G - 1))) {

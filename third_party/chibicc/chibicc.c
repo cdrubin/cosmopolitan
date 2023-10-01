@@ -218,7 +218,7 @@ static void parse_args(int argc, char **argv) {
       atexit(PrintMemoryUsage);
     } else if (!strcmp(argv[i], "-o")) {
       opt_o = argv[++i];
-    } else if (_startswith(argv[i], "-o")) {
+    } else if (startswith(argv[i], "-o")) {
       opt_o = argv[i] + 2;
     } else if (!strcmp(argv[i], "-S")) {
       opt_S = true;
@@ -242,19 +242,19 @@ static void parse_args(int argc, char **argv) {
       opt_P = true;
     } else if (!strcmp(argv[i], "-I")) {
       strarray_push(&include_paths, argv[++i]);
-    } else if (_startswith(argv[i], "-I")) {
+    } else if (startswith(argv[i], "-I")) {
       strarray_push(&include_paths, argv[i] + 2);
     } else if (!strcmp(argv[i], "-iquote")) {
       strarray_push(&include_paths, argv[++i]);
-    } else if (_startswith(argv[i], "-iquote")) {
+    } else if (startswith(argv[i], "-iquote")) {
       strarray_push(&include_paths, argv[i] + strlen("-iquote"));
     } else if (!strcmp(argv[i], "-isystem")) {
       strarray_push(&include_paths, argv[++i]);
-    } else if (_startswith(argv[i], "-isystem")) {
+    } else if (startswith(argv[i], "-isystem")) {
       strarray_push(&include_paths, argv[i] + strlen("-isystem"));
     } else if (!strcmp(argv[i], "-D")) {
       define(argv[++i]);
-    } else if (_startswith(argv[i], "-D")) {
+    } else if (startswith(argv[i], "-D")) {
       define(argv[i] + 2);
     } else if (!strcmp(argv[i], "-U")) {
       undef_macro(argv[++i]);
@@ -266,9 +266,9 @@ static void parse_args(int argc, char **argv) {
       opt_x = parse_opt_x(argv[++i]);
     } else if (!strncmp(argv[i], "-x", 2)) {
       opt_x = parse_opt_x(argv[i] + 2);
-    } else if (_startswith(argv[i], "-Wa")) {
+    } else if (startswith(argv[i], "-Wa")) {
       strarray_push_comma(&as_extra_args, argv[i] + 3);
-    } else if (_startswith(argv[i], "-Wl")) {
+    } else if (startswith(argv[i], "-Wl")) {
       strarray_push_comma(&ld_extra_args, argv[i] + 3);
     } else if (!strcmp(argv[i], "-Xassembler")) {
       strarray_push(&as_extra_args, argv[++i]);
@@ -336,7 +336,7 @@ static void parse_args(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-L")) {
       strarray_push(&ld_extra_args, "-L");
       strarray_push(&ld_extra_args, argv[++i]);
-    } else if (_startswith(argv[i], "-L")) {
+    } else if (startswith(argv[i], "-L")) {
       strarray_push(&ld_extra_args, "-L");
       strarray_push(&ld_extra_args, argv[i] + 2);
     } else {
@@ -380,7 +380,7 @@ static char *replace_extn(char *tmpl, char *extn) {
 }
 
 static char *create_tmpfile(void) {
-  char *path = xjoinpaths(kTmpPath, "chibicc-XXXXXX");
+  char *path = xjoinpaths(__get_tmpdir(), "chibicc-XXXXXX");
   int fd = mkstemp(path);
   if (fd == -1) error("%s: mkstemp failed: %s", path, strerror(errno));
   close(fd);
@@ -424,7 +424,7 @@ static bool NeedsShellQuotes(const char *s) {
 
 static bool run_subprocess(char **argv) {
   int rc, ws;
-  size_t i, j, n;
+  size_t i, j;
   if (opt_verbose) {
     for (i = 0; argv[i]; i++) {
       fputc(' ', stderr);
@@ -563,11 +563,11 @@ static Token *append_tokens(Token *tok1, Token *tok2) {
 
 static FileType get_file_type(const char *filename) {
   if (opt_x != FILE_NONE) return opt_x;
-  if (_endswith(filename, ".a")) return FILE_AR;
-  if (_endswith(filename, ".o")) return FILE_OBJ;
-  if (_endswith(filename, ".c")) return FILE_C;
-  if (_endswith(filename, ".s")) return FILE_ASM;
-  if (_endswith(filename, ".S")) return FILE_ASM_CPP;
+  if (endswith(filename, ".a")) return FILE_AR;
+  if (endswith(filename, ".o")) return FILE_OBJ;
+  if (endswith(filename, ".c")) return FILE_C;
+  if (endswith(filename, ".s")) return FILE_ASM;
+  if (endswith(filename, ".S")) return FILE_ASM_CPP;
   error("<command line>: unknown file extension: %s", filename);
 }
 
@@ -668,7 +668,6 @@ static void run_linker(StringArray *inputs, char *output) {
   strarray_push(&arr, "--gc-sections");
   strarray_push(&arr, "--build-id=none");
   strarray_push(&arr, "--no-dynamic-linker");
-  strarray_push(&arr, xasprintf("-Ttext-segment=%#x", IMAGE_BASE_VIRTUAL));
   /* strarray_push(&arr, "-T"); */
   /* strarray_push(&arr, LDS); */
   /* strarray_push(&arr, APE); */

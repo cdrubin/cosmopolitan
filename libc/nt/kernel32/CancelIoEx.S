@@ -1,9 +1,9 @@
 #include "libc/nt/codegen.h"
-.imp	kernel32,__imp_CancelIoEx,CancelIoEx,0
+.imp	kernel32,__imp_CancelIoEx,CancelIoEx
 
 	.text.windows
         .ftrace1
-__CancelIoEx:
+CancelIoEx:
         .ftrace2
 #ifdef __x86_64__
 	push	%rbp
@@ -14,5 +14,5 @@ __CancelIoEx:
 	mov	x0,#0
 	ret
 #endif
-	.endfn	__CancelIoEx,globl
+	.endfn	CancelIoEx,globl
 	.previous

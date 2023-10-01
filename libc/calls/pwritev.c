@@ -25,12 +25,10 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/likely.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 static ssize_t Pwritev(int fd, const struct iovec *iov, int iovlen,
                        int64_t off) {
@@ -51,13 +49,16 @@ static ssize_t Pwritev(int fd, const struct iovec *iov, int iovlen,
   }
 
   if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
-    return _weaken(__zipos_write)(
-        (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, iov, iovlen, off);
+    return ebadf();
   }
 
   if (IsWindows()) {
     if (fd < g_fds.n) {
-      return sys_write_nt(fd, iov, iovlen, off);
+      if (g_fds.p[fd].kind == kFdSocket) {
+        return espipe();
+      } else {
+        return sys_write_nt(fd, iov, iovlen, off);
+      }
     } else {
       return ebadf();
     }

@@ -73,7 +73,7 @@ linenoiseCompletionCallback *lua_repl_completions_callback;
 struct linenoiseState *lua_repl_linenoise;
 const char *lua_progname;
 static lua_State *globalL;
-static const char *g_historypath;
+static char *g_historypath;
 
 /*
 ** {==================================================================
@@ -105,8 +105,9 @@ void lua_readline_completions (const char *p, linenoiseCompletions *c) {
   size_t n;
   bool found;
   lua_State *L;
+  const char *a;
   const char *name;
-  char *a, *b, *s, *component;
+  char *b, *s, *component;
 
   // start searching globals
   L = globalL;
@@ -149,7 +150,7 @@ void lua_readline_completions (const char *p, linenoiseCompletions *c) {
     while (lua_next(L, -2)) {
       if (lua_type(L, -2) == LUA_TSTRING) {
         name = lua_tolstring(L, -2, &n);
-        if (_startswithi(name, a) && (s = malloc(a - p + n + 1))) {
+        if (startswithi(name, a) && (s = malloc(a - p + n + 1))) {
           memcpy(s, p, a - p);
           memcpy(s + (a - p), name, n + 1);
           lua_readline_addcompletion(c, s);
@@ -162,7 +163,7 @@ void lua_readline_completions (const char *p, linenoiseCompletions *c) {
   lua_pop(L, 1); // pop table
 
   for (i = 0; i < ARRAYLEN(kKeywordHints); ++i) {
-    if (_startswithi(kKeywordHints[i], p)) {
+    if (startswithi(kKeywordHints[i], p)) {
       if ((s = strdup(kKeywordHints[i]))) {
         lua_readline_addcompletion(c, s);
       }
@@ -318,7 +319,6 @@ static void lstop (lua_State *L, lua_Debug *ar) {
 static int multiline (lua_State *L) {
   for (;;) {  /* repeat until gets a complete statement */
     size_t len;
-    ssize_t rc;
     const char *line = lua_tolstring(L, 1, &len);  /* get what it has */
     int status = luaL_loadbuffer(L, line, len, "=stdin");  /* try it */
     if (!incomplete(L, status) || pushline(L, 0) != 1)

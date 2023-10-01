@@ -39,6 +39,7 @@
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/promises.internal.h"
 #include "libc/intrin/safemacros.internal.h"
+#include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
 #include "libc/mem/gc.internal.h"
@@ -69,8 +70,8 @@
 //     test/tool/build/pledge_test.sh
 //
 
-STATIC_YOINK("strerror_wr");
-STATIC_YOINK("zipos");
+__static_yoink("strerror_wr");
+__static_yoink("zipos");
 
 #define USAGE \
   "\
@@ -163,9 +164,9 @@ static void GetOpts(int argc, char *argv[]) {
   g_fszquota = 256 * 1000 * 1000;
   if (!sysinfo(&si)) {
     g_memquota = si.totalram;
-    g_proquota = _getcpucount() + si.procs;
+    g_proquota = __get_cpu_count() + si.procs;
   } else {
-    g_proquota = _getcpucount() * 100;
+    g_proquota = __get_cpu_count() * 100;
     g_memquota = 4L * 1024 * 1024 * 1024;
   }
   while ((opt = getopt(argc, argv, "hnqkNVT:p:u:g:c:C:D:P:M:F:O:v:")) != -1) {
@@ -583,9 +584,7 @@ Finish:
 int main(int argc, char *argv[]) {
   const char *s;
   bool hasfunbits;
-  int fdin, fdout;
   char buf[PATH_MAX];
-  int e, zipfd, memfd;
   int useruid, usergid;
   int owneruid, ownergid;
   int oldfsuid, oldfsgid;

@@ -30,25 +30,25 @@
 /**
  * Information about underlying Windows Sockets implementation.
  *
- * Cosmopolitan automatically calls YOINK() on this symbol when its
+ * Cosmopolitan automatically calls __yoink() on this symbol when its
  * Berkeley Socket wrappers are linked. The latest version of Winsock
  * was introduced alongside x64, so this should never fail.
  */
 struct NtWsaData kNtWsaData;
 
 static textwindows void WinSockCleanup(void) {
-  int i, rc;
+  int rc;
   (void)rc;
   rc = WSACleanup();
   NTTRACE("WSACleanup() → %d% lm", rc);
 }
 
-textwindows noasan void WinSockInit(void) {
+textwindows dontasan void WinSockInit(void) {
   int rc;
   atexit(WinSockCleanup);
   NTTRACE("WSAStartup()");
   if ((rc = WSAStartup(VERSION, &kNtWsaData)) != 0 ||
       kNtWsaData.wVersion != VERSION) {
-    ExitProcess(123);
+    _Exit(1);
   }
 }

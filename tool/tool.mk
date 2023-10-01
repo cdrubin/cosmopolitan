@@ -3,12 +3,10 @@
 
 .PHONY:	o/$(MODE)/tool
 o/$(MODE)/tool:			\
-	o/$(MODE)/tool/ape	\
 	o/$(MODE)/tool/args	\
 	o/$(MODE)/tool/build	\
 	o/$(MODE)/tool/curl	\
 	o/$(MODE)/tool/decode	\
-	o/$(MODE)/tool/hello	\
 	o/$(MODE)/tool/lambda	\
 	o/$(MODE)/tool/net	\
 	o/$(MODE)/tool/plinko	\

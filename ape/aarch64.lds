@@ -11,7 +11,7 @@ OUTPUT_FORMAT("elf64-littleaarch64",
 
 SECTIONS {
 
-  . = SEGMENT_START("text-segment", IMAGE_BASE_VIRTUAL);
+  . = SEGMENT_START("text-segment", 0x010000000000);
   __executable_start = .;
   . += SIZEOF_HEADERS;
 
@@ -72,8 +72,10 @@ SECTIONS {
     KEEP(*(SORT_NONE(.fini)))
   } =0x1f2003d5
 
-  .privileged ALIGN(CONSTANT(COMMONPAGESIZE)) : {
-    __privileged_start = .;
+  . += CONSTANT(MAXPAGESIZE);
+
+  .privileged : {
+    __privileged_start = ABSOLUTE(.) & -CONSTANT(MAXPAGESIZE);
     *(.privileged*)
   } =0x1f2003d6
 
@@ -119,8 +121,8 @@ SECTIONS {
   _etext = .;
   PROVIDE(etext = .);
 
-  . = ALIGN(CONSTANT(COMMONPAGESIZE));
-  . = DATA_SEGMENT_ALIGN(CONSTANT(COMMONPAGESIZE), CONSTANT(COMMONPAGESIZE));
+  . += CONSTANT(MAXPAGESIZE);
+  . = DATA_SEGMENT_ALIGN(CONSTANT(MAXPAGESIZE), CONSTANT(COMMONPAGESIZE));
 
   .eh_frame : ONLY_IF_RW {
     KEEP(*(.eh_frame))
@@ -271,12 +273,16 @@ SECTIONS {
     *(.gnu.lto_*)
     *(.eh_frame)
     *(.idata.*)
+    *(.yoink)
     *(.head)
   }
 }
 
-ape_stack_memsz = DEFINED(ape_stack_memsz) ? ape_stack_memsz : APE_STACKSIZE;
-ape_stack_memsz2 = ape_stack_memsz * 2;
+ape_stack_vaddr = DEFINED(ape_stack_vaddr) ? ape_stack_vaddr : 0x700000000000;
+ape_stack_memsz = DEFINED(ape_stack_memsz) ? ape_stack_memsz : 8 * 1024 * 1024;
+ape_stack_align = DEFINED(ape_stack_align) ? ape_stack_align : 16;
+ape_stack_round = -ape_stack_align;
+
 _tls_size = _tbss_end - _tdata_start;
 _tdata_size = _tdata_end - _tdata_start;
 _tbss_size = _tbss_end - _tbss_start;

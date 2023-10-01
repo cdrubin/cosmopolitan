@@ -48,10 +48,14 @@ $(THIRD_PARTY_NSYNC_A).pkg:				\
 		$(THIRD_PARTY_NSYNC_A_OBJS)		\
 		$(foreach x,$(THIRD_PARTY_NSYNC_A_DIRECTDEPS),$($(x)_A).pkg)
 
-#$(THIRD_PARTY_NSYNC_A_OBJS): private			\
-		CCFLAGS +=				\
+$(THIRD_PARTY_NSYNC_A_OBJS): private			\
+		COPTS +=				\
+			-ffreestanding			\
+			-fdata-sections			\
 			-ffunction-sections		\
-			-fdata-sections
+			-fno-sanitize=address		\
+			-Wframe-larger-than=4096	\
+			-Walloca-larger-than=4096
 
 # these assembly files are safe to build on aarch64
 o/$(MODE)/third_party/nsync/compat.o: third_party/nsync/compat.S

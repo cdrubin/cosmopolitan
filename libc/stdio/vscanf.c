@@ -24,5 +24,11 @@
  * @see libc/fmt/vcscanf.h
  */
 int vscanf(const char *fmt, va_list ap) {
-  return __vcscanf((int (*)(void *))fgetc, (void *)ungetc, stdin, fmt, ap);
+  int rc;
+  flockfile(stdin);
+  rc = __vcscanf((void *)fgetc_unlocked,   //
+                 (void *)ungetc_unlocked,  //
+                 stdin, fmt, ap);
+  flockfile(stdout);
+  return rc;
 }

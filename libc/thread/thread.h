@@ -97,10 +97,10 @@ typedef struct pthread_attr_s {
   int __schedparam;
   int __schedpolicy;
   int __contentionscope;
-  unsigned __guardsize;
-  unsigned __stacksize;
+  int __guardsize;
+  size_t __stacksize;
   uint32_t __sigmask[4];
-  char *__stackaddr;
+  void *__stackaddr;
 } pthread_attr_t;
 
 struct _pthread_cleanup_buffer {
@@ -146,7 +146,7 @@ int pthread_condattr_destroy(pthread_condattr_t *) paramsnonnull();
 int pthread_condattr_getpshared(const pthread_condattr_t *, int *) paramsnonnull();
 int pthread_condattr_init(pthread_condattr_t *) paramsnonnull();
 int pthread_condattr_setpshared(pthread_condattr_t *, int) paramsnonnull();
-int pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *) paramsnonnull((1, 3));
+int pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *) paramsnonnull((1));
 int pthread_detach(pthread_t);
 int pthread_equal(pthread_t, pthread_t);
 int pthread_getattr_np(pthread_t, pthread_attr_t *) paramsnonnull();
@@ -199,7 +199,6 @@ pthread_t pthread_self(void) pureconst;
 void *pthread_getspecific(pthread_key_t);
 void pthread_cleanup_pop(struct _pthread_cleanup_buffer *, int) paramsnonnull();
 void pthread_cleanup_push(struct _pthread_cleanup_buffer *, void (*)(void *), void *) paramsnonnull((1));
-void pthread_decimate_np(void);
 void pthread_exit(void *) wontreturn;
 void pthread_testcancel(void);
 
@@ -217,11 +216,12 @@ void pthread_testcancel(void);
 #if (__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 407 && \
     !defined(__STRICT_ANSI__) && !defined(MODE_DBG)
 extern const errno_t EBUSY;
-#define pthread_spin_lock(pSpin)                                           \
-  ({                                                                       \
-    pthread_spinlock_t *_s = pSpin;                                        \
-    while (__atomic_test_and_set(&_s->_lock, __ATOMIC_ACQUIRE)) donothing; \
-    0;                                                                     \
+#define pthread_spin_lock(pSpin)                                  \
+  ({                                                              \
+    pthread_spinlock_t *_s = pSpin;                               \
+    while (__atomic_test_and_set(&_s->_lock, __ATOMIC_ACQUIRE)) { \
+    }                                                             \
+    0;                                                            \
   })
 #define pthread_spin_unlock(pSpin)                     \
   ({                                                   \

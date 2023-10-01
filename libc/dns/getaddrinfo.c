@@ -22,7 +22,7 @@
 #include "libc/dns/resolvconf.h"
 #include "libc/dns/servicestxt.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/macros.internal.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/sock/sock.h"
@@ -47,7 +47,6 @@ int getaddrinfo(const char *name, const char *service,
                 const struct addrinfo *hints, struct addrinfo **res) {
   int rc, port;
   const char *canon;
-  size_t protolen;
   struct addrinfo *ai;
   char proto[32];
   port = 0;
@@ -94,7 +93,7 @@ int getaddrinfo(const char *name, const char *service,
     return EAI_NONAME;
   } else if (ResolveHostsTxt(GetHostsTxt(), AF_INET, name, ai->ai_addr,
                              sizeof(ai->ai_addr4), &canon) > 0) {
-    memcpy(ai->ai_canonname, canon, min(strlen(canon), DNS_NAME_MAX) + 1);
+    strlcpy(ai->ai_canonname, canon, DNS_NAME_MAX + 1);
     *res = ai;
     return 0;
   } else {

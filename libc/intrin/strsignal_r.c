@@ -36,12 +36,14 @@
  * @asyncsignalsafe
  * @threadsafe
  */
-privileged char *strsignal_r(int sig, char buf[hasatleast 15]) {
-  int i;
-  char *p;
+privileged char *strsignal_r(int sig, char buf[21]) {
   const char *s;
-  if (!sig) return "0";
-  if ((s = GetMagnumStr(kSignalNames, sig))) return s;
+  if (!sig) {
+    return "0";
+  }
+  if ((s = GetMagnumStr(kSignalNames, sig))) {
+    return (char *)s;
+  }
   if (SIGRTMIN <= sig && sig <= SIGRTMAX) {
     sig -= SIGRTMIN;
     buf[0] = 'S';

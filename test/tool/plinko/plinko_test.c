@@ -29,15 +29,15 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
 
-STATIC_YOINK("zipos");
-STATIC_YOINK("plinko.com");
-STATIC_YOINK("library.lisp");
-STATIC_YOINK("library_test.lisp");
-STATIC_YOINK("binarytrees.lisp");
-STATIC_YOINK("algebra.lisp");
-STATIC_YOINK("algebra_test.lisp");
-STATIC_YOINK("infix.lisp");
-STATIC_YOINK("ok.lisp");
+__static_yoink("zipos");
+__static_yoink("plinko.com");
+__static_yoink("library.lisp");
+__static_yoink("library_test.lisp");
+__static_yoink("binarytrees.lisp");
+__static_yoink("algebra.lisp");
+__static_yoink("algebra_test.lisp");
+__static_yoink("infix.lisp");
+__static_yoink("ok.lisp");
 
 static const char *const kSauces[] = {
     "/zip/library.lisp",       //
@@ -49,11 +49,10 @@ static const char *const kSauces[] = {
     "/zip/ok.lisp",            //
 };
 
-char testlib_enable_tmp_setup_teardown_once;
-
 void SetUpOnce(void) {
   exit(0);  // TODO(jart): How can we safely disable TLS with *NSYNC?
   int fdin, fdout;
+  testlib_enable_tmp_setup_teardown_once();
   ASSERT_NE(-1, mkdir("bin", 0755));
   ASSERT_NE(-1, (fdin = open("/zip/plinko.com", O_RDONLY)));
   ASSERT_NE(-1, (fdout = creat("bin/plinko.com", 0755)));
@@ -63,7 +62,6 @@ void SetUpOnce(void) {
 }
 
 TEST(plinko, worksOrPrintsNiceError) {
-  size_t n;
   ssize_t rc, got;
   char buf[1024], drain[64];
   sigset_t chldmask, savemask;
@@ -111,7 +109,7 @@ TEST(plinko, worksOrPrintsNiceError) {
   EXPECT_NE(-1, close(pfds[1][0]));
   EXPECT_NE(-1, waitpid(pid, &wstatus, 0));
   EXPECT_TRUE(WIFEXITED(wstatus));
-  if (!_startswith(buf, "error: ")) {
+  if (!startswith(buf, "error: ")) {
     EXPECT_STREQ("OKCOMPUTER\n", buf);
     EXPECT_EQ(0, WEXITSTATUS(wstatus));
   } else {

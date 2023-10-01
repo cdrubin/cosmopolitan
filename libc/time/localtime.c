@@ -5,7 +5,6 @@
 #include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/intrin/bits.h"
-#include "libc/intrin/nopl.internal.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
@@ -17,22 +16,22 @@
 #include "libc/time/tz.internal.h"
 #include "libc/time/tzfile.internal.h"
 
-STATIC_YOINK("zipos");
-STATIC_YOINK("usr/share/zoneinfo/");
-STATIC_YOINK("usr/share/zoneinfo/Anchorage");
-STATIC_YOINK("usr/share/zoneinfo/Beijing");
-STATIC_YOINK("usr/share/zoneinfo/Berlin");
-STATIC_YOINK("usr/share/zoneinfo/Boulder");
-STATIC_YOINK("usr/share/zoneinfo/Chicago");
-STATIC_YOINK("usr/share/zoneinfo/GMT");
-STATIC_YOINK("usr/share/zoneinfo/GST");
-STATIC_YOINK("usr/share/zoneinfo/Honolulu");
-STATIC_YOINK("usr/share/zoneinfo/Israel");
-STATIC_YOINK("usr/share/zoneinfo/Japan");
-STATIC_YOINK("usr/share/zoneinfo/London");
-STATIC_YOINK("usr/share/zoneinfo/Melbourne");
-STATIC_YOINK("usr/share/zoneinfo/New_York");
-STATIC_YOINK("usr/share/zoneinfo/UTC");
+__static_yoink("zipos");
+__static_yoink("usr/share/zoneinfo/");
+__static_yoink("usr/share/zoneinfo/Anchorage");
+__static_yoink("usr/share/zoneinfo/Beijing");
+__static_yoink("usr/share/zoneinfo/Berlin");
+__static_yoink("usr/share/zoneinfo/Boulder");
+__static_yoink("usr/share/zoneinfo/Chicago");
+__static_yoink("usr/share/zoneinfo/GMT");
+__static_yoink("usr/share/zoneinfo/GST");
+__static_yoink("usr/share/zoneinfo/Honolulu");
+__static_yoink("usr/share/zoneinfo/Israel");
+__static_yoink("usr/share/zoneinfo/Japan");
+__static_yoink("usr/share/zoneinfo/London");
+__static_yoink("usr/share/zoneinfo/Melbourne");
+__static_yoink("usr/share/zoneinfo/New_York");
+__static_yoink("usr/share/zoneinfo/UTC");
 
 // clang-format off
 /* Convert timestamp from time_t to struct tm.  */
@@ -48,6 +47,10 @@ STATIC_YOINK("usr/share/zoneinfo/UTC");
 
 static pthread_mutex_t locallock;
 
+void localtime_wipe(void) {
+	pthread_mutex_init(&locallock, 0);
+}
+
 void localtime_lock(void) {
 	pthread_mutex_lock(&locallock);
 }
@@ -56,21 +59,12 @@ void localtime_unlock(void) {
 	pthread_mutex_unlock(&locallock);
 }
 
-void localtime_funlock(void) {
-	pthread_mutex_init(&locallock, 0);
-}
-
 __attribute__((__constructor__)) static void localtime_init(void) {
-	localtime_funlock();
+	localtime_wipe();
 	pthread_atfork(localtime_lock,
 		       localtime_unlock,
-		       localtime_funlock);
+		       localtime_wipe);
 }
-
-#ifdef _NOPL0
-#define localtime_lock()   _NOPL0("__threadcalls", localtime_lock)
-#define localtime_unlock() _NOPL0("__threadcalls", localtime_unlock)
-#endif
 
 #ifndef TZ_ABBR_MAX_LEN
 #define TZ_ABBR_MAX_LEN	16

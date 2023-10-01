@@ -21,8 +21,6 @@
 #include "libc/intrin/likely.h"
 #include "libc/str/str.h"
 
-typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
-
 static const char kUtf8Dispatch[] = {
     0, 0, 1, 1, 1, 1, 1, 1,  // 0300 utf8-2
     1, 1, 1, 1, 1, 1, 1, 1,  // 0310
@@ -37,10 +35,10 @@ static const char kUtf8Dispatch[] = {
 /**
  * Returns true if text is utf-8.
  *
- *     _isutf8 n=0                  1 nanoseconds
- *     _isutf8 n=5                661 ps/byte          1,476 mb/s
- *     _isutf8 ascii n=22851       26 ps/byte             35 GB/s
- *     _isutf8 unicode n=3193     543 ps/byte          1,795 mb/s
+ *     isutf8 n=0                  1 nanoseconds
+ *     isutf8 n=5                661 ps/byte          1,476 mb/s
+ *     isutf8 ascii n=22851       26 ps/byte             35 GB/s
+ *     isutf8 unicode n=3193     543 ps/byte          1,795 mb/s
  *
  * This function considers all ASCII characters including NUL to be
  * valid UTF-8. The conditions for something not being valid are:
@@ -51,18 +49,19 @@ static const char kUtf8Dispatch[] = {
  *
  * @param size if -1 implies strlen
  */
-noasan bool _isutf8(const void *data, size_t size) {
+bool isutf8(const void *data, size_t size) {
   long c;
-  unsigned m;
   const char *p, *e;
   if (size == -1) size = data ? strlen(data) : 0;
   if (IsAsan()) __asan_verify(data, size);
   p = data;
   e = p + size;
   while (p < e) {
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__chibicc__)
+    typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
     if (!((intptr_t)p & 15)) {
       for (;;) {
+        unsigned m;
         if ((m = __builtin_ia32_pmovmskb128(*(xmm_t *)p >= (xmm_t){0}) ^
                  0xffff)) {
           m = __builtin_ctzll(m);

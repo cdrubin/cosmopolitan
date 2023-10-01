@@ -45,13 +45,13 @@ TEST_TOOL_PLINKO_DIRECTDEPS =					\
 	LIBC_LOG						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
+	LIBC_PROC						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
 	LIBC_SYSV						\
 	LIBC_TESTLIB						\
 	LIBC_X							\
-	LIBC_ZIPOS						\
 	THIRD_PARTY_COMPILER_RT					\
 	THIRD_PARTY_XED
 

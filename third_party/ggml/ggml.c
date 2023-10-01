@@ -49,6 +49,7 @@
 #include "libc/assert.h"
 #include "third_party/ggml/ggml.h"
 #include "libc/intrin/bsr.h"
+#include "libc/thread/thread.h"
 #include "third_party/libcxx/math.h"
 
 asm(".ident\t\"\\n\\n\
@@ -3386,7 +3387,7 @@ inline static void ggml_critical_section_start(void) {
     while (processing > 0) {
         // wait for other threads to finish
         atomic_fetch_sub(&g_state_barrier, 1);
-        sched_yield(); // TODO: reconsider this
+        pthread_yield(); // TODO: reconsider this
         processing = atomic_fetch_add(&g_state_barrier, 1);
     }
 }
@@ -4198,7 +4199,7 @@ const char * ggml_get_name(const struct ggml_tensor * tensor) {
 }
 
 void ggml_set_name(struct ggml_tensor * tensor, const char * name) {
-    strncpy(tensor->name, name, sizeof(tensor->name));
+    strlcpy(tensor->name, name, sizeof(tensor->name));
     tensor->name[sizeof(tensor->name) - 1] = '\0';
 }
 
@@ -15755,11 +15756,11 @@ size_t ggml_quantize_q8_0(const float * src, void * dst, int n, int k, int64_t *
 }
 
 static const quantize_chunk_f *const ggjt_v3_quantize_chunk[GGML_TYPE_COUNT] = {
-    [GGML_TYPE_Q4_0] = ggml_quantize_q4_0,
-    [GGML_TYPE_Q4_1] = ggml_quantize_q4_1,
-    [GGML_TYPE_Q5_0] = ggml_quantize_q5_0,
-    [GGML_TYPE_Q5_1] = ggml_quantize_q5_1,
-    [GGML_TYPE_Q8_0] = ggml_quantize_q8_0,
+    [GGML_TYPE_Q4_0] = (void *)ggml_quantize_q4_0,
+    [GGML_TYPE_Q4_1] = (void *)ggml_quantize_q4_1,
+    [GGML_TYPE_Q5_0] = (void *)ggml_quantize_q5_0,
+    [GGML_TYPE_Q5_1] = (void *)ggml_quantize_q5_1,
+    [GGML_TYPE_Q8_0] = (void *)ggml_quantize_q8_0,
 };
 const quantize_chunk_f *const *GGML_QUANTIZE_CHUNK;
 static_assert(GGML_TYPE_COUNT == 13, "GGML_QUANTIZE_CHUNK is outdated");

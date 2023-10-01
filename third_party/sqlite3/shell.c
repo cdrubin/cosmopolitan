@@ -209,7 +209,7 @@ typedef unsigned char u8;
 #   define access(f,m) _access((f),(m))
 #  endif
 #  ifndef unlink
-#   define unlink _unlink
+#   define unlink_ _unlink
 #  endif
 #  ifndef strdup
 #   define strdup _strdup
@@ -11429,7 +11429,7 @@ static char *cmdline_option_value(int argc, char **argv, int i){
 #  define main fiddle_main
 #endif
 
-STATIC_YOINK("zipos"); // for symtab
+__static_yoink("zipos"); // for symtab
 
 #if SQLITE_SHELL_IS_UTF8
 int SQLITE_CDECL main(int argc, char **argv){

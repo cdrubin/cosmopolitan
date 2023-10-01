@@ -38,9 +38,9 @@ char *xjoinpaths(const char *path, const char *other) {
     return xstrdup(path);
   } else if (!*path) {
     return xstrdup(other);
-  } else if (_isabspath(other) || !strcmp(path, ".")) {
+  } else if (*other == '/' || !strcmp(path, ".")) {
     return xstrdup(other);
-  } else if (_endswith(path, "/")) {
+  } else if (endswith(path, "/")) {
     return xstrcat(path, other);
   } else {
     return xstrcat(path, (uintptr_t)'/', other);

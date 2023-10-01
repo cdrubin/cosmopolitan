@@ -71,7 +71,7 @@ bool32 SetCurrentDirectory(const char16_t *lpPathName);
 uint32_t GetCurrentDirectory(uint32_t nBufferLength, char16_t *out_lpBuffer);
 
 bool32 CreateDirectory(const char16_t *lpPathName,
-                       struct NtSecurityAttributes *lpSecurityAttributes);
+                       const struct NtSecurityAttributes *lpSecurityAttributes);
 bool32 RemoveDirectory(const char16_t *lpPathName);
 
 bool32 DuplicateHandle(int64_t hSourceProcessHandle, int64_t hSourceHandle,
@@ -131,15 +131,12 @@ bool32 UnlockFileEx(int64_t hFile, uint32_t dwReserved,
 
 bool32 CreateHardLink(const char16_t *lpFileName,
                       const char16_t *lpExistingFileName,
-                      struct NtSecurityAttributes *reserved)
+                      const struct NtSecurityAttributes *reserved)
     paramsnonnull((1, 2));
 bool32 CreateSymbolicLink(const char16_t *lpSymlinkFileName,
                           const char16_t *lpTargetPathName, uint32_t dwFlags)
     paramsnonnull();
 
-uint32_t SetFilePointer(int64_t hFile, int32_t lDistanceToMove,
-                        int32_t *optional_lpDistanceToMoveHigh,
-                        int dwMoveMethod);
 bool32 SetFilePointerEx(int64_t hFile, int64_t liDistanceToMove,
                         int64_t *optional_lpNewFilePointer, int dwMoveMethod);
 
@@ -156,7 +153,7 @@ bool32 OpenProcessToken(int64_t hProcessHandle, uint32_t dwDesiredAccess,
 bool32 DuplicateToken(int64_t hExistingTokenHandle, int dwImpersonationLevel,
                       int64_t *out_hDuplicateTokenHandle);
 bool32 DuplicateTokenEx(int64_t hExistingToken, unsigned int dwDesiredAccess,
-                        struct NtSecurityAttributes *lpTokenAttributes,
+                        const struct NtSecurityAttributes *lpTokenAttributes,
                         int ImpersonationLevel, int TokenType,
                         int64_t *out_phNewToken);
 

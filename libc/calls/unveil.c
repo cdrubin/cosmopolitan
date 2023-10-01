@@ -31,14 +31,13 @@
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/libgen.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/vendor.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
-#include "libc/str/path.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/audit.h"
@@ -176,7 +175,7 @@ static int unveil_init(void) {
       .handled_access_fs = State.fs_mask,
   };
   // [undocumented] landlock_create_ruleset() always returns O_CLOEXEC
-  //                assert(__sys_fcntl(rc, F_GETFD, 0) == FD_CLOEXEC);
+  //                assert(__sys_fcntl(rc, F_GETFD) == FD_CLOEXEC);
   if ((rc = landlock_create_ruleset(&attr, sizeof(attr), 0)) < 0) return -1;
   // grant file descriptor a higher number that's less likely to interfere
   if ((fd = __sys_fcntl(rc, F_DUPFD_CLOEXEC, 100)) == -1) {
@@ -212,8 +211,8 @@ static int unveil_init(void) {
 static char *JoinPaths(char *buf, size_t size, const char *path,
                        const char *other) {
   size_t pathlen, otherlen;
-  if (!other) return path;
-  if (!path) return other;
+  if (!other) return (char *)path;
+  if (!path) return (char *)other;
   pathlen = strlen(path);
   if (!pathlen || *other == '/') {
     return (/*unconst*/ char *)other;
@@ -240,10 +239,8 @@ static char *JoinPaths(char *buf, size_t size, const char *path,
 }
 
 int sys_unveil_linux(const char *path, const char *permissions) {
-  int rc;
-  const char *dir;
-  const char *last;
-  const char *next;
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
   struct {
     char lbuf[PATH_MAX];
     char buf1[PATH_MAX];
@@ -252,6 +249,11 @@ int sys_unveil_linux(const char *path, const char *permissions) {
     char buf4[PATH_MAX];
   } b;
   CheckLargeStackAllocation(&b, sizeof(b));
+#pragma GCC pop_options
+  int rc;
+  const char *dir;
+  const char *last;
+  const char *next;
 
   if (!State.fd && (rc = unveil_init()) == -1) return rc;
   if ((path && !permissions) || (!path && permissions)) return einval();
@@ -473,10 +475,10 @@ int unveil(const char *path, const char *permissions) {
     if (permissions) return einval();
     if (IsOpenbsd()) return 0;
     if (landlock_abi_version != -1) {
-      _unassert(landlock_abi_version >= 1);
+      unassert(landlock_abi_version >= 1);
       return landlock_abi_version;
     } else {
-      _unassert(landlock_abi_errno);
+      unassert(landlock_abi_errno);
       errno = landlock_abi_errno;
       return -1;
     }

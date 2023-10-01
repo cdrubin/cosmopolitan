@@ -8,8 +8,10 @@ COSMOPOLITAN_C_START_
 
 #ifdef __x86_64__
 typedef long jmp_buf[8];
+typedef long sigjmp_buf[12];
 #elif defined(__aarch64__)
 typedef long jmp_buf[22];
+typedef long sigjmp_buf[26];
 #elif defined(__powerpc64__)
 typedef unsigned __int128 jmp_buf[32];
 #elif defined(__s390x__)
@@ -17,12 +19,6 @@ typedef unsigned long jmp_buf[18];
 #elif defined(__riscv)
 typedef unsigned long jmp_buf[26];
 #endif
-
-typedef long sigjmp_buf[12];
-
-extern char **environ;
-extern char *program_invocation_name;
-extern char *program_invocation_short_name;
 
 void mcount(void);
 int daemon(int, int);
@@ -40,10 +36,9 @@ void _exit(int) libcesque wontreturn;
 void _Exit(int) libcesque wontreturn;
 void quick_exit(int) wontreturn;
 void abort(void) wontreturn;
-int __cxa_atexit(void *, void *, void *) libcesque;
-int atfork(void *, void *) libcesque;
-int atexit(void (*)(void)) libcesque;
-char *getenv(const char *) nosideeffect libcesque;
+int __cxa_atexit(void *, void *, void *) paramsnonnull((1)) libcesque;
+int atexit(void (*)(void)) paramsnonnull() libcesque;
+char *getenv(const char *) paramsnonnull() __wur nosideeffect libcesque;
 int putenv(char *);
 int setenv(const char *, const char *, int);
 int unsetenv(const char *);
@@ -67,7 +62,12 @@ int getdtablesize(void);
 int sethostname(const char *, size_t);
 int acct(const char *);
 
-#ifdef COSMO
+#if defined(_GNU_SOURCE) || defined(_COSMO_SOURCE)
+extern char **environ;
+char *secure_getenv(const char *) paramsnonnull() __wur nosideeffect libcesque;
+#endif
+
+#ifdef _COSMO_SOURCE
 extern int __argc;
 extern char **__argv;
 extern char **__envp;
@@ -79,10 +79,10 @@ extern int __strace;
 extern int __ftrace;
 extern uint64_t __syscount;
 extern uint64_t kStartTsc;
-extern char kTmpPath[];
 extern const char kNtSystemDirectory[];
 extern const char kNtWindowsDirectory[];
 extern size_t __virtualmax;
+extern size_t __stackmax;
 extern bool __isworker;
 /* utilities */
 void _intsort(int *, size_t);
@@ -90,10 +90,10 @@ void _longsort(long *, size_t);
 /* diagnostics */
 void ShowCrashReports(void);
 void __printargs(const char *);
-int _getcpucount(void) pureconst;
 int ftrace_install(void);
 int ftrace_enabled(int);
 int strace_enabled(int);
+bool strace_enter(void);
 void _bt(const char *, ...);
 void __print_maps(void);
 long _GetMaxFd(void);
@@ -102,22 +102,22 @@ int _cocmd(int, char **, char **);
 /* executable program */
 char *GetProgramExecutableName(void);
 char *GetInterpreterExecutableName(char *, size_t);
-int _OpenExecutable(void);
+int __open_executable(void);
 /* execution control */
 int verynice(void);
 axdx_t setlongerjmp(jmp_buf)
 libcesque returnstwice paramsnonnull();
 void longerjmp(jmp_buf, intptr_t) libcesque wontreturn paramsnonnull();
 void __warn_if_powersave(void);
-void _Exitr(int) libcesque wontreturn;
 void _Exit1(int) libcesque wontreturn;
-void _restorewintty(void);
 void __paginate(int, const char *);
-long _missingno();
 /* memory management */
 void _weakfree(void *);
 void *_mapanon(size_t) attributeallocsize((1)) mallocesque;
 void *_mapshared(size_t) attributeallocsize((1)) mallocesque;
+void CheckForMemoryLeaks(void);
+void CheckForFileLeaks(void);
+void __enable_threads(void);
 void __oom_hook(size_t);
 bool _isheap(void *);
 /* code morphing */
@@ -130,10 +130,28 @@ bool IsCygwin(void);
 const char *GetCpuidOs(void);
 const char *GetCpuidEmulator(void);
 void GetCpuidBrand(char[13], uint32_t);
-long _GetResourceLimit(int);
+long __get_rlimit(int);
+int __set_rlimit(int, int64_t);
 const char *__describe_os(void);
-int __arg_max(void);
+long __get_sysctl(int, int);
+int __get_arg_max(void) pureconst;
+int __get_cpu_count(void) pureconst;
+long __get_avphys_pages(void) pureconst;
+long __get_phys_pages(void) pureconst;
+long __get_minsigstksz(void) pureconst;
+void __get_main_stack(void **, size_t *, int *);
+long __get_safe_size(long, long);
+char *__get_tmpdir(void);
+__funline int __trace_disabled(int x) {
+  return 0;
+}
+#ifndef FTRACE
+#define ftrace_enabled __trace_disabled
 #endif
+#ifndef SYSDEBUG
+#define strace_enabled __trace_disabled
+#endif
+#endif /* _COSMO_SOURCE */
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

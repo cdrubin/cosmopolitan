@@ -222,7 +222,7 @@ static const uint32_t NSYNC_WAITER_TAG = 0x726d2ba9;
   0x1 /* waiter reserved by a thread, even when not in use */
 #define WAITER_IN_USE 0x2 /* waiter in use by a thread */
 
-#define ASSERT(x) _npassert(x)
+#define ASSERT(x) npassert(x)
 
 /* Return a pointer to the nsync_waiter_s containing struct Dll *e. */
 #define DLL_NSYNC_WAITER(e)                 \
@@ -244,12 +244,8 @@ waiter *nsync_dll_waiter_(struct Dll *e);
                : DLL_CONTAINER(struct waiter_s, same_condition, e))
 waiter *nsync_dll_waiter_samecond_(struct Dll *e);
 
-/* Return a pointer to an unused waiter struct.
-   Ensures that the enclosed timer is stopped and its channel drained. */
-waiter *nsync_waiter_new_(void);
-
-/* Return an unused waiter struct *w to the free pool. */
-void nsync_waiter_free_(waiter *w);
+void nsync_waiter_init_(waiter *);
+void nsync_waiter_destroy_(waiter *);
 
 /* ---------- */
 
