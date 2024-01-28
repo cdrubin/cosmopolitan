@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/fmt.h"
 #include "libc/mem/gc.h"
+#include "libc/stdlib.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 #include "libc/x/xasprintf.h"
@@ -25,7 +25,7 @@
 TEST(fcvt, test) {
   int decpt, sign;
   ASSERT_STREQ("3.14159265358979",
-               _gc(xasprintf("%.14f", 3.14159265358979323846)));
+               gc(xasprintf("%.14f", 3.14159265358979323846)));
   ASSERT_STREQ("3141592653589793",
                fcvt(3.14159265358979323846, 15, &decpt, &sign));
   ASSERT_EQ(1, decpt);

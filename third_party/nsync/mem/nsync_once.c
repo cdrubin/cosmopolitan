@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2016 Google Inc.                                                   │
 │                                                                              │
@@ -27,7 +27,6 @@ asm(".ident\t\"\\n\\n\
 *NSYNC (Apache 2.0)\\n\
 Copyright 2016 Google, Inc.\\n\
 https://github.com/google/nsync\"");
-// clang-format off
 
 /* An once_sync_s struct contains a lock, and a condition variable on which
    threads may wait for an nsync_once to be initialized by another thread.

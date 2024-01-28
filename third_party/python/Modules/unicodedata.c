@@ -1,12 +1,11 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define PY_SSIZE_T_CLEAN
 #include "third_party/python/Modules/unicodedata.h"
-#include "libc/fmt/fmt.h"
 #include "libc/nexgen32e/kompressor.h"
 #include "third_party/python/Include/floatobject.h"
 #include "third_party/python/Include/import.h"
@@ -22,7 +21,6 @@
 #include "third_party/python/Include/yoink.h"
 #include "third_party/python/Modules/bextra.h"
 #include "third_party/python/Modules/unicodedata_unidata.h"
-/* clang-format off */
 
 PYTHON_PROVIDE("unicodedata");
 PYTHON_PROVIDE("unicodedata.UCD");

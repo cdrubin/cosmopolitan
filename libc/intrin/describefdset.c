@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -43,14 +43,15 @@ const char *(DescribeFdSet)(char buf[N], ssize_t rc, int nfds, fd_set *fds) {
   for (int fd = 0; fd < nfds; fd += 64) {
     uint64_t w = fds->fds_bits[fd >> 6];
     while (w) {
-      unsigned o = _bsr(w);
-      w &= ~((uint64_t)1 << o);
-      if (fd + o < nfds) {
+      unsigned m = _bsr(w);
+      w &= ~((uint64_t)1 << m);
+      if (fd + m < nfds) {
         if (!gotsome) {
           gotsome = true;
+        } else {
           append(", ");
-          append("%d", fd);
         }
+        append("%d", fd + m);
       }
     }
   }

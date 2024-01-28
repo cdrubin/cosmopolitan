@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -58,9 +58,6 @@
 #include "libc/thread/tls.h"
 #ifdef __x86_64__
 
-__static_yoink("strerror_wr");  // for kprintf %m
-__static_yoink("strsignal_r");  // for kprintf %G
-
 #define STACK_ERROR "error: not enough room on stack to print crash report\n"
 
 static const char kGregOrder[17] forcealign(1) = {
@@ -77,8 +74,8 @@ static const char kFpuExceptions[6] forcealign(1) = "IDZOUP";
 
 relegated static void ShowFunctionCalls(ucontext_t *ctx) {
   kprintf(
-      "cosmoaddr2line %s%s %lx %s\n\n", __argv[0],
-      endswith(__argv[0], ".com") ? ".dbg" : "", ctx ? ctx->uc_mcontext.PC : 0,
+      "cosmoaddr2line %s %lx %s\n\n", FindDebugBinary(),
+      ctx ? ctx->uc_mcontext.PC : 0,
       DescribeBacktrace(ctx ? (struct StackFrame *)ctx->uc_mcontext.BP
                             : (struct StackFrame *)__builtin_frame_address(0)));
   ShowBacktrace(2, &(struct StackFrame){
@@ -146,6 +143,9 @@ relegated static char *ShowGeneralRegisters(char *p, ucontext_t *ctx) {
       p, ctx->uc_mcontext.eflags,
       ctx->uc_mcontext.fpregs ? ctx->uc_mcontext.fpregs->swd : 0,
       ctx->uc_mcontext.fpregs ? ctx->uc_mcontext.fpregs->mxcsr : 0);
+  *p++ = '\n';
+  p = stpcpy(p, "TLS ");
+  p = HexCpy(p, (long)__get_tls(), 64);
   *p++ = '\n';
   return p;
 }

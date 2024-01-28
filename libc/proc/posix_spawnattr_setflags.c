@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -32,14 +32,20 @@
  *     - `POSIX_SPAWN_SETSCHEDPARAM`
  *     - `POSIX_SPAWN_SETSCHEDULER`
  *     - `POSIX_SPAWN_SETSID`
+ *     - `POSIX_SPAWN_SETRLIMIT`
  * @return 0 on success, or errno on error
  * @raise EINVAL if `flags` has invalid bits
  */
 int posix_spawnattr_setflags(posix_spawnattr_t *attr, short flags) {
-  if (flags &
-      ~(POSIX_SPAWN_RESETIDS | POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGDEF |
-        POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSCHEDPARAM |
-        POSIX_SPAWN_SETSCHEDULER | POSIX_SPAWN_SETSID)) {
+  if (flags & ~(POSIX_SPAWN_USEVFORK |       //
+                POSIX_SPAWN_RESETIDS |       //
+                POSIX_SPAWN_SETPGROUP |      //
+                POSIX_SPAWN_SETSIGDEF |      //
+                POSIX_SPAWN_SETSIGMASK |     //
+                POSIX_SPAWN_SETSCHEDPARAM |  //
+                POSIX_SPAWN_SETSCHEDULER |   //
+                POSIX_SPAWN_SETSID |         //
+                POSIX_SPAWN_SETRLIMIT)) {
     return EINVAL;
   }
   (*attr)->flags = flags;

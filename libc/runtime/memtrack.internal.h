@@ -8,7 +8,6 @@
 #include "libc/runtime/stack.h"
 #include "libc/sysv/consts/ss.h"
 #include "libc/thread/tls.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 #define kAutomapStart       0x100080040000
@@ -17,6 +16,8 @@ COSMOPOLITAN_C_START_
 #define kMemtrackSize       (0x1ffffffc0000 - kMemtrackStart)
 #define kFixedmapStart      0x300000040000
 #define kFixedmapSize       (0x400000040000 - kFixedmapStart)
+#define kMemtrackNsyncStart 0x6fc000040000
+#define kMemtrackNsyncSize  (0x6fcffffc0000 - kMemtrackNsyncStart)
 #define kMemtrackFdsStart   0x6fe000040000
 #define kMemtrackFdsSize    (0x6feffffc0000 - kMemtrackFdsStart)
 #define kMemtrackZiposStart 0x6fd000040000
@@ -56,7 +57,7 @@ int __untrack_memory(struct MemoryIntervals *, int, int,
                      void (*)(struct MemoryIntervals *, int, int));
 void __release_memory_nt(struct MemoryIntervals *, int, int);
 int __untrack_memories(void *, size_t);
-size_t __get_memtrack_size(struct MemoryIntervals *);
+size_t __get_memtrack_size(struct MemoryIntervals *) nosideeffect;
 
 #ifdef __x86_64__
 /*
@@ -112,6 +113,11 @@ forceinline pureconst bool IsMemtrackFrame(int x) {
 forceinline pureconst bool IsGfdsFrame(int x) {
   return (int)(kMemtrackFdsStart >> 16) <= x &&
          x <= (int)((kMemtrackFdsStart + kMemtrackFdsSize - 1) >> 16);
+}
+
+forceinline pureconst bool IsNsyncFrame(int x) {
+  return (int)(kMemtrackNsyncStart >> 16) <= x &&
+         x <= (int)((kMemtrackNsyncStart + kMemtrackNsyncSize - 1) >> 16);
 }
 
 forceinline pureconst bool IsZiposFrame(int x) {
@@ -181,5 +187,4 @@ forceinline pureconst bool OverlapsShadowSpace(const void *p, size_t n) {
 }
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_RUNTIME_MEMTRACK_H_ */

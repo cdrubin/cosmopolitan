@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -37,12 +37,10 @@
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/ucontext.h"
-#include "libc/dns/dns.h"
+#include "libc/cxxabi.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/intrin/xchg.internal.h"
@@ -124,7 +122,7 @@ Flags & Keyboard Shortcuts:\n\
   -v         increases verbosity        [flag]\n\
   -L PATH    redirects stderr to path   [flag]\n\
   -y         yes to interactive prompts [flag]\n\
-  -h         shows this information     [flag]\n\
+  -h or -?   shows this information     [flag]\n\
   UP/DOWN    adjust volume              [keyboard]\n\
   CTRL+L     redraw                     [keyboard]\n\
   CTRL+Z     suspend                    [keyboard]\n\
@@ -313,6 +311,16 @@ static void StrikeDownCrapware(int sig) {
 
 static struct timespec GetGraceTime(void) {
   return timespec_sub(deadline_, timespec_real());
+}
+
+static char *strntoupper(char *s, size_t n) {
+  size_t i;
+  for (i = 0; s[i] && i < n; ++i) {
+    if ('a' <= s[i] && s[i] <= 'z') {
+      s[i] -= 'a' - 'A';
+    }
+  }
+  return s;
 }
 
 static int GetNamedVector(const struct NamedVector *choices, size_t n,
@@ -1365,10 +1373,8 @@ static bool CanPlayAudio(void) {
   }
 }
 
-static void PrintUsage(int rc, FILE *f) {
-  fputs("Usage: ", f);
-  fputs(program_invocation_name, f);
-  fputs(USAGE, f);
+static void PrintUsage(int rc, int fd) {
+  tinyprint(fd, "Usage: ", program_invocation_name, USAGE, NULL);
   exit(rc);
 }
 
@@ -1390,12 +1396,15 @@ static void GetOpts(int argc, char *argv[]) {
       case 'Y':
         yonly_ = true;
         break;
-      case '?':
       case 'h':
-        PrintUsage(EXIT_SUCCESS, stdout);
+      case '?':
       default:
         if (!ProcessOptKey(opt)) {
-          PrintUsage(EX_USAGE, stderr);
+          if (opt == optopt) {
+            PrintUsage(EXIT_SUCCESS, STDOUT_FILENO);
+          } else {
+            PrintUsage(EX_USAGE, STDERR_FILENO);
+          }
         }
     }
   }
@@ -1553,7 +1562,7 @@ int main(int argc, char *argv[]) {
   fullclear_ = true;
   GetOpts(argc, argv);
   if (!tuned_) PickDefaults();
-  if (optind == argc) PrintUsage(EX_USAGE, stderr);
+  if (optind == argc) PrintUsage(EX_USAGE, STDERR_FILENO);
   patharg_ = argv[optind];
   s = commandvenv("SOX", "sox");
   sox_ = s ? strdup(s) : 0;
@@ -1576,7 +1585,7 @@ int main(int argc, char *argv[]) {
     xsigaction(SIGCHLD, OnSigChld, 0, 0, NULL);
     xsigaction(SIGPIPE, OnSigPipe, 0, 0, NULL);
     if (ttyraw(kTtyLfToCrLf) != -1) ttymode_ = true;
-    __cxa_atexit(OnExit, NULL, NULL);
+    __cxa_atexit((void *)OnExit, NULL, NULL);
     __log_file = fopen(logpath_, "a");
     if (ischardev(infd_) && ischardev(outfd_)) {
       /* CHECK_NE(-1, fcntl(infd_, F_SETFL, O_NONBLOCK)); */

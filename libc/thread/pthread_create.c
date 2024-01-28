@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,17 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/atomic.h"
-#include "libc/calls/blocksigs.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/atomic.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/dll.h"
@@ -38,6 +35,9 @@
 #include "libc/mem/alloca.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
+#include "libc/nt/enum/memflags.h"
+#include "libc/nt/enum/pageflags.h"
+#include "libc/nt/memory.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/synchronization.h"
 #include "libc/runtime/runtime.h"
@@ -56,6 +56,7 @@
 
 __static_yoink("nsync_mu_lock");
 __static_yoink("nsync_mu_unlock");
+__static_yoink("nsync_mu_trylock");
 __static_yoink("nsync_mu_rlock");
 __static_yoink("nsync_mu_runlock");
 __static_yoink("_pthread_atfork");
@@ -64,9 +65,10 @@ __static_yoink("_pthread_atfork");
 #define MAP_STACK_OPENBSD 0x4000
 
 void _pthread_free(struct PosixThread *pt, bool isfork) {
+  unassert(dll_is_alone(&pt->list) && &pt->list != _pthread_list);
   if (pt->pt_flags & PT_STATIC) return;
   if (pt->pt_flags & PT_OWNSTACK) {
-    unassert(!munmap(pt->attr.__stackaddr, pt->attr.__stacksize));
+    unassert(!munmap(pt->pt_attr.__stackaddr, pt->pt_attr.__stacksize));
   }
   if (!isfork) {
     if (IsWindows()) {
@@ -79,28 +81,53 @@ void _pthread_free(struct PosixThread *pt, bool isfork) {
       }
     }
   }
-  free(pt->tls);
+  free(pt->pt_tls);
   free(pt);
+}
+
+void _pthread_decimate(void) {
+  struct Dll *e;
+  struct PosixThread *pt;
+  enum PosixThreadStatus status;
+StartOver:
+  _pthread_lock();
+  for (e = dll_last(_pthread_list); e; e = dll_prev(_pthread_list, e)) {
+    pt = POSIXTHREAD_CONTAINER(e);
+    status = atomic_load_explicit(&pt->pt_status, memory_order_acquire);
+    if (status != kPosixThreadZombie) break;
+    if (!atomic_load_explicit(&pt->tib->tib_tid, memory_order_acquire)) {
+      dll_remove(&_pthread_list, e);
+      _pthread_unlock();
+      _pthread_unref(pt);
+      goto StartOver;
+    }
+  }
+  _pthread_unlock();
 }
 
 static int PosixThread(void *arg, int tid) {
   void *rc;
   struct PosixThread *pt = arg;
-  if (pt->attr.__inheritsched == PTHREAD_EXPLICIT_SCHED) {
+  if (pt->pt_attr.__inheritsched == PTHREAD_EXPLICIT_SCHED) {
     unassert(_weaken(_pthread_reschedule));
     _weaken(_pthread_reschedule)(pt);  // yoinked by attribute builder
   }
   // set long jump handler so pthread_exit can bring control back here
-  if (!setjmp(pt->exiter)) {
-    pthread_sigmask(SIG_SETMASK, (sigset_t *)pt->attr.__sigmask, 0);
-    rc = pt->start(pt->arg);
+  if (!setjmp(pt->pt_exiter)) {
+    if (IsWindows()) {
+      atomic_store_explicit(&__get_tls()->tib_sigmask, pt->pt_attr.__sigmask,
+                            memory_order_release);
+    } else {
+      sys_sigprocmask(SIG_SETMASK, &pt->pt_attr.__sigmask, 0);
+    }
+    rc = pt->pt_start(pt->pt_arg);
     // ensure pthread_cleanup_pop(), and pthread_exit() popped cleanup
-    unassert(!pt->cleanup);
+    unassert(!pt->pt_cleanup);
     // calling pthread_exit() will either jump back here, or call exit
     pthread_exit(rc);
   }
   // avoid signal handler being triggered after we trash our own stack
-  _sigblockall();
+  __sig_block();
   // return to clone polyfill which clears tid, wakes futex, and exits
   return 0;
 }
@@ -148,16 +175,12 @@ static errno_t pthread_create_impl(pthread_t *thread,
     errno = e;
     return EAGAIN;
   }
-  pt->start = start_routine;
-  pt->arg = arg;
-  if (IsWindows()) {
-    if (!(pt->semaphore = CreateSemaphore(0, 0, 1, 0))) {
-      notpossible;
-    }
-  }
+  dll_init(&pt->list);
+  pt->pt_start = start_routine;
+  pt->pt_arg = arg;
 
   // create thread local storage memory
-  if (!(pt->tls = _mktls(&pt->tib))) {
+  if (!(pt->pt_tls = _mktls(&pt->tib))) {
     free(pt);
     errno = e;
     return EAGAIN;
@@ -165,18 +188,18 @@ static errno_t pthread_create_impl(pthread_t *thread,
 
   // setup attributes
   if (attr) {
-    pt->attr = *attr;
+    pt->pt_attr = *attr;
     attr = 0;
   } else {
-    pthread_attr_init(&pt->attr);
+    pthread_attr_init(&pt->pt_attr);
   }
 
   // setup stack
-  if (pt->attr.__stackaddr) {
+  if (pt->pt_attr.__stackaddr) {
     // caller supplied their own stack
     // assume they know what they're doing as much as possible
     if (IsOpenbsd()) {
-      if ((rc = FixupCustomStackOnOpenbsd(&pt->attr))) {
+      if ((rc = FixupCustomStackOnOpenbsd(&pt->pt_attr))) {
         _pthread_free(pt, false);
         return rc;
       }
@@ -187,36 +210,47 @@ static errno_t pthread_create_impl(pthread_t *thread,
     // 2. in public world optimize to *work* regardless of memory
     int granularity = FRAMESIZE;
     int pagesize = getauxval(AT_PAGESZ);
-    pt->attr.__guardsize = ROUNDUP(pt->attr.__guardsize, pagesize);
-    pt->attr.__stacksize = ROUNDUP(pt->attr.__stacksize, granularity);
-    if (pt->attr.__guardsize + pagesize > pt->attr.__stacksize) {
+    pt->pt_attr.__guardsize = ROUNDUP(pt->pt_attr.__guardsize, pagesize);
+    pt->pt_attr.__stacksize = ROUNDUP(pt->pt_attr.__stacksize, granularity);
+    if (pt->pt_attr.__guardsize + pagesize > pt->pt_attr.__stacksize) {
       _pthread_free(pt, false);
       return EINVAL;
     }
-    if (pt->attr.__guardsize == pagesize) {
-      pt->attr.__stackaddr =
-          mmap(0, pt->attr.__stacksize, PROT_READ | PROT_WRITE,
+    if (pt->pt_attr.__guardsize == pagesize) {
+      pt->pt_attr.__stackaddr =
+          mmap(0, pt->pt_attr.__stacksize, PROT_READ | PROT_WRITE,
                MAP_STACK | MAP_ANONYMOUS, -1, 0);
     } else {
-      pt->attr.__stackaddr =
-          mmap(0, pt->attr.__stacksize, PROT_READ | PROT_WRITE,
+      pt->pt_attr.__stackaddr =
+          mmap(0, pt->pt_attr.__stacksize, PROT_READ | PROT_WRITE,
                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-      if (pt->attr.__stackaddr != MAP_FAILED) {
+      if (pt->pt_attr.__stackaddr != MAP_FAILED) {
         if (IsOpenbsd() &&
             __sys_mmap(
-                pt->attr.__stackaddr, pt->attr.__stacksize,
+                pt->pt_attr.__stackaddr, pt->pt_attr.__stacksize,
                 PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_FIXED | MAP_ANON_OPENBSD | MAP_STACK_OPENBSD,
-                -1, 0, 0) != pt->attr.__stackaddr) {
+                -1, 0, 0) != pt->pt_attr.__stackaddr) {
           notpossible;
         }
-        if (pt->attr.__guardsize && !IsWindows() &&
-            mprotect(pt->attr.__stackaddr, pt->attr.__guardsize, PROT_NONE)) {
-          notpossible;
+        if (pt->pt_attr.__guardsize) {
+          if (!IsWindows()) {
+            if (mprotect(pt->pt_attr.__stackaddr, pt->pt_attr.__guardsize,
+                         PROT_NONE)) {
+              notpossible;
+            }
+          } else {
+            uint32_t oldattr;
+            if (!VirtualProtect(pt->pt_attr.__stackaddr,
+                                pt->pt_attr.__guardsize,
+                                kNtPageReadwrite | kNtPageGuard, &oldattr)) {
+              notpossible;
+            }
+          }
         }
       }
     }
-    if (!pt->attr.__stackaddr || pt->attr.__stackaddr == MAP_FAILED) {
+    if (!pt->pt_attr.__stackaddr || pt->pt_attr.__stackaddr == MAP_FAILED) {
       rc = errno;
       _pthread_free(pt, false);
       errno = e;
@@ -227,8 +261,8 @@ static errno_t pthread_create_impl(pthread_t *thread,
       }
     }
     pt->pt_flags |= PT_OWNSTACK;
-    if (IsAsan() && pt->attr.__guardsize) {
-      __asan_poison(pt->attr.__stackaddr, pt->attr.__guardsize,
+    if (IsAsan() && !IsWindows() && pt->pt_attr.__guardsize) {
+      __asan_poison(pt->pt_attr.__stackaddr, pt->pt_attr.__guardsize,
                     kAsanStackOverflow);
     }
   }
@@ -236,17 +270,17 @@ static errno_t pthread_create_impl(pthread_t *thread,
   // set initial status
   pt->tib->tib_pthread = (pthread_t)pt;
   atomic_store_explicit(&pt->tib->tib_sigmask, -1, memory_order_relaxed);
-  if (!pt->attr.__havesigmask) {
-    pt->attr.__havesigmask = true;
-    memcpy(pt->attr.__sigmask, &oldsigs, sizeof(oldsigs));
+  if (!pt->pt_attr.__havesigmask) {
+    pt->pt_attr.__havesigmask = true;
+    pt->pt_attr.__sigmask = oldsigs;
   }
-  switch (pt->attr.__detachstate) {
+  switch (pt->pt_attr.__detachstate) {
     case PTHREAD_CREATE_JOINABLE:
-      atomic_store_explicit(&pt->status, kPosixThreadJoinable,
+      atomic_store_explicit(&pt->pt_status, kPosixThreadJoinable,
                             memory_order_relaxed);
       break;
     case PTHREAD_CREATE_DETACHED:
-      atomic_store_explicit(&pt->status, kPosixThreadDetached,
+      atomic_store_explicit(&pt->pt_status, kPosixThreadDetached,
                             memory_order_relaxed);
       break;
     default:
@@ -256,22 +290,21 @@ static errno_t pthread_create_impl(pthread_t *thread,
 
   // add thread to global list
   // we add it to the beginning since zombies go at the end
-  dll_init(&pt->list);
-  pthread_spin_lock(&_pthread_lock);
+  _pthread_lock();
   dll_make_first(&_pthread_list, &pt->list);
-  pthread_spin_unlock(&_pthread_lock);
+  _pthread_unlock();
 
   // launch PosixThread(pt) in new thread
-  if ((rc = clone(PosixThread, pt->attr.__stackaddr,
-                  pt->attr.__stacksize - (IsOpenbsd() ? 16 : 0),
+  if ((rc = clone(PosixThread, pt->pt_attr.__stackaddr,
+                  pt->pt_attr.__stacksize - (IsOpenbsd() ? 16 : 0),
                   CLONE_VM | CLONE_THREAD | CLONE_FS | CLONE_FILES |
                       CLONE_SIGHAND | CLONE_SYSVSEM | CLONE_SETTLS |
                       CLONE_PARENT_SETTID | CLONE_CHILD_SETTID |
                       CLONE_CHILD_CLEARTID,
                   pt, &pt->ptid, __adj_tls(pt->tib), &pt->tib->tib_tid))) {
-    pthread_spin_lock(&_pthread_lock);
+    _pthread_lock();
     dll_remove(&_pthread_list, &pt->list);
-    pthread_spin_unlock(&_pthread_lock);
+    _pthread_unlock();
     _pthread_free(pt, false);
     return rc;
   }
@@ -335,7 +368,6 @@ static const char *DescribeHandle(char buf[12], errno_t err, pthread_t *th) {
  * @raise EPERM if scheduling policy was requested and user account
  *     isn't authorized to use it
  * @returnserrno
- * @threadsafe
  */
 errno_t pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                        void *(*start_routine)(void *), void *arg) {

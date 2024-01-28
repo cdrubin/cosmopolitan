@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -28,7 +28,6 @@
 #include "libc/elf/struct/phdr.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/bits.h"
 #include "libc/limits.h"
 #include "libc/macho.internal.h"
 #include "libc/macros.internal.h"
@@ -40,6 +39,7 @@
 #include "libc/nt/struct/imagesectionheader.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
+#include "libc/serialize.h"
 #include "libc/stdalign.internal.h"
 #include "libc/stdckdint.h"
 #include "libc/stdio/stdio.h"
@@ -674,9 +674,10 @@ static void LoadSymbols(Elf64_Ehdr *e, Elf64_Off size, const char *path) {
   unsigned char *cfile = Malloc(cfile_size);
   bzero(cfile, cfile_size);
   WRITE32LE(cfile, kZipCfileHdrMagic);
-  cfile[4] = kZipCosmopolitanVersion;
-  cfile[5] = kZipOsUnix;
-  cfile[6] = kZipEra1993;
+  WRITE16LE(cfile + kZipCfileOffsetVersionMadeBy,
+            kZipOsUnix << 8 | kZipCosmopolitanVersion);
+  WRITE16LE(cfile + kZipCfileOffsetVersionNeeded, kZipEra2001);
+  WRITE16LE(cfile + kZipCfileOffsetGeneralflag, kZipGflagUtf8);
   WRITE16LE(cfile + kZipCfileOffsetCompressionmethod, kZipCompressionDeflate);
   WRITE16LE(cfile + kZipCfileOffsetLastmodifieddate, DOS_DATE(2023, 7, 29));
   WRITE16LE(cfile + kZipCfileOffsetLastmodifiedtime, DOS_TIME(0, 0, 0));
@@ -690,8 +691,8 @@ static void LoadSymbols(Elf64_Ehdr *e, Elf64_Off size, const char *path) {
   unsigned char *lfile = Malloc(lfile_size);
   bzero(lfile, lfile_size);
   WRITE32LE(lfile, kZipLfileHdrMagic);
-  cfile[4] = kZipEra1993;
-  cfile[5] = kZipOsDos;
+  WRITE16LE(lfile + kZipLfileOffsetVersionNeeded, kZipEra2001);
+  WRITE16LE(lfile + kZipLfileOffsetGeneralflag, kZipGflagUtf8);
   WRITE16LE(lfile + kZipLfileOffsetCompressionmethod, kZipCompressionDeflate);
   WRITE16LE(lfile + kZipLfileOffsetLastmodifieddate, DOS_DATE(2023, 7, 29));
   WRITE16LE(lfile + kZipLfileOffsetLastmodifiedtime, DOS_TIME(0, 0, 0));
@@ -1813,9 +1814,11 @@ int main(int argc, char *argv[]) {
   int i, j;
   Elf64_Off offset;
   Elf64_Xword prologue_bytes;
-#ifndef NDEBUG
+
+#ifdef MODE_DBG
   ShowCrashReports();
 #endif
+
   prog = argv[0];
   if (!prog) prog = "apelink";
 
@@ -1944,7 +1947,7 @@ int main(int argc, char *argv[]) {
     }
 
     // otherwise this is a fresh install so consider the platform
-    p = stpcpy(p, "m=$(uname -m)\n");
+    p = stpcpy(p, "m=$(uname -m 2>/dev/null) || m=x86_64\n");
     if (support_vector & _HOSTXNU) {
       p = stpcpy(p, "if [ ! -d /Applications ]; then\n");
     }

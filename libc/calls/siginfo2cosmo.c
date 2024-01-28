@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -83,6 +83,14 @@ privileged void __siginfo2cosmo(struct siginfo *si,
     si_value = m->netbsd.si_value;
   } else {
     notpossible;
+  }
+
+  // Turn BUS_OBJERR into BUS_ADRERR for consistency with Linux.
+  // See test/libc/calls/sigbus_test.c
+  if (IsFreebsd() || IsOpenbsd()) {
+    if (si_signo == 10 && si_code == 3) {
+      si_code = 2;
+    }
   }
 
   *si = (struct siginfo){0};

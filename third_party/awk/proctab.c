@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │ Copyright (C) Lucent Technologies 1997                                       │
@@ -25,10 +25,8 @@
 │ THIS SOFTWARE.                                                               │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/fmt.h"
 #include "third_party/awk/awk.h"
 #include "third_party/awk/awkgram.tab.h"
-// clang-format off
 
 static const char * const printname[95] = {
 	"FIRSTTOKEN",	/* 258 */

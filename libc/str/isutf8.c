@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -49,7 +49,7 @@ static const char kUtf8Dispatch[] = {
  *
  * @param size if -1 implies strlen
  */
-bool isutf8(const void *data, size_t size) {
+bool32 isutf8(const void *data, size_t size) {
   long c;
   const char *p, *e;
   if (size == -1) size = data ? strlen(data) : 0;

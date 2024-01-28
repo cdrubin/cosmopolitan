@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -66,6 +66,7 @@
  *     if this parameter is NULL, we'll polyfill getitimer() behavior
  * @param out_opt_old may receive remainder of previous op (if any)
  * @return 0 on success or -1 w/ errno
+ * @asyncsignalsafe
  */
 int setitimer(int which, const struct itimerval *newvalue,
               struct itimerval *oldvalue) {

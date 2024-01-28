@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2016 Google Inc.                                                   │
 │                                                                              │
@@ -21,7 +21,6 @@
 #include "third_party/nsync/testing/testing.h"
 #include "third_party/nsync/testing/time_extra.h"
 #include "third_party/nsync/time.h"
-// clang-format off
 
 /* Verify the properties of a prenotified note. */
 static void test_note_prenotified (testing t) {

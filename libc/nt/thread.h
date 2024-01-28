@@ -4,7 +4,6 @@
 #include "libc/nt/struct/overlapped.h"
 #include "libc/nt/struct/securityattributes.h"
 #include "libc/nt/thunk/msabi.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*                            ░░░░
                        ▒▒▒░░░▒▒▒▒▒▒▒▓▓▓░
@@ -66,9 +65,13 @@ uint32_t ResumeThread(int64_t hThread);
 bool32 GetThreadContext(int64_t hThread, struct NtContext *in_out_lpContext);
 bool32 SetThreadContext(int64_t hThread, const struct NtContext *lpContext);
 
+void *SetThreadDescription(int64_t hThread,
+                           const char16_t *lpThreadDescription);
+void *GetThreadDescription(int64_t hThread,
+                           char16_t *out_ppszThreadDescription);
+
 #if ShouldUseMsabiAttribute()
 #include "libc/nt/thunk/thread.inc"
 #endif /* ShouldUseMsabiAttribute() */
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_NT_THREADS_H_ */

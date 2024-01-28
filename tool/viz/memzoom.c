@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -29,7 +29,6 @@
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/bsf.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/hilbert.h"
@@ -46,6 +45,7 @@
 #include "libc/str/unicode.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
+#include "libc/sysv/consts/fileno.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/poll.h"
@@ -64,7 +64,7 @@ DESCRIPTION\n\
 \n\
 FLAGS\n\
 \n\
-  -h         help\n\
+  -h or -?   help\n\
   -z         zoom\n\
   -m         morton ordering\n\
   -H         hilbert ordering\n\
@@ -888,10 +888,8 @@ static void MemZoom(void) {
   } while (!(action & INTERRUPTED));
 }
 
-static wontreturn void PrintUsage(int rc) {
-  Write("SYNOPSIS\n\n  ");
-  Write(program_invocation_name);
-  Write(USAGE);
+static wontreturn void PrintUsage(int rc, int fd) {
+  tinyprint(fd, "SYNOPSIS\n\n ", program_invocation_name, USAGE, NULL);
   exit(rc);
 }
 
@@ -899,7 +897,7 @@ static void GetOpts(int argc, char *argv[]) {
   int opt;
   char *p;
   fps = 10;
-  while ((opt = getopt(argc, argv, "hzHNWf:p:")) != -1) {
+  while ((opt = getopt(argc, argv, "?hmzHNWf:p:")) != -1) {
     switch (opt) {
       case 'z':
         ++zoom;
@@ -928,9 +926,13 @@ static void GetOpts(int argc, char *argv[]) {
         }
         break;
       case 'h':
-        PrintUsage(EXIT_SUCCESS);
+      case '?':
       default:
-        PrintUsage(EX_USAGE);
+        if (opt == optopt) {
+          PrintUsage(EXIT_SUCCESS, STDOUT_FILENO);
+        } else {
+          PrintUsage(EX_USAGE, STDERR_FILENO);
+        }
     }
   }
   if (pid) {
@@ -942,10 +944,10 @@ static void GetOpts(int argc, char *argv[]) {
     stpcpy(p, "/maps");
   } else {
     if (optind == argc) {
-      PrintUsage(EX_USAGE);
+      PrintUsage(EX_USAGE, STDERR_FILENO);
     }
     if (!memccpy(path, argv[optind], '\0', sizeof(path))) {
-      PrintUsage(EX_USAGE);
+      PrintUsage(EX_USAGE, STDERR_FILENO);
     }
   }
 }

@@ -1,10 +1,16 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_SYSCALL_SUPPORT_SYSV_INTERNAL_H_
 #define COSMOPOLITAN_LIBC_CALLS_SYSCALL_SUPPORT_SYSV_INTERNAL_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § syscalls » system five » structless support               ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
+
+long __syscall2(long, long, int);
+int __syscall2i(long, long, int) asm("__syscall2");
+long __syscall3(long, long, long, int);
+int __syscall3i(long, long, long, int) asm("__syscall3");
+long __syscall4(long, long, long, long, int);
+int __syscall4i(long, long, long, long, int) asm("__syscall4");
 
 bool __is_linux_2_6_23(void);
 bool32 sys_isatty_metal(int);
@@ -29,5 +35,4 @@ void cosmo2flock(uintptr_t);
 void flock2cosmo(uintptr_t);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_SYSCALL_SUPPORT_SYSV_INTERNAL_H_ */

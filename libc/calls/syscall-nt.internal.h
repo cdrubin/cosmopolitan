@@ -1,10 +1,8 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_SYSCALL_NT_INTERNAL_H_
 #define COSMOPOLITAN_LIBC_CALLS_SYSCALL_NT_INTERNAL_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-bool32 sys_isatty_nt(int);
-char *sys_getcwd_nt(char *, size_t);
+bool32 sys_isatty(int);
 int sys_chdir_nt(const char *);
 int sys_close_epoll_nt(int);
 int sys_dup_nt(int, int, int, int);
@@ -12,6 +10,7 @@ int sys_execve_nt(const char *, char *const[], char *const[]);
 int sys_faccessat_nt(int, const char *, int, uint32_t);
 int sys_fadvise_nt(int, uint64_t, uint64_t, int);
 int sys_fchdir_nt(int);
+int sys_fchmod_nt(int, uint32_t);
 int sys_fchmodat_nt(int, const char *, uint32_t, int);
 int sys_fcntl_nt(int, int, uintptr_t);
 int sys_fdatasync_nt(int, bool);
@@ -41,5 +40,4 @@ ssize_t sys_read_nt_impl(int, void *, size_t, int64_t);
 ssize_t sys_readlinkat_nt(int, const char *, char *, size_t);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_SYSCALL_NT_INTERNAL_H_ */

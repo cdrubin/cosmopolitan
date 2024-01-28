@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_RUNTIME_STACK_H_
 #define COSMOPOLITAN_LIBC_RUNTIME_STACK_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 #ifdef _COSMO_SOURCE
 
 /**
@@ -97,7 +96,7 @@ extern char ape_stack_align[] __attribute__((__weak__));
  * since it'll not only ensure stack overflows are detected, it
  * will also trigger the stack to grow down safely.
  */
-__funline void CheckLargeStackAllocation(void *p, ssize_t n) {
+forceinline void CheckLargeStackAllocation(void *p, ssize_t n) {
   for (; n > 0; n -= 4096) {
     ((char *)p)[n - 1] = 0;
   }
@@ -158,5 +157,4 @@ int FreeCosmoStack(void *) libcesque;
 COSMOPOLITAN_C_END_
 #endif /* GNU ELF */
 #endif /* _COSMO_SOURCE */
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_RUNTIME_STACK_H_ */

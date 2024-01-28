@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -87,8 +87,8 @@ int main(int argc, char *argv[]) {
   }
   n = end + 1 - start;
   m = ROUNDUP(n, 16);
-  present = _gc(malloc(m));
-  intotal = _gc(calloc(1, m));
+  present = gc(malloc(m));
+  intotal = gc(calloc(1, m));
   if (optind < argc) {
     for (arg = optind; arg < argc; ++arg) {
       ttf = xslurp(argv[arg], &ttfsize);

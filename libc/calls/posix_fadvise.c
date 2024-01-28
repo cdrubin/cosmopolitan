@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -46,7 +46,6 @@ int sys_fadvise_netbsd(int, int, int64_t, int64_t, int) asm("sys_fadvise");
  * @raise ENOTSUP if `fd` is a /zip file
  * @raise ENOSYS on XNU and OpenBSD
  * @returnserrno
- * @threadsafe
  */
 errno_t posix_fadvise(int fd, int64_t offset, int64_t len, int advice) {
   int rc, e = errno;

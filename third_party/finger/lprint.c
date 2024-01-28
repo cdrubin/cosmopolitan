@@ -35,7 +35,6 @@
  */
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
-#include "libc/fmt/fmt.h"
 #include "libc/paths.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -44,7 +43,6 @@
 #include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
 #include "third_party/finger/finger.h"
-// clang-format off
 
 /*
  * from: @(#)lprint.c	5.13 (Berkeley) 10/31/90

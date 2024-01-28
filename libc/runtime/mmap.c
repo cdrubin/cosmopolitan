@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,15 +19,16 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/sigset.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/asancodes.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/intrin/likely.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/intrin/strace.internal.h"
@@ -37,6 +38,9 @@
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/nt/enum/memflags.h"
+#include "libc/nt/enum/pageflags.h"
+#include "libc/nt/memory.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/processmemorycounters.h"
@@ -51,6 +55,7 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/ss.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/thread.h"
@@ -396,9 +401,15 @@ inline void *__mmap_unlocked(void *addr, size_t size, int prot, int flags,
                     kAsanMmapSizeOverrun);
     }
     if (needguard) {
-      unassert(!mprotect(p, pagesize, PROT_NONE));
-      if (IsAsan()) {
-        __asan_poison(p, pagesize, kAsanStackOverflow);
+      if (!IsWindows()) {
+        unassert(!mprotect(p, pagesize, PROT_NONE));
+        if (IsAsan()) {
+          __asan_poison(p, pagesize, kAsanStackOverflow);
+        }
+      } else {
+        uint32_t oldattr;
+        unassert(VirtualProtect(p, pagesize, kNtPageReadwrite | kNtPageGuard,
+                                &oldattr));
       }
     }
   }
@@ -455,7 +466,7 @@ inline void *__mmap_unlocked(void *addr, size_t size, int prot, int flags,
  */
 void *mmap(void *addr, size_t size, int prot, int flags, int fd, int64_t off) {
   void *res;
-#ifdef SYSDEBUG
+#if SYSDEBUG
   size_t toto = 0;
 #if _KERNTRACE || _NTTRACE
   if (IsWindows()) {
@@ -476,9 +487,11 @@ void *mmap(void *addr, size_t size, int prot, int flags, int fd, int64_t off) {
   toto = __strace > 0 ? __get_memtrack_size(&_mmi) : 0;
 #endif
   __mmi_unlock();
+#if SYSDEBUG
   STRACE("mmap(%p, %'zu, %s, %s, %d, %'ld) → %p% m (%'zu bytes total)", addr,
          size, DescribeProtFlags(prot), DescribeMapFlags(flags), fd, off, res,
          toto);
+#endif
   return res;
 }
 

@@ -1,5 +1,5 @@
 #-*-mode:makefile-gmake;indent-tabs-mode:t;tab-width:8;coding:utf-8-*-┐
-#───vi: set et ft=make ts=8 tw=8 fenc=utf-8 :vi───────────────────────┘
+#── vi: set et ft=make ts=8 sw=8 fenc=utf-8 :vi ──────────────────────┘
 
 # Default Mode
 #
@@ -15,6 +15,12 @@ CONFIG_OFLAGS ?= -g
 CONFIG_CCFLAGS += -O2 $(BACKTRACES)
 CONFIG_CPPFLAGS += -DSYSDEBUG
 TARGET_ARCH ?= -msse3
+endif
+ifeq ($(MODE), x86_64)
+ENABLE_FTRACE = 1
+CONFIG_OFLAGS ?= -g
+CONFIG_CCFLAGS += -O2 $(BACKTRACES)
+CONFIG_CPPFLAGS += -DSYSDEBUG
 endif
 ifeq ($(MODE), aarch64)
 ENABLE_FTRACE = 1
@@ -39,8 +45,8 @@ CONFIG_CPPFLAGS += -DSYSDEBUG
 endif
 ifeq ($(MODE), aarch64-zero)
 CONFIG_OFLAGS ?= -g
-OVERRIDE_CFLAGS += -O0
-OVERRIDE_CXXFLAGS += -O0
+OVERRIDE_CFLAGS += -O0 -fdce
+OVERRIDE_CXXFLAGS += -O0 -fdce
 CONFIG_CPPFLAGS += -DSYSDEBUG
 endif
 
@@ -166,7 +172,7 @@ ifeq ($(MODE), aarch64-dbg)
 ENABLE_FTRACE = 1
 CONFIG_OFLAGS ?= -g
 CONFIG_CPPFLAGS += -DMODE_DBG -D__SANITIZE_UNDEFINED__
-CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG -O0 -fno-inline
+CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG -O0 -fno-inline -fdce
 CONFIG_COPTS += -fsanitize=undefined
 QUOTA ?= -C64 -L300
 endif
@@ -202,6 +208,27 @@ endif
 #   - YOLO
 #
 ifeq ($(MODE), tiny)
+CONFIG_CPPFLAGS +=			\
+	-DTINY				\
+	-DNDEBUG			\
+	-DTRUSTWORTHY
+CONFIG_CCFLAGS +=			\
+	-Os				\
+	-fno-align-functions		\
+	-fno-align-jumps		\
+	-fno-align-labels		\
+	-fno-align-loops		\
+	-fschedule-insns2		\
+	-momit-leaf-frame-pointer	\
+	-foptimize-sibling-calls	\
+	-DDWARFLESS
+TARGET_ARCH ?=				\
+	-msse3
+PYFLAGS +=				\
+	-O2				\
+	-B
+endif
+ifeq ($(MODE), x86_64-tiny)
 CONFIG_CPPFLAGS +=			\
 	-DTINY				\
 	-DNDEBUG			\

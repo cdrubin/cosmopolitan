@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -62,7 +62,6 @@
  * @return pointer to nul terminator within `p`, cf. stpcpy()
  * @see iso8601() if microsecond resolution isn't desirable
  * @asyncsignalsafe
- * @threadsafe
  */
 char *iso8601us(char p[hasatleast 27], struct tm *tm, long ns) {
   p = iso8601(p, tm);

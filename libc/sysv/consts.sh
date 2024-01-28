@@ -1,5 +1,5 @@
 /*bin/echo   ' -*- mode:sh; indent-tabs-mode:nil; tab-width:8; coding:utf-8 -*-│
-│vi: set net ft=sh ts=2 sts=2 sw=2 fenc=utf-8                               :vi│
+│ vi: set noet ft=sh ts=8 sts=8 sw=8 fenc=utf-8                            :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,7 +18,6 @@
 ╚────────────────────────────────────────────────────────────────'>/dev/null #*/
 dir=libc/sysv/consts
 . libc/sysv/gen.sh
-#include "libc/sysv/consts/ss.h"
 
 #	The Fifth Bell System, Community Edition
 #	» catalogue of carnage
@@ -125,7 +124,7 @@ syscon	errno	ECANCELED				125			125			89			89			85			88			87			1223			# kNtError
 syscon	errno	EOWNERDEAD				130			130			105			105			96			94			97			105			# kNtErrorSemOwnerDied; raised by pthread_cond_timedwait(3), pthread_mutex_consistent(3), pthread_mutex_getprioceiling(3), pthread_mutex_lock(3), pthread_mutex_timedlock(3), pthread_mutexattr_getrobust(3), pthread_mutexattr_setrobust(3)
 syscon	errno	ENOTRECOVERABLE				131			131			104			104			95			93			98			0			# raised by pthread_cond_timedwait(3), pthread_mutex_consistent(3), pthread_mutex_getprioceiling(3), pthread_mutex_lock(3), pthread_mutex_timedlock(3), pthread_mutexattr_getrobust(3), pthread_mutexattr_setrobust(3)
 syscon	errno	ENONET					64			64			317			317			317			317			317			0			# made up on BSDs; raised by accept(2)
-syscon	errno	ERESTART				85			85			-1			-1			-1			-1			-3			0			# should only be seen in ptrace()
+syscon	errno	ERESTART				85			85			318			318			318			318			-3			20000			# should only be seen in ptrace()
 syscon	errno	ENODATA					61			61			96			96			0			0			89			232			# no message is available in xsi stream or named pipe is being closed; no data available; barely in posix; returned by ioctl; very close in spirit to EPIPE?
 syscon	errno	ENOSR					63			63			98			98			0			90			90			0			# out of streams resources; something like EAGAIN; it's in POSIX; maybe some commercial UNIX returns it with openat, putmsg, putpmsg, posix_openpt, ioctl, open
 syscon	errno	ENOSTR					60			60			99			99			0			0			91			0			# not a stream; returned by getmsg, putmsg, putpmsg, getpmsg
@@ -235,6 +234,7 @@ syscon	mmap	MAP_INHERIT				-1			-1			-1			-1			-1			-1			0x00000080		-1			# make
 syscon	mmap	MAP_HASSEMAPHORE			0			0			0x00000200		0x00000200		0x00000200		0			0x00000200		0			# does it matter on x86?
 syscon	mmap	MAP_NOSYNC				0			0			0			0			0x00000800		0			0			0			# flush to physical media only when necessary rather than gratuitously; be sure to use write() rather than ftruncate() with this!
 syscon	mmap	MAP_CONCEAL				0			0			0			0			0x00020000		0x00008000		0x00008000		0			# omit from core dumps; MAP_NOCORE on FreeBSD
+syscon	mmap	MAP_JIT					0			0			0			0x00000800		0			0			0			0			# omit from core dumps; MAP_NOCORE on FreeBSD
 syscon	compat	MAP_NOCORE				0			0			0			0			0x00020000		0x00008000		0x00008000		0			# use MAP_CONCEAL
 syscon	compat	MAP_ANON				0x00000020		0x00000020		0x00001000		0x00001000		0x00001000		0x00001000		0x00001000		0x00000020		# bsd consensus; faked nt
 syscon	compat	MAP_EXECUTABLE				0x00001000		0x00001000		0			0			0			0			0			0			# ignored
@@ -427,8 +427,8 @@ syscon	utime	UTIME_OMIT				0x3ffffffe		0x3ffffffe		-2			-2			-2			-1			0x3ffffff
 syscon	auxv	AT_EXECFN				31			31			31			31			15			31			2014			31			# address of string containing first argument passed to execve() used when running program; AT_EXECPATH on FreeBSD
 syscon	auxv	AT_SECURE				23			23			23			23			0			23			0			23
 syscon	auxv	AT_RANDOM				25			25			25			25			16			25			0			25			# address of sixteen bytes of random data; AT_CANARY on FreeBSD whose AT_CANARYLEN should be 64
-syscon	auxv	AT_HWCAP				16			16			16			16			0			16			0			16
-syscon	auxv	AT_HWCAP2				26			26			26			26			0			26			0			26
+syscon	auxv	AT_HWCAP				16			16			16			16			25			16			0			16
+syscon	auxv	AT_HWCAP2				26			26			26			26			26			26			0			26
 syscon	auxv	AT_UID					11			11			11			11			0			11			2001			11
 syscon	auxv	AT_EUID					12			12			12			12			0			12			2000			12
 syscon	auxv	AT_GID					13			13			13			13			0			13			2003			13
@@ -470,7 +470,7 @@ syscon	rlimit	RLIMIT_RSS				5			5			5			5			5			5			5			127			# max physical mem
 syscon	rlimit	RLIMIT_NPROC				6			6			7			7			7			7			7			127			# max number of processes; see fork()→EAGAIN; bsd consensus
 syscon	rlimit	RLIMIT_NOFILE				7			7			8			8			8			8			8			127			# max number of open files; see accept()→EMFILE/ENFILE; bsd consensus
 syscon	rlimit	RLIMIT_MEMLOCK				8			8			6			6			6			6			6			127			# max locked-in-memory address space; bsd consensus
-syscon	rlimit	RLIMIT_AS				9			9			5			5			10			2			10			0			# max virtual memory size in bytes; this one actually works; fudged as RLIMIT_DATA on OpenBSD
+syscon	rlimit	RLIMIT_AS				9\			9			5			5			10			2			10			0			# max virtual memory size in bytes; this one actually works; fudged as RLIMIT_DATA on OpenBSD
 syscon	rlimit	RLIMIT_LOCKS				10			10			127			127			127			127			127			127			# max flock() / fcntl() locks; bsd consensus
 syscon	rlimit	RLIMIT_SIGPENDING			11			11			127			127			127			127			127			127			# max sigqueue() can enqueue; bsd consensus
 syscon	rlimit	RLIMIT_MSGQUEUE				12			12			127			127			127			127			127			127			# meh posix message queues; bsd consensus
@@ -578,16 +578,16 @@ syscon	close	CLOSE_RANGE_CLOEXEC			4			4			-1			-1			-1			-1			-1			-1			#
 syscon	clock	CLOCK_REALTIME				0			0			0			0			0			0			0			0			# consensus
 syscon	clock	CLOCK_REALTIME_PRECISE			0			0			0			0			9			0			0			0			#
 syscon	clock	CLOCK_REALTIME_FAST			0			0			0			0			10			0			0			0			#
-syscon	clock	CLOCK_REALTIME_COARSE			5			5			0			0			10			0			0			0			# Linux 2.6.32+; bsd consensus; not available on RHEL5
+syscon	clock	CLOCK_REALTIME_COARSE			5			5			0			0			10			0			0			2			# Linux 2.6.32+; bsd consensus; not available on RHEL5
 syscon	clock	CLOCK_MONOTONIC				1			1			1			6			4			3			3			1			# XNU/NT faked; could move backwards if NTP introduces negative leap second
 syscon	clock	CLOCK_MONOTONIC_PRECISE			1			1			1			6			11			3			3			1			#
 syscon	clock	CLOCK_MONOTONIC_FAST			1			1			1			6			12			3			3			1			#
 syscon	clock	CLOCK_MONOTONIC_COARSE			6			6			1			6			12			3			3			1			# Linux 2.6.32+; bsd consensus; not available on RHEL5
 syscon	clock	CLOCK_MONOTONIC_RAW			4			4			127			4			127			127			127			127			# actually monotonic; not subject to NTP adjustments; Linux 2.6.28+; XNU/NT/FreeBSD/OpenBSD faked; not available on RHEL5
-syscon	clock	CLOCK_PROCESS_CPUTIME_ID		2			2			127			12			15			2			0x40000000		127			#
+syscon	clock	CLOCK_PROCESS_CPUTIME_ID		2			2			127			12			15			2			0x40000000		127			# NetBSD lets you bitwise a PID into clockid_t
 syscon	clock	CLOCK_THREAD_CPUTIME_ID			3			3			127			16			14			4			0x20000000		127			#
 syscon	clock	CLOCK_PROF				127			127			127			127			2			127			2			127			#
-syscon	clock	CLOCK_BOOTTIME				7			7			127			127			127			6			127			127			#
+syscon	clock	CLOCK_BOOTTIME				7			7			7			127			127			6			127			3			#
 syscon	clock	CLOCK_REALTIME_ALARM			8			8			127			127			127			127			127			127			#
 syscon	clock	CLOCK_BOOTTIME_ALARM			9			9			127			127			127			127			127			127			#
 syscon	clock	CLOCK_TAI				11			11			127			127			127			127			127			127			#
@@ -622,7 +622,7 @@ syscon	so	SO_TYPE					3			3			0x1008			0x1008			0x1008			0x1008			0x1008			0x100
 syscon	so	SO_ERROR				4			4			0x1007			0x1007			0x1007			0x1007			0x1007			0x1007			# takes int pointer and stores/clears the pending error code; bsd consensus
 syscon	so	SO_ACCEPTCONN				30			30			2			2			2			2			2			2			# takes int pointer and stores boolean indicating if listen() was called on fd; bsd consensus
 syscon	so	SO_REUSEPORT				15			15			0x0200			0x0200			0x0200			0x0200			0x0200			0			# bsd consensus; no windows support
-syscon	so	SO_REUSEADDR				2			2			4			4			4			4			4			4			# bsd consensus (default behavior on NT)
+syscon	so	SO_REUSEADDR				2			2			4			4			4			4			4			-5			# SO_EXCLUSIVEADDRUSE on Windows (see third_party/python/Lib/test/support/__init__.py)
 syscon	so	SO_KEEPALIVE				9			9			8			8			8			8			8			8			# bsd consensus
 syscon	so	SO_DONTROUTE				5			5			0x10			0x10			0x10			0x10			0x10			0x10			# bsd consensus
 syscon	so	SO_BROADCAST				6			6			0x20			0x20			0x20			0x20			0x20			0x20			# socket is configured for broadcast messages; bsd consensus
@@ -1130,8 +1130,8 @@ syscon	prio	PRIO_MAX				20			20			20			20			20			20			20			20			# unix consensus
 #	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
 syscon	rusage	RUSAGE_SELF				0			0			0			0			0			0			0			0			# unix consensus & faked nt
 syscon	rusage	RUSAGE_THREAD				1			1			99			99			1			1			1			1			# faked nt & unavailable on xnu
-syscon	rusage	RUSAGE_CHILDREN				-1			-1			-1			-1			-1			-1			-1			99			# unix consensus & unavailable on nt
-syscon	rusage	RUSAGE_BOTH				-2			-2			99			99			99			99			99			99			# woop
+syscon	rusage	RUSAGE_CHILDREN				-1			-1			-1			-1			-1			-1			-1			-1			# unix consensus & unavailable on nt
+syscon	rusage	RUSAGE_BOTH				-2			-2			99			99			99			99			99			-2			# woop
 
 #	fast userspace mutexes
 #
@@ -1275,23 +1275,23 @@ syscon	termios	  FF1					0b1000000000000000	0b1000000000000000	0b000100000000000
 #	Teletypewriter Special Control Character Assignments
 #
 #	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
-syscon	termios	VMIN					6+1			6+1			16			16			16			16			16			6			# termios.c_cc[VMIN]=𝑥 in non-canonical mode can be set to 0 for non-blocking reads, 1 for single character raw mode reads, or higher to buffer
-syscon	termios	VTIME					5+1			5+1			17			17			17			17			17			5			# termios.c_cc[VTIME]=𝑥 sets non-canonical read timeout to 𝑥×𝟷𝟶𝟶ms which is needed when entering escape sequences manually with the escape key
-syscon	termios	VINTR					0+1			0+1			8			8			8			8			8			0			# termios.c_cc[VINTR]=𝑥
-syscon	termios	VQUIT					1+1			1+1			9			9			9			9			9			1			# termios.c_cc[VQUIT]=𝑥
-syscon	termios	VERASE					2+1			2+1			3			3			3			3			3			2			# termios.c_cc[VERASE]=𝑥
-syscon	termios	VKILL					3+1			3+1			5			5			5			5			5			3			# termios.c_cc[VKILL]=𝑥
-syscon	termios	VEOF					4+1			4+1			0			0			0			0			0			4			# termios.c_cc[VEOF]=𝑥
-syscon	termios	VSWTC					7+1			7+1			0			0			0			0			0			7			# termios.c_cc[VSWTC]=𝑥
-syscon	termios	VSTART					8+1			8+1			12			12			12			12			12			8			# termios.c_cc[VSTART]=𝑥
-syscon	termios	VSTOP					9+1			9+1			13			13			13			13			13			9			# termios.c_cc[VSTOP]=𝑥
-syscon	termios	VSUSP					10+1			10+1			10			10			10			10			10			10			# termios.c_cc[VSUSP]=𝑥 defines suspend, i.e. Ctrl-Z (a.k.a. →, ^Z, SUB, 26, 032, 0x1A, ord('Z')^0b01000000); unix consensus
-syscon	termios	VEOL					11+1			11+1			1			1			1			1			1			11			# termios.c_cc[VEOL]=𝑥
-syscon	termios	VREPRINT				12+1			12+1			6			6			6			6			6			12			# termios.c_cc[VREPRINT]=𝑥
-syscon	termios	VDISCARD				13+1			13+1			15			15			15			15			15			13			# termios.c_cc[VDISCARD]=𝑥
-syscon	termios	VWERASE					14+1			14+1			4			4			4			4			4			14			# termios.c_cc[VWERASE]=𝑥
-syscon	termios	VLNEXT					15+1			15+1			14			14			14			14			14			15			# termios.c_cc[VLNEXT]=𝑥
-syscon	termios	VEOL2					16+1			16+1			2			2			2			2			2			16			# termios.c_cc[VEOL2]=𝑥
+syscon	termios	VMIN					6+1			6+1			16			16			16			16			16			6+1			# termios.c_cc[VMIN]=𝑥 in non-canonical mode can be set to 0 for non-blocking reads, 1 for single character raw mode reads, or higher to buffer
+syscon	termios	VTIME					5+1			5+1			17			17			17			17			17			5+1			# termios.c_cc[VTIME]=𝑥 sets non-canonical read timeout to 𝑥×𝟷𝟶𝟶ms which is needed when entering escape sequences manually with the escape key
+syscon	termios	VINTR					0+1			0+1			8			8			8			8			8			0+1			# termios.c_cc[VINTR]=𝑥
+syscon	termios	VQUIT					1+1			1+1			9			9			9			9			9			1+1			# termios.c_cc[VQUIT]=𝑥
+syscon	termios	VERASE					2+1			2+1			3			3			3			3			3			2+1			# termios.c_cc[VERASE]=𝑥
+syscon	termios	VKILL					3+1			3+1			5			5			5			5			5			3+1			# termios.c_cc[VKILL]=𝑥
+syscon	termios	VEOF					4+1			4+1			0			0			0			0			0			4+1			# termios.c_cc[VEOF]=𝑥
+syscon	termios	VSWTC					7+1			7+1			0			0			0			0			0			7+1			# termios.c_cc[VSWTC]=𝑥
+syscon	termios	VSTART					8+1			8+1			12			12			12			12			12			8+1			# termios.c_cc[VSTART]=𝑥
+syscon	termios	VSTOP					9+1			9+1			13			13			13			13			13			9+1			# termios.c_cc[VSTOP]=𝑥
+syscon	termios	VSUSP					10+1			10+1			10			10			10			10			10			10+1			# termios.c_cc[VSUSP]=𝑥 defines suspend, i.e. Ctrl-Z (a.k.a. →, ^Z, SUB, 26, 032, 0x1A, ord('Z')^0b01000000); unix consensus
+syscon	termios	VEOL					11+1			11+1			1			1			1			1			1			11+1			# termios.c_cc[VEOL]=𝑥
+syscon	termios	VREPRINT				12+1			12+1			6			6			6			6			6			12+1			# termios.c_cc[VREPRINT]=𝑥
+syscon	termios	VDISCARD				13+1			13+1			15			15			15			15			15			13+1			# termios.c_cc[VDISCARD]=𝑥
+syscon	termios	VWERASE					14+1			14+1			4			4			4			4			4			14+1			# termios.c_cc[VWERASE]=𝑥
+syscon	termios	VLNEXT					15+1			15+1			14			14			14			14			14			15+1			# termios.c_cc[VLNEXT]=𝑥
+syscon	termios	VEOL2					16+1			16+1			2			2			2			2			2			16+1			# termios.c_cc[VEOL2]=𝑥
 syscon	termios	_POSIX_VDISABLE				0			0			255			255			255			255			255			0			# termios.c_cc tombstone value
 
 #	tcflush() magic numbers
@@ -1352,7 +1352,7 @@ syscon	iff	IFF_ALLMULTI				0x0200			0x0200			0x0200			0x0200			0x0200			0x0200		
 syscon	iff	IFF_NOARP				0x80			0x80			0x80			0x80			0x80			0x80			0x80			0x80			# faked nt as linux; unix consensus
 syscon	iff	IFF_POINTOPOINT				0x10			0x10			0x10			0x10			0x10			0x10			0x10			0x10			# point-to-point; faked nt as linux; unix consensus
 syscon	iff	IFF_PROMISC				0x100			0x100			0x100			0x100			0x100			0x100			0x100			0			# in packet capture mode; unix consensus
-syscon	iff	IFF_RUNNING				0x40			0x40			0x40			0x40			0x40			0x40			0x40			0			# unix consensus
+syscon	iff	IFF_RUNNING				0x40			0x40			0x40			0x40			0x40			0x40			0x40			0			# unix consensus (mostly for bsd compatibility?)
 syscon	iff	IFF_NOTRAILERS				0x20			0x20			0x20			0x20			0			0			0			0
 syscon	iff	IFF_AUTOMEDIA				0x4000			0x4000			0			0			0			0			0			0
 syscon	iff	IFF_DYNAMIC				0x8000			0x8000			0			0			0			0			0			0
@@ -1391,9 +1391,6 @@ syscon	lock	LOCK_UNLOCK_CACHE			54			54			0			0			0			0			0			0			# wut
 syscon	misc	IP6F_MORE_FRAG				0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			# consensus
 syscon	misc	IP6F_OFF_MASK				0xf8ff			0xf8ff			0xf8ff			0xf8ff			0xf8ff			0xf8ff			0xf8ff			0xf8ff			# consensus
 syscon	misc	IP6F_RESERVED_MASK			0x0600			0x0600			0x0600			0x0600			0x0600			0x0600			0x0600			0x0600			# consensus
-
-syscon	misc	NO_SENSE				0			0			0			0			0			0			0			0			# consensus
-syscon	misc	NO_ADDRESS				4			4			4			4			4			4			4			0x2afc			# unix consensus
 
 syscon	misc	L_SET					0			0			0			0			0			0			0			0			# consensus
 syscon	misc	L_INCR					1			1			1			1			1			1			1			0			# unix consensus
@@ -1464,10 +1461,6 @@ syscon	misc	CTIME					0			0			0			0			0			0			0			0			# consensus
 syscon	misc	EFD_CLOEXEC				0x080000		0x080000		0			0			0			0			0			0
 syscon	misc	EFD_NONBLOCK				0x0800			0x0800			0			0			0			0			0			0
 syscon	misc	EFD_SEMAPHORE				1			1			0			0			0			0			0			0
-
-syscon	misc	SYNC_FILE_RANGE_WAIT_AFTER		4			4			0			0			0			0			0			0
-syscon	misc	SYNC_FILE_RANGE_WAIT_BEFORE		1			1			0			0			0			0			0			0
-syscon	misc	SYNC_FILE_RANGE_WRITE			2			2			0			0			0			0			0			0
 
 syscon	misc	TEST_UNIT_READY				0			0			0			0			0			0			0			0
 syscon	misc	TFD_CLOEXEC				0x080000		0x080000		0			0			0			0			0			0
@@ -1732,6 +1725,7 @@ syscon	nr	__NR_ioperm				0x00ad			0x0fff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_init_module			0x00af			0x0069			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_delete_module			0x00b0			0x006a			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_gettid				0x00ba			0x00b2			0x100001b		0xfff			432			299			311			0xfff		# TODO(jart): thread_self_trap vs. gettid?
+syscon	nr	__NR_set_tls				0x009e			0xfff			0x3000003		0xfff			0x00a5			0x0149			0x13d			0xfff
 syscon	nr	__NR_readahead				0x00bb			0x00d5			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_setxattr				0x00bc			0x0005			0x20000ec		0x00ec			0xfff			0xfff			0x177			0xfff
 syscon	nr	__NR_fsetxattr				0x00be			0x0007			0x20000ed		0x00ed			0xfff			0xfff			0x179			0xfff
@@ -1811,7 +1805,6 @@ syscon	nr	__NR_faccessat				0x010d			0x0030			0x20001d2		0x01d2			0x01e9			0x013
 syscon	nr	__NR_unshare				0x0110			0x0061			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_splice				0x0113			0x004c			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_tee				0x0114			0x004d			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
-syscon	nr	__NR_sync_file_range			0x0115			0x0054			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_vmsplice				0x0116			0x004b			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_migrate_pages			0x0100			0x00ee			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff
 syscon	nr	__NR_move_pages				0x0117			0x00ef			0xfff			0xfff			0xfff			0xfff			0xfff			0xfff

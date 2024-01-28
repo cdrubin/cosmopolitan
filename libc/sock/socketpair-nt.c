@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -23,6 +23,7 @@
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
 #include "libc/nt/enum/fileflagandattributes.h"
+#include "libc/nt/enum/filesharemode.h"
 #include "libc/nt/ipc.h"
 #include "libc/nt/runtime.h"
 #include "libc/sock/internal.h"
@@ -30,6 +31,7 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/sock.h"
 #include "libc/sysv/errfuns.h"
+#ifdef __x86_64__
 
 textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
   uint32_t mode;
@@ -64,16 +66,17 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
     if (writer != -1) __releasefd(writer);
     return -1;
   }
-  if ((hpipe = CreateNamedPipe(pipename,
-                               kNtPipeAccessDuplex | kNtFileFlagOverlapped,
-                               mode, 1, 65536, 65536, 0, 0)) == -1) {
+  if ((hpipe = CreateNamedPipe(
+           pipename, kNtPipeAccessDuplex | kNtFileFlagOverlapped, mode, 1,
+           65536, 65536, 0, &kNtIsInheritable)) == -1) {
     __releasefd(writer);
     __releasefd(reader);
     return -1;
   }
 
-  h1 = CreateFile(pipename, kNtGenericWrite | kNtGenericRead, 0, 0,
-                  kNtOpenExisting, kNtFileFlagOverlapped, 0);
+  h1 = CreateFile(pipename, kNtGenericWrite | kNtGenericRead,
+                  kNtFileShareRead | kNtFileShareWrite | kNtFileShareDelete,
+                  &kNtIsInheritable, kNtOpenExisting, kNtFileFlagOverlapped, 0);
 
   __fds_lock();
 
@@ -104,3 +107,5 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
 
   return rc;
 }
+
+#endif /* __x86_64__ */

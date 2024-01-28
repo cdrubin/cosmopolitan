@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2016 Google Inc.                                                   │
 │                                                                              │
@@ -27,7 +27,6 @@ asm(".ident\t\"\\n\\n\
 *NSYNC (Apache 2.0)\\n\
 Copyright 2016 Google, Inc.\\n\
 https://github.com/google/nsync\"");
-// clang-format off
 
 /* Attempt to remove waiter *w from *mu's
    waiter queue.  If successful, leave the lock held in mode *l_type, and
@@ -149,12 +148,12 @@ int nsync_mu_wait_with_deadline (nsync_mu *mu,
 	lock_type *l_type;
 	int first_wait;
 	int condition_is_true;
-	waiter w[1];
+	waiter *w;
 	int outcome;
 	/* Work out in which mode the lock is held. */
 	uint32_t old_word;
 	IGNORE_RACES_START ();
-	BLOCK_CANCELLATIONS;
+	BLOCK_CANCELATION;
 	old_word = ATM_LOAD (&mu->word);
 	if ((old_word & MU_ANY_LOCK) == 0) {
 		nsync_panic_ ("nsync_mu not held in some mode when calling "
@@ -165,12 +164,12 @@ int nsync_mu_wait_with_deadline (nsync_mu *mu,
 		l_type = nsync_reader_type_;
 	}
 
-	w->tag = 0; /* avoid allocating system resources */
 	first_wait = 1; /* first time through the loop below. */
 	condition_is_true = (condition == NULL || (*condition) (condition_arg));
 
 	/* Loop until either the condition becomes true, or "outcome" indicates
 	   cancellation or timeout. */
+	w = NULL;
 	outcome = 0;
 	while (outcome == 0 && !condition_is_true) {
 		uint32_t has_condition;
@@ -180,10 +179,8 @@ int nsync_mu_wait_with_deadline (nsync_mu *mu,
 		int sem_outcome;
 		unsigned attempts;
 		int have_lock;
-
-		/* initialize the waiter if we haven't already */
-		if (!w->tag) {
-			nsync_waiter_init_ (w);
+		if (w == NULL) {
+			w = nsync_waiter_new_ (); /* get a waiter struct if we need one. */
 		}
 
 		/* Prepare to wait. */
@@ -261,11 +258,13 @@ int nsync_mu_wait_with_deadline (nsync_mu *mu,
 		}
 		condition_is_true = (condition == NULL || (*condition) (condition_arg));
 	}
-	nsync_waiter_destroy_ (w);
+	if (w != NULL) {
+		nsync_waiter_free_ (w); /* free waiter if we allocated one. */
+	}
 	if (condition_is_true) {
 		outcome = 0; /* condition is true trumps other outcomes. */
 	}
-	ALLOW_CANCELLATIONS;
+	ALLOW_CANCELATION;
 	IGNORE_RACES_END ();
 	return (outcome);
 }

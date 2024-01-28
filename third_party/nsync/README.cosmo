@@ -15,9 +15,13 @@ ORIGIN
 
 LOCAL CHANGES
 
+  - Fix nsync_mu_unlock() on Apple Silicon
+
   - Time APIs were so good that they're now in libc
 
   - Double linked list API was so good that it's now in libc
+
+  - Support Apple's ulock futexes which are internal but nicer than GCD
 
   - Ensure resources such as POSIX semaphores are are released on fork.
 

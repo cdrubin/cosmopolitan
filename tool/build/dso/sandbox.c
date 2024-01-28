@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -22,10 +22,8 @@
 #include "libc/intrin/promises.internal.h"
 #include "libc/runtime/runtime.h"
 
-/*
- * runs pledge at glibc executable load time, e.g.
- * strace -vff bash -c '_PLEDGE=4194303,0 LD_PRELOAD=$HOME/sandbox.so ls'
- */
+// runs pledge at glibc executable load time, e.g.
+// strace -vff bash -c '_PLEDGE=4194303,0 LD_PRELOAD=$HOME/sandbox.so ls'
 
 __attribute__((__constructor__)) void init(void) {
   int c, i, j;

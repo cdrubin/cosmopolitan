@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=8 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=8 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/fmt/fmt.h"
+#include "libc/fmt/internal.h"
 #include "libc/stdckdint.h"
 #include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
@@ -59,12 +59,11 @@ static int __vfprintf_nbuf(const char *s, struct state *t, size_t n) {
   for (i = 0; i < n; ++i) {
     t->b.p[t->b.n++] = s[i];
     if (t->b.n == sizeof(t->b.p)) {
-      if (!fwrite_unlocked(s, 1, t->b.n, t->f)) {
+      if (!fwrite_unlocked(t->b.p, 1, t->b.n, t->f)) {
         return -1;
       }
       t->b.n = 0;
-    }
-    if (ckd_add(&t->n, t->n, 1)) {
+    } else if (ckd_add(&t->n, t->n, 1)) {
       return eoverflow();
     }
   }

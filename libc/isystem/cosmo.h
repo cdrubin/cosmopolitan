@@ -1,6 +1,5 @@
 #ifndef _COSMO_H
 #define _COSMO_H
-#include "libc/stdbool.h"
 
 #ifdef _COSMO_SOURCE
 #define COSMO_ALREADY_DEFINED
@@ -24,10 +23,11 @@
  * includes core runtime services, third party libraries we've curated,
  * as well as internal libraries we made that are good enough to share.
  *
- * @see tool/script/cosmocc
+ * @see tool/cosmocc
  */
 
 #include "libc/calls/calls.h"
+#include "libc/calls/pledge.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/cosmo.h"
@@ -59,6 +59,7 @@
 #include "libc/str/unicode.h"
 #include "libc/str/utf16.h"
 #include "libc/sysv/errfuns.h"
+#include "net/http/http.h"
 
 #ifdef COSMO_ALREADY_DEFINED
 #undef COSMO_ALREADY_DEFINED

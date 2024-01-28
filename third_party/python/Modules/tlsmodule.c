@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -20,7 +20,7 @@
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/str/str.h"
 #include "net/https/https.h"
 #include "third_party/mbedtls/ctr_drbg.h"
@@ -37,7 +37,6 @@
 #include "third_party/python/Include/pymacro.h"
 #include "third_party/python/Include/structmember.h"
 #include "third_party/python/Include/yoink.h"
-/* clang-format off */
 
 /**
  * @fileoverview Enough TLS support for HttpsClient so far.

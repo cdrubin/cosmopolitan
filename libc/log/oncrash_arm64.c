@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -30,6 +30,7 @@
 #include "libc/calls/struct/utsname.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/ucontext.h"
+#include "libc/cxxabi.h"
 #include "libc/errno.h"
 #include "libc/intrin/describebacktrace.internal.h"
 #include "libc/intrin/describeflags.internal.h"
@@ -49,9 +50,6 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/thread/thread.h"
 #ifdef __aarch64__
-
-__static_yoink("strerror_wr");  // for kprintf %m
-__static_yoink("strsignal_r");  // for kprintf %G
 
 #define STACK_ERROR "error: not enough room on stack to print crash report\n"
 
@@ -223,13 +221,18 @@ static relegated void __oncrash_impl(int sig, struct siginfo *si,
   Append(b, "%serror%s: Uncaught %G (%s) on %s pid %d tid %d\n", strong, reset,
          sig, kind, host, getpid(), gettid());
   if (program_invocation_name) {
-    Append(b, " %s\n", program_invocation_name);
+    Append(b, " %s\n", __program_executable_name);
   }
   if (errno) {
     Append(b, " %s\n", strerror(errno));
   }
   Append(b, " %s %s %s %s\n", names.sysname, names.version, names.nodename,
          names.release);
+  Append(
+      b, " cosmoaddr2line %s %lx %s\n", FindDebugBinary(),
+      ctx ? ctx->uc_mcontext.PC : 0,
+      DescribeBacktrace(ctx ? (struct StackFrame *)ctx->uc_mcontext.BP
+                            : (struct StackFrame *)__builtin_frame_address(0)));
   if (ctx) {
     long pc;
     char *mem = 0;
@@ -240,6 +243,7 @@ static relegated void __oncrash_impl(int sig, struct siginfo *si,
     struct StackFrame *fp;
     struct SymbolTable *st;
     struct fpsimd_context *vc;
+
     st = GetSymbolTable();
     debugbin = FindDebugBinary();
     addr2line = GetAddr2linePath();
@@ -360,14 +364,14 @@ static relegated void __oncrash_impl(int sig, struct siginfo *si,
     free(mem);
   }
   b->p[b->n - 1] = '\n';
-  sys_write(2, b->p, MIN(b->i, b->n));
+  klog(b->p, MIN(b->i, b->n));
 }
 
 relegated void __oncrash(int sig, struct siginfo *si, void *arg) {
   ucontext_t *ctx = arg;
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   __oncrash_impl(sig, si, ctx);
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
 }
 
 #endif /* __aarch64__ */

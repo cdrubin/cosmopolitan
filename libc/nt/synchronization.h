@@ -7,7 +7,6 @@
 #include "libc/nt/struct/securityattributes.h"
 #include "libc/nt/struct/systemtime.h"
 #include "libc/nt/thunk/msabi.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*                            ░░░░
                        ▒▒▒░░░▒▒▒▒▒▒▒▓▓▓░
@@ -59,7 +58,7 @@ uint32_t SleepEx(uint32_t dwMilliseconds, bool32 bAlertable);
 void GetSystemTime(struct NtSystemTime *lpSystemTime);
 bool32 SystemTimeToFileTime(const struct NtSystemTime *lpSystemTime,
                             struct NtFileTime *lpFileTime);
-void GetSystemTimeAsFileTime(struct NtFileTime *);        /* win8+ */
+void GetSystemTimeAsFileTime(struct NtFileTime *);
 void GetSystemTimePreciseAsFileTime(struct NtFileTime *); /* win8+ */
 
 uint32_t WaitForSingleObject(int64_t hHandle, uint32_t dwMilliseconds);
@@ -110,8 +109,8 @@ void TryAcquireSRWLockShared(intptr_t *);
 
 uint64_t GetTickCount64(void);
 
-bool32 QueryPerformanceFrequency(int64_t *lpFrequency);
-bool32 QueryPerformanceCounter(int64_t *lpPerformanceCount);
+bool32 QueryPerformanceFrequency(uint64_t *lpFrequency);
+bool32 QueryPerformanceCounter(uint64_t *lpPerformanceCount);
 bool32 GetSystemTimeAdjustment(uint32_t *lpTimeAdjustment,
                                uint32_t *lpTimeIncrement,
                                bool32 *lpTimeAdjustmentDisabled);
@@ -120,5 +119,4 @@ bool32 GetSystemTimeAdjustment(uint32_t *lpTimeAdjustment,
 #include "libc/nt/thunk/synchronization.inc"
 #endif /* ShouldUseMsabiAttribute() */
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_NT_SYNCHRONIZATION_H_ */

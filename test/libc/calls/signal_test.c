@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/sigset.h"
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
 #include "libc/log/check.h"
@@ -33,6 +34,8 @@ void OnUsr1(int sig) {
 }
 
 void SetUpOnce(void) {
+  sigset_t ss;
+  sigprocmask(SIG_SETMASK, 0, &ss);
   ASSERT_SYS(0, 0, pledge("stdio proc", 0));
 }
 

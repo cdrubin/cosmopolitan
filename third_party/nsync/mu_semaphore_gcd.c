@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2016 Google Inc.                                                   │
 │                                                                              │
@@ -20,6 +20,7 @@
 #include "libc/errno.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/runtime/clktck.h"
 #include "libc/runtime/syslib.internal.h"
 #include "libc/str/str.h"
 #include "libc/thread/posixthread.internal.h"
@@ -30,7 +31,6 @@
 #include "third_party/nsync/futex.internal.h"
 #include "third_party/nsync/mu_semaphore.internal.h"
 #include "third_party/nsync/time.h"
-// clang-format off
 
 /**
  * @fileoverview Semaphores w/ Apple's Grand Central Dispatch API.
@@ -65,7 +65,7 @@ static long dispatch_semaphore_signal (dispatch_semaphore_t ds) {
 }
 
 static dispatch_time_t dispatch_walltime (const struct timespec *base,
-					    int64_t offset) {
+					  int64_t offset) {
 	return __syslib->__dispatch_walltime (base, offset);
 }
 
@@ -89,11 +89,6 @@ void nsync_mu_semaphore_init_gcd (nsync_semaphore *s) {
 	*(dispatch_semaphore_t *)s = dispatch_semaphore_create (0);
 }
 
-/* Releases system resources associated with *s. */
-void nsync_mu_semaphore_destroy_gcd (nsync_semaphore *s) {
-	dispatch_release (*(dispatch_semaphore_t *)s);
-}
-
 /* Wait until the count of *s exceeds 0, and decrement it. If POSIX cancellations
    are currently disabled by the thread, then this function always succeeds. When
    they're enabled in MASKED mode, this function may return ECANCELED. Otherwise,
@@ -114,10 +109,9 @@ errno_t nsync_mu_semaphore_p_with_deadline_gcd (nsync_semaphore *s,
 	    !_weaken (pthread_testcancel_np) ||
 	    !(pt = _pthread_self()) ||
 	    (pt->pt_flags & PT_NOCANCEL)) {
-		nsync_dispatch_semaphore_wait (s, abs_deadline);
+		result = nsync_dispatch_semaphore_wait (s, abs_deadline);
 	} else {
-		struct timespec now, until, slice;
-		slice = timespec_frommillis (__SIG_LOCK_INTERVAL_MS);
+		struct timespec now, until, slice = {0, 1000000000 / CLK_TCK};
 		for (;;) {
 			if (_weaken (pthread_testcancel_np) () == ECANCELED) {
 				result = ECANCELED;

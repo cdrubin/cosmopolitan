@@ -5,7 +5,6 @@
 #define M_GRANULARITY    (-2)
 #define M_MMAP_THRESHOLD (-3)
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § dynamic memory                                            ─╬─│┼
@@ -25,14 +24,14 @@ char *strdup(const char *) paramsnonnull() mallocesque;
 char *strndup(const char *, size_t) paramsnonnull() mallocesque;
 void *aligned_alloc(size_t, size_t) attributeallocalign((1))
     attributeallocsize((2)) returnspointerwithnoaliases libcesque __wur;
-int posix_memalign(void **, size_t, size_t);
+int posix_memalign(void **, size_t, size_t) libcesque;
 
-int mallopt(int, int);
-int malloc_trim(size_t);
-size_t bulk_free(void **, size_t);
-size_t malloc_usable_size(void *);
-void **independent_calloc(size_t, size_t, void **);
-void **independent_comalloc(size_t, size_t *, void **);
+int mallopt(int, int) libcesque;
+int malloc_trim(size_t) libcesque;
+size_t bulk_free(void **, size_t) libcesque;
+size_t malloc_usable_size(void *) libcesque;
+void **independent_calloc(size_t, size_t, void **) libcesque;
+void **independent_comalloc(size_t, size_t *, void **) libcesque;
 
 wchar_t *wcsdup(const wchar_t *) strlenesque __wur;
 
@@ -49,18 +48,13 @@ struct mallinfo {
   size_t keepcost; /* releasable (via malloc_trim) space */
 };
 
-struct mallinfo mallinfo(void);
+struct mallinfo mallinfo(void) libcesque;
 
-size_t malloc_footprint(void);
-size_t malloc_max_footprint(void);
-size_t malloc_footprint_limit(void);
-size_t malloc_set_footprint_limit(size_t);
+size_t malloc_footprint(void) libcesque;
+size_t malloc_max_footprint(void) libcesque;
+size_t malloc_footprint_limit(void) libcesque;
+size_t malloc_set_footprint_limit(size_t) libcesque;
 void malloc_inspect_all(void (*)(void *, void *, size_t, void *), void *);
 
-#ifdef _COSMO_SOURCE
-bool __grow(void *, size_t *, size_t, size_t) paramsnonnull((1, 2)) libcesque;
-#endif
-
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_MEM_MEM_H_ */

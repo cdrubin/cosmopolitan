@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
@@ -7,9 +7,7 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
-#include "libc/fmt/fmt.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/bits.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/map.h"
@@ -21,8 +19,8 @@
 #include "third_party/python/Include/pylifecycle.h"
 #include "third_party/python/Include/pymacro.h"
 #include "third_party/python/Include/pymem.h"
+#include "libc/serialize.h"
 #include "third_party/python/Include/yoink.h"
-/* clang-format off */
 
 /* Python's malloc wrappers (see pymem.h) */
 

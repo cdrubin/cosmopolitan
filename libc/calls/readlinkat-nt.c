@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/mem/alloca.h"
@@ -35,8 +36,8 @@
 #include "libc/str/utf16.h"
 #include "libc/sysv/errfuns.h"
 
-textwindows ssize_t sys_readlinkat_nt(int dirfd, const char *path, char *buf,
-                                      size_t bufsiz) {
+static textwindows ssize_t sys_readlinkat_nt_impl(int dirfd, const char *path,
+                                                  char *buf, size_t bufsiz) {
 
   char16_t path16[PATH_MAX];
   if (__mkntpathat(dirfd, path, 0, path16) == -1) return -1;
@@ -126,5 +127,14 @@ textwindows ssize_t sys_readlinkat_nt(int dirfd, const char *path, char *buf,
   } else {
     rc = __fix_enotdir(-1, path16);
   }
+  return rc;
+}
+
+textwindows ssize_t sys_readlinkat_nt(int dirfd, const char *path, char *buf,
+                                      size_t bufsiz) {
+  ssize_t rc;
+  BLOCK_SIGNALS;
+  rc = sys_readlinkat_nt_impl(dirfd, path, buf, bufsiz);
+  ALLOW_SIGNALS;
   return rc;
 }

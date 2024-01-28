@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,9 +19,11 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/stat.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/fmt/conv.h"
+#include "libc/fmt/wintime.internal.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/strace.internal.h"
@@ -76,13 +78,48 @@ static textwindows long GetSizeOfReparsePoint(int64_t fh) {
   return z;
 }
 
-textwindows int sys_fstat_nt(int64_t handle, struct stat *out_st) {
+static textwindows int sys_fstat_nt_socket(int kind, struct stat *st) {
+  bzero(st, sizeof(*st));
+  st->st_blksize = 512;
+  st->st_mode = S_IFSOCK | 0666;
+  st->st_dev = 0x44444444;
+  st->st_ino = kind;
+  return 0;
+}
+
+textwindows int sys_fstat_nt_special(int kind, struct stat *st) {
+  bzero(st, sizeof(*st));
+  st->st_blksize = 512;
+  st->st_mode = S_IFCHR | 0666;
+  st->st_dev = 0x77777777;
+  st->st_ino = kind;
+  return 0;
+}
+
+textwindows int sys_fstat_nt(int fd, struct stat *st) {
+  if (fd + 0u >= g_fds.n) return ebadf();
+  switch (g_fds.p[fd].kind) {
+    case kFdEmpty:
+      return ebadf();
+    case kFdConsole:
+    case kFdDevNull:
+      return sys_fstat_nt_special(g_fds.p[fd].kind, st);
+    case kFdSocket:
+      return sys_fstat_nt_socket(g_fds.p[fd].kind, st);
+    default:
+      return sys_fstat_nt_handle(g_fds.p[fd].handle, 0, st);
+  }
+}
+
+textwindows int sys_fstat_nt_handle(int64_t handle, const char16_t *path,
+                                    struct stat *out_st) {
   struct stat st = {0};
 
   // Always set st_blksize to avoid divide by zero issues.
   // The Linux kernel sets this for /dev/tty and similar too.
   // TODO(jart): GetVolumeInformationByHandle?
   st.st_blksize = 4096;
+  st.st_gid = st.st_uid = sys_getuid_nt();
 
   // We'll use the "umask" to fake out the mode bits.
   uint32_t umask = atomic_load_explicit(&__umask, memory_order_acquire);
@@ -92,9 +129,13 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *out_st) {
       break;
     case kNtFileTypeChar:
       st.st_mode = S_IFCHR | (0666 & ~umask);
+      st.st_dev = 0x66666666;
+      st.st_ino = handle;
       break;
     case kNtFileTypePipe:
       st.st_mode = S_IFIFO | (0666 & ~umask);
+      st.st_dev = 0x55555555;
+      st.st_ino = handle;
       break;
     case kNtFileTypeDisk: {
       struct NtByHandleFileInformation wst;
@@ -103,7 +144,7 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *out_st) {
       }
       st.st_mode = 0444 & ~umask;
       if ((wst.dwFileAttributes & kNtFileAttributeDirectory) ||
-          IsWindowsExecutable(handle)) {
+          IsWindowsExecutable(handle, path)) {
         st.st_mode |= 0111 & ~umask;
       }
       st.st_flags = wst.dwFileAttributes;
@@ -126,7 +167,6 @@ textwindows int sys_fstat_nt(int64_t handle, struct stat *out_st) {
       } else {
         st.st_ctim = st.st_mtim;
       }
-      st.st_gid = st.st_uid = sys_getuid_nt();
       st.st_size = (wst.nFileSizeHigh + 0ull) << 32 | wst.nFileSizeLow;
       st.st_dev = wst.dwVolumeSerialNumber;
       st.st_ino = (wst.nFileIndexHigh + 0ull) << 32 | wst.nFileIndexLow;

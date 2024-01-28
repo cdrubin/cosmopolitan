@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 sw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,10 +19,7 @@
 #include "libc/intrin/strace.internal.h"
 #include "libc/dce.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/macros.h"
-#include "libc/sysv/consts/sig.h"
-#include "libc/thread/posixthread.internal.h"
-#include "libc/sysv/consts/nr.h"
+#include "libc/thread/pt.internal.h"
 
 #define SIG_IGN 1
 
@@ -381,12 +378,12 @@ _init_systemfive_magnums:
 	jnz	3b
 	xchg	%rbx,%rax
 	stosq
-#ifdef SYSDEBUG
+#if SYSDEBUG
 	inc	%r8d
 #endif
 	jmp	2b
 5:	nop
-#ifdef SYSDEBUG
+#if SYSDEBUG
 	push	%rdi
 	push	%rsi
 	push	%r8
@@ -399,7 +396,9 @@ _init_systemfive_magnums:
 	jz	5f
 	ezlea	.Llog,di
 	mov	%r8d,%esi
+	push	%rax
 	call	*%rax
+	pop	%rax
 5:	pop	%rsi
 	pop	%rdi
 #endif /* DEBUGSYS */
@@ -434,7 +433,7 @@ _init_systemfive_sigsys:
 	push	%rax
 	push	$SIG_IGN				// sigaction_meta size 48
 	mov	__NR_sigaction(%rip),%eax		// mag
-	mov	SIGSYS,%edi				// sig
+	mov	SIGSYS(%rip),%edi			// sig
 	mov	%rsp,%rsi				// new
 	xor	%edx,%edx				// old
 	mov	$8,%r10d				// for linux
@@ -449,7 +448,7 @@ _init_systemfive_done:
 	nop
 	.init.end 300,_init_systemfive,globl,hidden
 
-#ifdef SYSDEBUG
+#if SYSDEBUG
 	.rodata.str1.1
 .Llog:	.ascii	STRACE_PROLOGUE
 	.ascii	"bell system five system call support"

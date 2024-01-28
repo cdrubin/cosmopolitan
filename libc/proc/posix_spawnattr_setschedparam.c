@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,14 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/struct/sched_param.h"
-#include "libc/proc/posix_spawn.h"
 #include "libc/proc/posix_spawn.internal.h"
 
 /**
  * Specifies scheduler parameter override for spawned process.
  *
- * Using this setter automatically sets `POSIX_SPAWN_SETSCHEDPARAM`.
+ * You also need to pass `POSIX_SPAWN_SETSCHEDPARAM` to
+ * posix_spawnattr_setflags() for it to take effect.
  *
  * @param attr was initialized by posix_spawnattr_init()
  * @param schedparam receives the result
@@ -31,7 +30,6 @@
  */
 int posix_spawnattr_setschedparam(posix_spawnattr_t *attr,
                                   const struct sched_param *schedparam) {
-  (*attr)->flags |= POSIX_SPAWN_SETSCHEDPARAM;
   (*attr)->schedparam = *schedparam;
   return 0;
 }

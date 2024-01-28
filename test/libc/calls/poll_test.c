@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -96,7 +96,7 @@ TEST(poll, testNegativeOneFd_isIgnored) {
   EXPECT_SYS(0, 0, poll(fds, ARRAYLEN(fds), 1));
   EXPECT_STREQ("fd:-1 revents:<TODO:kPollNames>\n"
                "fd:3 revents:<TODO:kPollNames>\n",
-               _gc(FormatPollFd(&fds[0])));
+               gc(FormatPollFd(&fds[0])));
   ASSERT_SYS(0, 0, close(3));
 }
 

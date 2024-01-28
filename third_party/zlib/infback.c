@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 /* infback.c -- inflate using a call-back interface
  * Copyright (C) 1995-2022 Mark Adler
@@ -11,7 +11,6 @@
 #include "third_party/zlib/internal.h"
 #include "third_party/zlib/macros.internal.h"
 #include "third_party/zlib/zutil.internal.h"
-// clang-format off
 
 /*
    This code is largely copied from inflate.c.  Normally either infback.o or

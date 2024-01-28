@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -21,6 +21,7 @@
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/directmap.internal.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/runtime/syslib.internal.h"
 
 /**
  * Unmaps memory directly with system.
@@ -29,14 +30,15 @@
  * but it works on everything else including bare metal.
  *
  * @asyncsignalsafe
- * @threadsafe
  */
 int sys_munmap(void *p, size_t n) {
   int rc;
-  if (!IsMetal()) {
-    rc = __sys_munmap(p, n);
-  } else {
+  if (IsXnuSilicon()) {
+    rc = _sysret(__syslib->__munmap(p, n));
+  } else if (IsMetal()) {
     rc = sys_munmap_metal(p, n);
+  } else {
+    rc = __sys_munmap(p, n);
   }
   KERNTRACE("sys_munmap(%p /* %s */, %'zu) → %d", p,
             DescribeFrame((intptr_t)p >> 16), n, rc);

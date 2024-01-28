@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
@@ -22,14 +22,14 @@
 #include "libc/calls/struct/utsname.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/syscall-sysv.internal.h"
-#include "libc/calls/sysparam.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/log/log.h"
 #include "libc/mem/alg.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -37,7 +37,7 @@
 #include "libc/nt/enum/sw.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
-#include "libc/runtime/dlfcn.h"
+#include "libc/dlopen/dlfcn.h"
 #include "libc/runtime/pathconf.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sock/sendfile.internal.h"
@@ -90,7 +90,6 @@
 #include "third_party/python/Include/yoink.h"
 #include "third_party/python/Modules/_multiprocessing/multiprocessing.h"
 #include "third_party/python/pyconfig.h"
-/* clang-format off */
 
 PYTHON_PROVIDE("posix");
 PYTHON_PROVIDE("posix._getfinalpathname");

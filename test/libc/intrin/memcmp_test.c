@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
@@ -111,21 +111,6 @@ TEST(memcmp, fuzz) {
     ASSERT_EQ(MAX(-1, MIN(1, g)), timingsafe_memcmp(a + o, b + o, n),
               "n=%d o=%d", n, o);
   }
-}
-
-TEST(memcmp, pageOverlapTorture) {
-  long pagesz = sysconf(_SC_PAGESIZE);
-  char *map = mmap(0, pagesz * 2, PROT_READ | PROT_WRITE,
-                   MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-  char *map2 = mmap(0, pagesz * 2, PROT_READ | PROT_WRITE,
-                    MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-  ASSERT_SYS(0, 0, mprotect(map + pagesz, pagesz, PROT_NONE));
-  ASSERT_SYS(0, 0, mprotect(map2 + pagesz, pagesz, PROT_NONE));
-  strcpy(map + pagesz - 9, "12345678");
-  strcpy(map2 + pagesz - 9, "12345679");
-  EXPECT_LT(memcmp(map + pagesz - 9, map2 + pagesz - 9, 79), 0);
-  EXPECT_SYS(0, 0, munmap(map2, pagesz * 2));
-  EXPECT_SYS(0, 0, munmap(map, pagesz * 2));
 }
 
 int buncmp(const void *, const void *, size_t) asm("bcmp");

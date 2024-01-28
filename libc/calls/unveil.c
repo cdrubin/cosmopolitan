@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -188,56 +188,6 @@ static int unveil_init(void) {
   return 0;
 }
 
-/**
- * Joins paths, e.g.
- *
- *     0    + 0    → 0
- *     ""   + ""   → ""
- *     "a"  + 0    → "a"
- *     "a"  + ""   → "a/"
- *     0    + "b"  → "b"
- *     ""   + "b"  → "b"
- *     "."  + "b"  → "./b"
- *     "b"  + "."  → "b/."
- *     "a"  + "b"  → "a/b"
- *     "a/" + "b"  → "a/b"
- *     "a"  + "b/" → "a/b/"
- *     "a"  + "/b" → "/b"
- *
- * @return joined path, which may be `buf`, `path`, or `other`, or null
- *     if (1) `buf` didn't have enough space, or (2) both `path` and
- *     `other` were null
- */
-static char *JoinPaths(char *buf, size_t size, const char *path,
-                       const char *other) {
-  size_t pathlen, otherlen;
-  if (!other) return (char *)path;
-  if (!path) return (char *)other;
-  pathlen = strlen(path);
-  if (!pathlen || *other == '/') {
-    return (/*unconst*/ char *)other;
-  }
-  otherlen = strlen(other);
-  if (path[pathlen - 1] == '/') {
-    if (pathlen + otherlen + 1 <= size) {
-      memmove(buf, path, pathlen);
-      memmove(buf + pathlen, other, otherlen + 1);
-      return buf;
-    } else {
-      return 0;
-    }
-  } else {
-    if (pathlen + 1 + otherlen + 1 <= size) {
-      memmove(buf, path, pathlen);
-      buf[pathlen] = '/';
-      memmove(buf + pathlen + 1, other, otherlen + 1);
-      return buf;
-    } else {
-      return 0;
-    }
-  }
-}
-
 int sys_unveil_linux(const char *path, const char *permissions) {
 #pragma GCC push_options
 #pragma GCC diagnostic ignored "-Wframe-larger-than="
@@ -302,7 +252,7 @@ int sys_unveil_linux(const char *path, const char *permissions) {
         // next = join(dirname(next), link)
         strcpy(b.buf2, next);
         dir = dirname(b.buf2);
-        if ((next = JoinPaths(b.buf3, PATH_MAX, dir, b.lbuf))) {
+        if ((next = __join_paths(b.buf3, PATH_MAX, dir, b.lbuf))) {
           // next now points to either: buf3, buf2, lbuf, rodata
           strcpy(b.buf4, next);
           next = b.buf4;
@@ -330,9 +280,9 @@ int sys_unveil_linux(const char *path, const char *permissions) {
   }
 
   // now we can open the path
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   rc = sys_openat(AT_FDCWD, path, O_PATH | O_NOFOLLOW | O_CLOEXEC, 0);
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
   if (rc == -1) return rc;
 
   pb.parent_fd = rc;
@@ -460,7 +410,6 @@ int sys_unveil_linux(const char *path, const char *permissions) {
  * @note on Linux this function requires Linux Kernel 5.13+ and version 6.2+
  *     to properly support truncation operations
  * @see [1] https://docs.kernel.org/userspace-api/landlock.html
- * @threadsafe
  */
 int unveil(const char *path, const char *permissions) {
   int e, rc;

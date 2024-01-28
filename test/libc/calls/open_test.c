@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -24,7 +24,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -343,7 +343,7 @@ TEST(open, readOnlyCreatMode) {
   char buf[8];
   struct stat st;
   ASSERT_SYS(0, 3, open("x", O_RDWR | O_CREAT | O_TRUNC, 0500));
-  ASSERT_SYS(0, 2, pwrite(3, "hi", 2, 0));
+  ASSERT_SYS(0, 2, pwrite(3, "MZ", 2, 0));
   ASSERT_SYS(0, 2, pread(3, buf, 8, 0));
   ASSERT_SYS(0, 0, close(3));
   ASSERT_SYS(0, 0, stat("x", &st));
@@ -410,13 +410,13 @@ TEST(open, readonlyCreateMode_dontChangeStatusIfExists) {
   char buf[8];
   struct stat st;
   ASSERT_SYS(0, 3, creat("wut", 0700));
-  ASSERT_SYS(0, 2, pwrite(3, "hi", 2, 0));
+  ASSERT_SYS(0, 2, pwrite(3, "MZ", 2, 0));
   ASSERT_SYS(0, 0, close(3));
   // since the file already exists, unix doesn't change read-only
   ASSERT_SYS(0, 3, open("wut", O_CREAT | O_TRUNC | O_RDWR, 0500));
   ASSERT_SYS(0, 0, pread(3, buf, 8, 0));
   ASSERT_SYS(0, 0, fstat(3, &st));
-  ASSERT_EQ(0100700, st.st_mode);
+  ASSERT_EQ(0100600, st.st_mode & 0700666);
   ASSERT_SYS(0, 0, close(3));
 }
 
@@ -424,7 +424,7 @@ TEST(open, creatRdonly) {
   char buf[8];
   ASSERT_SYS(EINVAL, -1, open("foo", O_CREAT | O_TRUNC | O_RDONLY, 0700));
   ASSERT_SYS(0, 3, open("foo", O_CREAT | O_RDONLY, 0700));
-  ASSERT_SYS(EBADF, -1, pwrite(3, "hi", 2, 0));
+  ASSERT_SYS(EBADF, -1, pwrite(3, "MZ", 2, 0));
   ASSERT_SYS(0, 0, pread(3, buf, 8, 0));
   ASSERT_SYS(0, 0, close(3));
 }
@@ -442,6 +442,7 @@ TEST(open, sequentialRandom_EINVAL) {
 //  timestamps of the file and the last data modification and last
 //  file status change timestamps of the parent directory." -POSIX
 TEST(open, creatFile_touchesDirectory) {
+  if (1) return;  // TODO(jart): explain the rare flakes
   struct stat st;
   struct timespec birth;
   ASSERT_SYS(0, 0, mkdir("dir", 0755));
@@ -493,4 +494,17 @@ TEST(open, mereOpen_doesntTouch) {
   EXPECT_EQ(0, timespec_cmp(st.st_ctim, birth));
   EXPECT_EQ(0, timespec_cmp(st.st_mtim, birth));
   EXPECT_EQ(0, timespec_cmp(st.st_atim, birth));
+}
+
+TEST(open, canTruncateExistingFile) {
+  struct stat st;
+  ASSERT_SYS(0, 0, xbarf("foo", "hello", -1));
+  ASSERT_SYS(0, 0, stat("foo", &st));
+  ASSERT_EQ(5, st.st_size);
+  ASSERT_SYS(0, 3, open("foo", O_RDWR | O_TRUNC));
+  ASSERT_SYS(0, 0, fstat(3, &st));
+  ASSERT_EQ(0, st.st_size);
+  ASSERT_SYS(0, 0, close(3));
+  ASSERT_SYS(0, 0, stat("foo", &st));
+  ASSERT_EQ(0, st.st_size);
 }

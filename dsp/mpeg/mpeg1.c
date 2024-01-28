@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:4;tab-width:4;coding:utf-8   -*-│
-│vi: set et ft=c ts=4 sw=4 fenc=utf-8                                       :vi│
+│ vi: set et ft=c ts=4 sw=4 fenc=utf-8                                     :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │  PL_MPEG - MPEG1 Video decoder, MP2 Audio decoder, MPEG-PS demuxer           │
 │  Dominic Szablewski - https://phoboslab.org                                  │
@@ -32,6 +32,7 @@
 #include "dsp/mpeg/idct.h"
 #include "dsp/mpeg/mpeg.h"
 #include "dsp/mpeg/video.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/fmt/conv.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"

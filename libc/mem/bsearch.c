@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -21,7 +21,7 @@
 
 /**
  * Searches sorted array for exact item in logarithmic time.
- * @see bsearch_r(), bisectcarleft()
+ * @see bsearch_r()
  */
 void *bsearch(const void *key, const void *base, size_t nmemb, size_t size,
               int cmp(const void *a, const void *b)) {

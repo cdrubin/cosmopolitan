@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -29,7 +29,7 @@
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/libgen.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/bits.h"
+#include "libc/serialize.h"
 #include "libc/intrin/bsr.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
@@ -294,7 +294,7 @@ int main(int argc, char *argv[]) {
   struct ar_hdr header1;
   struct ar_hdr header2;
 
-#ifndef NDEBUG
+#ifdef MODE_DBG
   ShowCrashReports();
 #endif
 

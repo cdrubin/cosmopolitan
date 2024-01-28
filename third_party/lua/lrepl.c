@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Lua                                                                         │
@@ -48,7 +48,6 @@
 #include "third_party/lua/lprefix.h"
 #include "third_party/lua/lua.h"
 #include "third_party/lua/lualib.h"
-// clang-format off
 
 asm(".ident\t\"\\n\\n\
 Lua 5.4.3 (MIT License)\\n\
@@ -347,8 +346,10 @@ void lua_initrepl(lua_State *L) {
     }
     lua_repl_linenoise = linenoiseBegin(prompt, 0, 1);
     lua_pop(L, 1);  /* remove prompt */
-    __replmode = true;
-    if (isatty(2)) __replstderr = true;
+    __ttyconf.replmode = true;
+    if (isatty(2)) {
+      __ttyconf.replstderr = true;
+    }
   }
   lua_repl_unlock();
 }
@@ -356,7 +357,7 @@ void lua_initrepl(lua_State *L) {
 
 void lua_freerepl(void) {
   lua_repl_lock();
-  __replmode = false;
+  __ttyconf.replmode = false;
   linenoiseEnd(lua_repl_linenoise);
   free(g_historypath);
   lua_repl_unlock();

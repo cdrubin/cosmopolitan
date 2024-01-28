@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,12 +18,15 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/state.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
 
@@ -67,10 +70,18 @@ int dup3(int oldfd, int newfd, int flags) {
     rc = einval();  // NetBSD doesn't do this
   } else if (oldfd < 0 || newfd < 0) {
     rc = ebadf();
-  } else if (__isfdkind(oldfd, kFdZip)) {
-    rc = enotsup();
   } else if (!IsWindows()) {
-    rc = sys_dup3(oldfd, newfd, flags);
+    if (__isfdkind(oldfd, kFdZip) || __isfdkind(newfd, kFdZip)) {
+      if (__vforked) {
+        return enotsup();
+      }
+      rc = sys_dup3(oldfd, newfd, flags);
+      if (rc != -1) {
+        _weaken(__zipos_postdup)(oldfd, newfd);
+      }
+    } else {
+      rc = sys_dup3(oldfd, newfd, flags);
+    }
   } else {
     rc = sys_dup_nt(oldfd, newfd, flags, -1);
   }

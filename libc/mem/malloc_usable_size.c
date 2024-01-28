@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -39,7 +39,6 @@ size_t (*hook_malloc_usable_size)(void *) = dlmalloc_usable_size;
  * @param p is address of allocation
  * @return total number of bytes
  * @see dlmalloc_usable_size()
- * @threadsafe
  */
 size_t malloc_usable_size(void *p) {
   return hook_malloc_usable_size(p);

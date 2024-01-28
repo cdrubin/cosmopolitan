@@ -1,4 +1,3 @@
-// clang-format off
 /*
  * divsufsort.c for libdivsufsort-lite
  * Copyright (c) 2003-2008 Yuta Mori All Rights Reserved.
@@ -40,7 +39,6 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"

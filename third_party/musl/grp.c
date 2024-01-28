@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set et ft=c ts=8 sw=8 fenc=utf-8                                     :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Musl Libc                                                                   │
@@ -46,8 +46,8 @@ static unsigned atou(char **s) {
   return x;
 }
 
-static int __getgrent_a(FILE *f, struct group *gr, char **line, size_t *size,
-                        char ***mem, size_t *nmem, struct group **res) {
+int __getgrent_a(FILE *f, struct group *gr, char **line, size_t *size,
+		 char ***mem, size_t *nmem, struct group **res) {
   ssize_t l;
   char *s, *mems;
   size_t i;
@@ -103,9 +103,9 @@ end:
   return rv;
 }
 
-static int __getgr_a(const char *name, gid_t gid, struct group *gr, char **buf,
-                     size_t *size, char ***mem, size_t *nmem,
-                     struct group **res) {
+int __getgr_a(const char *name, gid_t gid, struct group *gr, char **buf,
+	      size_t *size, char ***mem, size_t *nmem,
+	      struct group **res) {
   FILE *f;
   int rv = 0;
   int cs;
@@ -215,14 +215,27 @@ static struct GetgrentState {
   struct group gr;
 } g_getgrent[1];
 
+/**
+ * Closes group database.
+ * @threadunsafe
+ */
 void endgrent() {
   setgrent();
 }
+
+/**
+ * Rewinds to beginning of group database.
+ * @threadunsafe
+ */
 void setgrent() {
   if (g_getgrent->f) fclose(g_getgrent->f);
   g_getgrent->f = 0;
 }
 
+/**
+ * Returns successive entries in /etc/group database.
+ * @threadunsafe
+ */
 struct group *getgrent() {
   struct group *res;
   size_t size = 0, nmem = 0;

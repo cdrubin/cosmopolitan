@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -26,10 +26,17 @@
 #include "libc/log/internal.h"
 #include "libc/log/log.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/symbols.internal.h"
 #include "libc/str/str.h"
 
 /**
- * Prints miniature crash report.
+ * Prints miniature crash report, e.g.
+ *
+ *     struct sigaction sa = {
+ *         .sa_sigaction = __minicrash,
+ *         .sa_flags = SA_SIGINFO | SA_RESETHAND,
+ *     };
+ *     sigaction(SIGSEGV, &sa, 0);
  *
  * This function may be called from a signal handler to print vital
  * information about the cause of a crash. Only vital number values
@@ -49,7 +56,6 @@
  *
  * @see __die() for crashing from normal code without aborting
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 relegated dontinstrument void __minicrash(int sig, siginfo_t *si, void *arg) {
@@ -59,12 +65,12 @@ relegated dontinstrument void __minicrash(int sig, siginfo_t *si, void *arg) {
   gethostname(host, sizeof(host));
   kprintf(
       "%serror: %s on %s pid %d tid %d got %G%s code %d addr %p%s\n"
-      "cosmoaddr2line %s%s %lx %s\n",
+      "cosmoaddr2line %s %lx %s\n",
       __nocolor ? "" : "\e[1;31m", program_invocation_short_name, host,
       getpid(), gettid(), sig,
       __is_stack_overflow(si, ctx) ? " (stack overflow)" : "", si->si_code,
-      si->si_addr, __nocolor ? "" : "\e[0m", __argv[0],
-      endswith(__argv[0], ".com") ? ".dbg" : "", ctx ? ctx->uc_mcontext.PC : 0,
+      si->si_addr, __nocolor ? "" : "\e[0m", FindDebugBinary(),
+      ctx ? ctx->uc_mcontext.PC : 0,
       DescribeBacktrace(ctx ? (struct StackFrame *)ctx->uc_mcontext.BP
                             : (struct StackFrame *)__builtin_frame_address(0)));
 }

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/copyfile.h"
 #include "libc/calls/struct/itimerval.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/rusage.h"
@@ -33,7 +32,6 @@
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/libgen.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/log/appendresourcereport.internal.h"
@@ -42,14 +40,15 @@
 #include "libc/macros.internal.h"
 #include "libc/math.h"
 #include "libc/mem/alg.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/kcpuids.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nexgen32e/x86info.h"
-#include "libc/runtime/runtime.h"
-#include "libc/stdio/append.h"
 #include "libc/proc/posix_spawn.h"
+#include "libc/runtime/runtime.h"
+#include "libc/serialize.h"
+#include "libc/stdio/append.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/clock.h"
@@ -113,9 +112,9 @@ FLAGS\n\
   -V NUMBER    specifies compiler version\n\
   -C SECS      set cpu limit [default 16]\n\
   -L SECS      set lat limit [default 90]\n\
-  -P PROCS     set pro limit [default 2048]\n\
+  -P PROCS     set pro limit [default 4096]\n\
   -S BYTES     set stk limit [default 8m]\n\
-  -M BYTES     set mem limit [default 512m]\n\
+  -M BYTES     set mem limit [default 2048m]\n\
   -F BYTES     set fsz limit [default 256m]\n\
   -O BYTES     set out limit [default 1m]\n\
   -s           decrement verbosity [default 4]\n\
@@ -638,6 +637,8 @@ int Launch(void) {
 
   posix_spawnattr_init(&spawnattr);
   posix_spawnattr_setsigmask(&spawnattr, &savemask);
+  posix_spawnattr_setflags(&spawnattr,
+                           POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETRLIMIT);
   SetCpuLimit(cpuquota);
   SetFszLimit(fszquota);
   SetMemLimit(memquota);
@@ -836,7 +837,7 @@ int main(int argc, char *argv[]) {
   char *s, *q, **envp;
   int ws, opt, exitcode;
 
-#ifndef NDEBUG
+#ifdef MODE_DBG
   ShowCrashReports();
 #endif
 
@@ -844,12 +845,12 @@ int main(int argc, char *argv[]) {
 
   // parse prefix arguments
   verbose = 4;
-  timeout = 90;                 /* secs */
-  cpuquota = 32;                /* secs */
-  proquota = 2048;              /* procs */
-  stkquota = 8 * 1024 * 1024;   /* bytes */
-  fszquota = 256 * 1000 * 1000; /* bytes */
-  memquota = 512 * 1024 * 1024; /* bytes */
+  timeout = 90;                    // secs
+  cpuquota = 32;                   // secs
+  proquota = 4096;                 // procs
+  stkquota = 8 * 1024 * 1024;      // bytes
+  fszquota = 256 * 1000 * 1000;    // bytes
+  memquota = 2048L * 1024 * 1024;  // bytes
   if ((s = getenv("V"))) verbose = atoi(s);
   while ((opt = getopt(argc, argv, "hnstvwA:C:F:L:M:O:P:T:V:S:")) != -1) {
     switch (opt) {

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -37,7 +37,6 @@
  *
  * @return user id (always successful)
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 uint32_t getuid(void) {
@@ -62,7 +61,6 @@ uint32_t getuid(void) {
  *
  * @return group id (always successful)
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 uint32_t getgid(void) {

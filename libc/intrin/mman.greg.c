@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -59,6 +59,7 @@ struct ReclaimedPage {
 };
 
 /**
+ * @internal
  * Allocates new page of physical memory.
  */
 texthead uint64_t __new_page(struct mman *mm) {
@@ -85,6 +86,7 @@ texthead uint64_t __new_page(struct mman *mm) {
 }
 
 /**
+ * @internal
  * Returns pointer to page table entry for page at virtual address.
  * Additional page tables are allocated if needed as a side-effect.
  */
@@ -106,6 +108,7 @@ textreal uint64_t *__get_virtual(struct mman *mm, uint64_t *t, int64_t vaddr,
 }
 
 /**
+ * @internal
  * Sorts, rounds, and filters BIOS memory map.
  */
 static textreal void __normalize_e820(struct mman *mm, uint64_t top) {
@@ -139,6 +142,7 @@ static textreal void __normalize_e820(struct mman *mm, uint64_t top) {
 }
 
 /**
+ * @internal
  * Identity maps an area of physical memory to its negative address.
  */
 textreal uint64_t *__invert_memory_area(struct mman *mm, uint64_t *pml4t,
@@ -157,6 +161,7 @@ textreal uint64_t *__invert_memory_area(struct mman *mm, uint64_t *pml4t,
 }
 
 /**
+ * @internal
  * Increments the reference count for a page of physical memory.
  */
 void __ref_page(struct mman *mm, uint64_t *pml4t, uint64_t p) {
@@ -172,6 +177,7 @@ void __ref_page(struct mman *mm, uint64_t *pml4t, uint64_t p) {
 }
 
 /**
+ * @internal
  * Increments the reference counts for an area of physical memory.
  */
 void __ref_pages(struct mman *mm, uint64_t *pml4t, uint64_t ps, uint64_t size) {
@@ -183,6 +189,7 @@ void __ref_pages(struct mman *mm, uint64_t *pml4t, uint64_t ps, uint64_t size) {
 }
 
 /**
+ * @internal
  * Reclaims a page of physical memory for later use.
  */
 static void __reclaim_page(struct mman *mm, uint64_t p) {
@@ -193,6 +200,7 @@ static void __reclaim_page(struct mman *mm, uint64_t p) {
 }
 
 /**
+ * @internal
  * Decrements the reference count for a page of physical memory.  Frees the
  * page if there are no virtual addresses (excluding the negative space)
  * referring to it.
@@ -211,6 +219,7 @@ void __unref_page(struct mman *mm, uint64_t *pml4t, uint64_t p) {
 }
 
 /**
+ * @internal
  * Identity maps all usable physical memory to its negative address.
  */
 static textreal void __invert_memory(struct mman *mm, uint64_t *pml4t) {
@@ -224,6 +233,7 @@ static textreal void __invert_memory(struct mman *mm, uint64_t *pml4t) {
 }
 
 /**
+ * @internal
  * Exports information about the offset of a field within a structure type,
  * so that assembly language routines can use it.  This macro can be invoked
  * from inside a function whose code is known to be emitted.
@@ -263,6 +273,7 @@ static textreal uint64_t __map_phdr(struct mman *mm, uint64_t *pml4t,
                                     uint64_t b, uint64_t m,
                                     struct Elf64_Phdr *p) {
   uint64_t i, f, v;
+  if (p->p_type != PT_LOAD) return m;
   f = PAGE_RSRV | PAGE_U;
   if (p->p_flags & PF_W)
     f |= PAGE_V | PAGE_RW;
@@ -283,6 +294,7 @@ static textreal uint64_t __map_phdr(struct mman *mm, uint64_t *pml4t,
 }
 
 /**
+ * @internal
  * Maps APE-defined ELF program headers into memory and clears BSS.
  */
 textreal void __map_phdrs(struct mman *mm, uint64_t *pml4t, uint64_t b,
@@ -303,6 +315,7 @@ textreal void __map_phdrs(struct mman *mm, uint64_t *pml4t, uint64_t b,
   }
   m = __map_phdr(mm, pml4t, b, m,
                  &(struct Elf64_Phdr){
+                     .p_type = PT_LOAD,
                      .p_flags = (uintptr_t)ape_stack_pf,
                      .p_offset = (uintptr_t)ape_stack_offset,
                      .p_vaddr = ABS64(ape_stack_vaddr),
@@ -313,6 +326,7 @@ textreal void __map_phdrs(struct mman *mm, uint64_t *pml4t, uint64_t b,
 }
 
 /**
+ * @internal
  * Reclaims memory pages which were used at boot time but which can now be
  * made available for the application.
  */

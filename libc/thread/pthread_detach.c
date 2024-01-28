@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -29,7 +29,7 @@
 static errno_t pthread_detach_impl(struct PosixThread *pt) {
   enum PosixThreadStatus status, transition;
   for (;;) {
-    status = atomic_load_explicit(&pt->status, memory_order_acquire);
+    status = atomic_load_explicit(&pt->pt_status, memory_order_acquire);
     if (status == kPosixThreadJoinable) {
       transition = kPosixThreadDetached;
     } else if (status == kPosixThreadTerminated) {
@@ -37,8 +37,8 @@ static errno_t pthread_detach_impl(struct PosixThread *pt) {
     } else {
       return EINVAL;
     }
-    if (atomic_compare_exchange_weak_explicit(&pt->status, &status, transition,
-                                              memory_order_release,
+    if (atomic_compare_exchange_weak_explicit(&pt->pt_status, &status,
+                                              transition, memory_order_release,
                                               memory_order_relaxed)) {
       if (transition == kPosixThreadZombie) {
         _pthread_zombify(pt);
@@ -62,7 +62,6 @@ static errno_t pthread_detach_impl(struct PosixThread *pt) {
  * @return 0 on success, or errno with error
  * @raise EINVAL if `thread` isn't joinable
  * @returnserrno
- * @threadsafe
  */
 errno_t pthread_detach(pthread_t thread) {
   struct PosixThread *pt = (struct PosixThread *)thread;

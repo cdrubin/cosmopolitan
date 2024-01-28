@@ -4,15 +4,16 @@
 /*
  * integral getauxval() keys
  */
-#define AT_PHDR   3
-#define AT_PHENT  4
-#define AT_PHNUM  5
-#define AT_PAGESZ 6
-#define AT_BASE   7
-#define AT_FLAGS  8
-#define AT_ENTRY  9
+#define AT_PHDR                     3
+#define AT_PHENT                    4
+#define AT_PHNUM                    5
+#define AT_PAGESZ                   6
+#define AT_BASE                     7
+#define AT_FLAGS                    8
+#define AT_FLAGS_PRESERVE_ARGV0_BIT 0
+#define AT_FLAGS_PRESERVE_ARGV0     (1 << AT_FLAGS_PRESERVE_ARGV0_BIT)
+#define AT_ENTRY                    9
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 /*
@@ -64,5 +65,4 @@ extern const unsigned long AT_TIMEKEEP;
 extern const unsigned long AT_UCACHEBSIZE;
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_AUXV_H_ */

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -24,9 +24,11 @@
 #include "libc/intrin/asancodes.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/dll.h"
+#include "libc/intrin/getenv.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/files.h"
+#include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/synchronization.h"
 #include "libc/nt/thread.h"
@@ -46,6 +48,18 @@ extern unsigned char __tls_mov_nt_rax[];
 extern unsigned char __tls_add_nt_rax[];
 
 _Alignas(TLS_ALIGNMENT) static char __static_tls[6016];
+
+static unsigned long ParseMask(const char *str) {
+  int c;
+  unsigned long x = 0;
+  if (str) {
+    while ((c = *str++)) {
+      x *= 10;
+      x += c - '0';
+    }
+  }
+  return x;
+}
 
 /**
  * Enables thread local storage for main process.
@@ -191,10 +205,11 @@ textstartup void __enable_tls(void) {
   tib->tib_locale = (intptr_t)&__c_dot_utf8_locale;
   tib->tib_pthread = (pthread_t)&_pthread_static;
   if (IsWindows()) {
-    intptr_t threadhand, pseudo = GetCurrentThread();
-    DuplicateHandle(GetCurrentProcess(), pseudo, GetCurrentProcess(),
-                    &threadhand, 0, false, kNtDuplicateSameAccess);
-    atomic_store_explicit(&tib->tib_syshand, threadhand, memory_order_relaxed);
+    intptr_t hThread;
+    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                    GetCurrentProcess(), &hThread, 0, false,
+                    kNtDuplicateSameAccess);
+    atomic_store_explicit(&tib->tib_syshand, hThread, memory_order_relaxed);
   } else if (IsXnuSilicon()) {
     tib->tib_syshand = __syslib->__pthread_self();
   }
@@ -206,6 +221,14 @@ textstartup void __enable_tls(void) {
     tid = sys_gettid();
   }
   atomic_store_explicit(&tib->tib_tid, tid, memory_order_relaxed);
+  // TODO(jart): set_tid_address?
+
+  // inherit signal mask
+  if (IsWindows()) {
+    atomic_store_explicit(&tib->tib_sigmask,
+                          ParseMask(__getenv(environ, "_MASK").s),
+                          memory_order_relaxed);
+  }
 
   // initialize posix threads
   _pthread_static.tib = tib;
@@ -213,11 +236,6 @@ textstartup void __enable_tls(void) {
   dll_init(&_pthread_static.list);
   _pthread_list = &_pthread_static.list;
   atomic_store_explicit(&_pthread_static.ptid, tid, memory_order_relaxed);
-  if (IsWindows()) {
-    if (!(_pthread_static.semaphore = CreateSemaphore(0, 0, 1, 0))) {
-      notpossible;
-    }
-  }
 
   // copy in initialized data section
   if (I(_tdata_size)) {

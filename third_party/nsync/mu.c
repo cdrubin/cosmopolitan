@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2016 Google Inc.                                                   │
 │                                                                              │
@@ -28,7 +28,6 @@ asm(".ident\t\"\\n\\n\
 *NSYNC (Apache 2.0)\\n\
 Copyright 2016 Google, Inc.\\n\
 https://github.com/google/nsync\"");
-// clang-format off
 
 /* Initialize *mu. */
 void nsync_mu_init (nsync_mu *mu) {
@@ -53,7 +52,7 @@ void nsync_mu_lock_slow_ (nsync_mu *mu, waiter *w, uint32_t clear, lock_type *l_
 	uint32_t wait_count;
 	uint32_t long_wait;
 	unsigned attempts = 0; /* attempt count; used for spinloop backoff */
-	BLOCK_CANCELLATIONS;
+	BLOCK_CANCELATION;
 	w->cv_mu = NULL;      /* not a cv wait */
 	w->cond.f = NULL; /* Not using a conditional critical section. */
 	w->cond.v = NULL;
@@ -127,7 +126,7 @@ void nsync_mu_lock_slow_ (nsync_mu *mu, waiter *w, uint32_t clear, lock_type *l_
 		}
 		attempts = nsync_spin_delay_ (attempts);
 	}
-	ALLOW_CANCELLATIONS;
+	ALLOW_CANCELATION;
 }
 
 /* Attempt to acquire *mu in writer mode without blocking, and return non-zero
@@ -156,10 +155,9 @@ void nsync_mu_lock (nsync_mu *mu) {
 		if ((old_word&MU_WZERO_TO_ACQUIRE) != 0 ||
 		    !ATM_CAS_ACQ (&mu->word, old_word,
 				  (old_word+MU_WADD_TO_ACQUIRE) & ~MU_WCLEAR_ON_ACQUIRE)) {
-			waiter w;
-			nsync_waiter_init_ (&w);
-			nsync_mu_lock_slow_ (mu, &w, 0, nsync_writer_type_);
-			nsync_waiter_destroy_ (&w);
+			waiter *w = nsync_waiter_new_ ();
+			nsync_mu_lock_slow_ (mu, w, 0, nsync_writer_type_);
+			nsync_waiter_free_ (w);
 		}
 	}
 	IGNORE_RACES_END ();
@@ -192,10 +190,9 @@ void nsync_mu_rlock (nsync_mu *mu) {
 		if ((old_word&MU_RZERO_TO_ACQUIRE) != 0 ||
 		    !ATM_CAS_ACQ (&mu->word, old_word,
 				  (old_word+MU_RADD_TO_ACQUIRE) & ~MU_RCLEAR_ON_ACQUIRE)) {
-			waiter w;
-			nsync_waiter_init_ (&w);
-			nsync_mu_lock_slow_ (mu, &w, 0, nsync_reader_type_);
-			nsync_waiter_destroy_ (&w);
+			waiter *w = nsync_waiter_new_ ();
+			nsync_mu_lock_slow_ (mu, w, 0, nsync_reader_type_);
+			nsync_waiter_free_ (w);
 		}
 	}
 	IGNORE_RACES_END ();
@@ -300,8 +297,8 @@ void nsync_mu_unlock_slow_ (nsync_mu *mu, lock_type *l_type) {
 				return;
 			}
 		} else if ((old_word&MU_SPINLOCK) == 0 &&
-			   ATM_CAS_ACQ (&mu->word, old_word,
-					(old_word-early_release_mu)|MU_SPINLOCK|MU_DESIG_WAKER)) {
+			   ATM_CAS_SEQCST (&mu->word, old_word, /* [jart] fixes issues on apple silicon */
+                                           (old_word-early_release_mu)|MU_SPINLOCK|MU_DESIG_WAKER)) {
 			struct Dll *wake;
 			lock_type *wake_type;
 			uint32_t clear_on_release;

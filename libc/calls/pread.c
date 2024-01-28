@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -50,14 +50,13 @@
  * @raise EINTR if signal was delivered instead
  * @raise ECANCELED if thread was cancelled in masked mode
  * @see pwrite(), write()
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 ssize_t pread(int fd, void *buf, size_t size, int64_t offset) {
   ssize_t rc;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (offset < 0) {
     rc = einval();
@@ -73,17 +72,17 @@ ssize_t pread(int fd, void *buf, size_t size, int64_t offset) {
     rc = sys_pread(fd, buf, size, offset, offset);
   } else if (__isfdkind(fd, kFdSocket)) {
     rc = espipe();
-  } else if (__isfdkind(fd, kFdFile)) {
+  } else if (__isfdkind(fd, kFdFile) || __isfdkind(fd, kFdDevNull)) {
     rc = sys_read_nt(fd, (struct iovec[]){{buf, size}}, 1, offset);
   } else {
     rc = ebadf();
   }
   npassert(rc == -1 || (size_t)rc <= size);
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   DATATRACE("pread(%d, [%#.*hhs%s], %'zu, %'zd) → %'zd% m", fd,
             MAX(0, MIN(40, rc)), buf, rc > 40 ? "..." : "", size, offset, rc);
   return rc;
 }
 
-__strong_reference(pread, pread64);
+__weak_reference(pread, pread64);

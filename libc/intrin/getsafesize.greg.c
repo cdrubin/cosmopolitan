@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,6 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/stack.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/tls.h"
@@ -33,13 +36,18 @@ privileged long __get_safe_size(long want, long extraspace) {
   if (!__tls_enabled) return want;
   struct PosixThread *pt;
   struct CosmoTib *tib = __get_tls_privileged();
+  if (!IsAutoFrame((uintptr_t)tib >> 16) &&
+      !(__executable_start <= (const unsigned char *)tib &&
+        (const unsigned char *)tib < _end)) {
+    return want;
+  }
   long bottom, sp = GetStackPointer();
   if ((char *)sp >= tib->tib_sigstack_addr &&
       (char *)sp <= tib->tib_sigstack_addr + tib->tib_sigstack_size) {
     bottom = (long)tib->tib_sigstack_addr;
   } else if ((pt = (struct PosixThread *)tib->tib_pthread) &&
-             pt->attr.__stacksize) {
-    bottom = (long)pt->attr.__stackaddr + pt->attr.__guardsize;
+             pt->pt_attr.__stacksize) {
+    bottom = (long)pt->pt_attr.__stackaddr + pt->pt_attr.__guardsize;
   } else {
     return want;
   }

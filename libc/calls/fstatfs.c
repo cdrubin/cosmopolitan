@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -32,7 +32,7 @@
  *
  * @return 0 on success, or -1 w/ errno
  * @raise ENOTSUP if /zip path
- * @cancellationpoint
+ * @cancelationpoint
  */
 int fstatfs(int fd, struct statfs *sf) {
 #pragma GCC push_options
@@ -41,7 +41,7 @@ int fstatfs(int fd, struct statfs *sf) {
   CheckLargeStackAllocation(&m, sizeof(m));
 #pragma GCC pop_options
   int rc;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
     rc = enotsup();
@@ -55,7 +55,7 @@ int fstatfs(int fd, struct statfs *sf) {
     rc = ebadf();
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("fstatfs(%d, [%s]) → %d% m", fd, DescribeStatfs(rc, sf));
   return rc;
 }

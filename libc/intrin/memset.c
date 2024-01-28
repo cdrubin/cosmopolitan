@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
@@ -29,7 +28,6 @@ typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
 typedef long long xmm_a __attribute__((__vector_size__(16), __aligned__(16)));
 static void *memset_sse(char *p, char c, size_t n) {
   xmm_t v = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
-  if (IsAsan()) __asan_verify(p, n);
   if (n <= 32) {
     *(xmm_t *)(p + n - 16) = v;
     *(xmm_t *)p = v;
@@ -50,7 +48,6 @@ static void *memset_sse(char *p, char c, size_t n) {
 _Microarchitecture("avx") static void *memset_avx(char *p, char c, size_t n) {
   char *t;
   xmm_t v = {c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};
-  if (IsAsan()) __asan_verify(p, n);
   if (n <= 32) {
     *(xmm_t *)(p + n - 16) = v;
     *(xmm_t *)p = v;

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -27,20 +27,19 @@
  *
  * @param fd is vetted by close()
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 int __zipos_close(int fd) {
   int rc;
-  struct ZiposHandle *h;
-  h = (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle;
   if (!IsWindows()) {
     rc = sys_close(fd);
   } else {
     rc = 0;  // no system file descriptor needed on nt
   }
   if (!__vforked) {
-    __zipos_free(h);
+    struct ZiposHandle *h;
+    h = (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle;
+    __zipos_drop(h);
   }
   return rc;
 }

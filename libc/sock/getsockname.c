@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -50,7 +50,7 @@ static int __getsockpeername(int fd, struct sockaddr *out_addr,
           // The socket has not been bound to an address with bind, or
           // ADDR_ANY is specified in bind but connection has not yet
           // occurred. -MSDN
-          ss.ss_family = ((struct SockFd *)g_fds.p[fd].extra)->family;
+          ss.ss_family = g_fds.p[fd].family;
           rc = 0;
         } else {
           rc = __winsockerr();

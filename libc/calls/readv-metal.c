@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -26,7 +26,6 @@
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/vga/vga.internal.h"
-
 #ifdef __x86_64__
 
 ssize_t sys_readv_metal(int fd, const struct iovec *iov, int iovlen) {

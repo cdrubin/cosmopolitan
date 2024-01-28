@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
 #ifndef __aarch64__
@@ -94,7 +93,6 @@ static const char *strchrnul_x64(const char *p, uint64_t c) {
  *     NUL terminator if c is not found
  */
 char *strchrnul(const char *s, int c) {
-  if (IsAsan()) __asan_verify_str(s);
 #if defined(__x86_64__) && !defined(__chibicc__)
   const char *r;
   if (X86_HAVE(SSE)) {

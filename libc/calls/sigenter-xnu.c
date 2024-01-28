@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -486,9 +486,14 @@ static privileged void linuxssefpustate2xnu(
 
 #endif /* __x86_64__ */
 
+#ifdef __x86_64__
 privileged void __sigenter_xnu(void *fn, int infostyle, int sig,
                                struct siginfo_xnu *xnuinfo,
                                struct __darwin_ucontext *xnuctx) {
+#else
+privileged void __sigenter_xnu(int sig, struct siginfo_xnu *xnuinfo,
+                               struct __darwin_ucontext *xnuctx) {
+#endif
 #pragma GCC push_options
 #pragma GCC diagnostic ignored "-Wframe-larger-than="
   struct Goodies {
@@ -507,8 +512,7 @@ privileged void __sigenter_xnu(void *fn, int infostyle, int sig,
       __repstosb(&g, 0, sizeof(g));
 
       if (xnuctx) {
-        g.uc.uc_sigmask.__bits[0] = xnuctx->uc_sigmask;
-        g.uc.uc_sigmask.__bits[1] = 0;
+        g.uc.uc_sigmask = xnuctx->uc_sigmask;
         g.uc.uc_stack.ss_sp = xnuctx->uc_stack.ss_sp;
         g.uc.uc_stack.ss_flags = xnuctx->uc_stack.ss_flags;
         g.uc.uc_stack.ss_size = xnuctx->uc_stack.ss_size;
@@ -546,7 +550,7 @@ privileged void __sigenter_xnu(void *fn, int infostyle, int sig,
         xnuctx->uc_stack.ss_sp = g.uc.uc_stack.ss_sp;
         xnuctx->uc_stack.ss_flags = g.uc.uc_stack.ss_flags;
         xnuctx->uc_stack.ss_size = g.uc.uc_stack.ss_size;
-        xnuctx->uc_sigmask = g.uc.uc_sigmask.__bits[0];
+        xnuctx->uc_sigmask = g.uc.uc_sigmask;
 #ifdef __x86_64__
         if (xnuctx->uc_mcontext) {
           if (xnuctx->uc_mcsize >=
@@ -580,15 +584,6 @@ privileged void __sigenter_xnu(void *fn, int infostyle, int sig,
                : "=a"(ax)
                : "0"(0x20000b8 /* sigreturn */), "D"(xnuctx), "S"(infostyle)
                : "rcx", "r11", "memory", "cc");
-#else
-  register long r0 asm("x0") = (long)xnuctx;
-  register long r1 asm("x1") = (long)infostyle;
-  asm volatile("mov\tx16,%0\n\t"
-               "svc\t0"
-               : /* no outputs */
-               : "i"(0x0b8 /* sigreturn */), "r"(r0), "r"(r1)
-               : "x16", "memory");
-#endif /* __x86_64__ */
-
   notpossible;
+#endif /* __x86_64__ */
 }

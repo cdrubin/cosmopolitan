@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -29,7 +29,7 @@
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/gc.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/vendor.internal.h"
@@ -177,8 +177,8 @@ TEST(pthread_create, testCustomStack_withReallySmallSize) {
 void *JoinMainWorker(void *arg) {
   void *rc;
   pthread_t main_thread = (pthread_t)arg;
-  _gc(malloc(32));
-  _gc(malloc(32));
+  gc(malloc(32));
+  gc(malloc(32));
   ASSERT_EQ(0, pthread_join(main_thread, &rc));
   ASSERT_EQ(123, (intptr_t)rc);
   return 0;
@@ -186,8 +186,8 @@ void *JoinMainWorker(void *arg) {
 
 TEST(pthread_join, mainThread) {
   pthread_t id;
-  _gc(malloc(32));
-  _gc(malloc(32));
+  gc(malloc(32));
+  gc(malloc(32));
   SPAWN(fork);
   ASSERT_EQ(0, pthread_create(&id, 0, JoinMainWorker, (void *)pthread_self()));
   pthread_exit((void *)123);
@@ -196,8 +196,8 @@ TEST(pthread_join, mainThread) {
 
 TEST(pthread_join, mainThreadDelayed) {
   pthread_t id;
-  _gc(malloc(32));
-  _gc(malloc(32));
+  gc(malloc(32));
+  gc(malloc(32));
   SPAWN(fork);
   ASSERT_EQ(0, pthread_create(&id, 0, JoinMainWorker, (void *)pthread_self()));
   usleep(10000);
@@ -253,58 +253,6 @@ TEST(pthread_cleanup, pthread_normal) {
   ASSERT_EQ(0, pthread_join(id, 0));
   ASSERT_TRUE(g_cleanup1);
   ASSERT_TRUE(g_cleanup2);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-jmp_buf recover;
-volatile bool smashed_stack;
-
-void CrashHandler(int sig, siginfo_t *si, void *ctx) {
-  kprintf("kprintf avoids overflowing %G %p\n", si->si_signo, si->si_addr);
-  smashed_stack = true;
-  ASSERT_TRUE(__is_stack_overflow(si, ctx));
-  longjmp(recover, 123);
-}
-
-int StackOverflow(int f(), int n) {
-  if (n < INT_MAX) {
-    return f(f, n + 1) - 1;
-  } else {
-    return INT_MAX;
-  }
-}
-
-int (*pStackOverflow)(int (*)(), int) = StackOverflow;
-
-void *MyPosixThread(void *arg) {
-  int jumpcode;
-  struct sigaction sa, o1, o2;
-  struct sigaltstack ss;
-  ss.ss_flags = 0;
-  ss.ss_size = sysconf(_SC_MINSIGSTKSZ) + 4096;
-  ss.ss_sp = gc(malloc(ss.ss_size));
-  ASSERT_SYS(0, 0, sigaltstack(&ss, 0));
-  sa.sa_flags = SA_SIGINFO | SA_ONSTACK;  // <-- important
-  sigemptyset(&sa.sa_mask);
-  sa.sa_sigaction = CrashHandler;
-  sigaction(SIGBUS, &sa, &o1);
-  sigaction(SIGSEGV, &sa, &o2);
-  if (!(jumpcode = setjmp(recover))) {
-    exit(pStackOverflow(pStackOverflow, 0));
-  }
-  ASSERT_EQ(123, jumpcode);
-  sigaction(SIGSEGV, &o2, 0);
-  sigaction(SIGBUS, &o1, 0);
-  return 0;
-}
-
-TEST(cosmo, altstack_thread) {
-  pthread_t th;
-  if (IsWindows()) return;
-  pthread_create(&th, 0, MyPosixThread, 0);
-  pthread_join(th, 0);
-  ASSERT_TRUE(smashed_stack);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

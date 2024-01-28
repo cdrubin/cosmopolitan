@@ -2,7 +2,6 @@
 #define COSMOPOLITAN_LIBC_CALLS_STRUCT_TIMEVAL_H_
 #include "libc/calls/struct/timespec.h"
 #include "libc/time/struct/timezone.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 struct timeval {
@@ -39,14 +38,36 @@ static inline struct timeval timeval_fromseconds(int64_t __x) {
 static inline struct timespec timeval_totimespec(struct timeval __tv) {
   return (struct timespec){__tv.tv_sec, __tv.tv_usec * 1000};
 }
-static inline bool timeval_iszero(struct timeval __tv) {
+static inline int timeval_iszero(struct timeval __tv) {
   return !(__tv.tv_sec | __tv.tv_usec);
 }
-static inline bool timeval_isvalid(struct timeval __tv) {
+static inline int timeval_isvalid(struct timeval __tv) {
   return __tv.tv_sec >= 0 && __tv.tv_usec + 0ull < 1000000ull;
 }
 #endif /* _COSMO_SOURCE */
 
+#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
+#define timerisset(t) ((t)->tv_sec || (t)->tv_usec)
+#define timerclear(t) ((t)->tv_sec = (t)->tv_usec = 0)
+#define timercmp(s, t, op)                                  \
+  ((s)->tv_sec == (t)->tv_sec ? (s)->tv_usec op(t)->tv_usec \
+                              : (s)->tv_sec op(t)->tv_sec)
+#define timeradd(s, t, a)                                           \
+  (void)((a)->tv_sec = (s)->tv_sec + (t)->tv_sec,                   \
+         ((a)->tv_usec = (s)->tv_usec + (t)->tv_usec) >= 1000000 && \
+             ((a)->tv_usec -= 1000000, (a)->tv_sec++))
+#define timersub(s, t, a)                                    \
+  (void)((a)->tv_sec = (s)->tv_sec - (t)->tv_sec,            \
+         ((a)->tv_usec = (s)->tv_usec - (t)->tv_usec) < 0 && \
+             ((a)->tv_usec += 1000000, (a)->tv_sec--))
+#endif
+
+#ifdef _GNU_SOURCE
+#define TIMEVAL_TO_TIMESPEC(tv, ts) \
+  ((ts)->tv_sec = (tv)->tv_sec, (ts)->tv_nsec = (tv)->tv_usec * 1000, (void)0)
+#define TIMESPEC_TO_TIMEVAL(tv, ts) \
+  ((tv)->tv_sec = (ts)->tv_sec, (tv)->tv_usec = (ts)->tv_nsec / 1000, (void)0)
+#endif
+
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_STRUCT_TIMEVAL_H_ */

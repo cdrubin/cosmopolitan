@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 sw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -28,10 +28,9 @@
 //	@param	esi is returned by setjmp() invocation (coerced nonzero)
 //	@assume	system five nexgen32e abi conformant
 //	@see	examples/ctrlc.c
-//	@threadsafe
 //	@noreturn
 	.ftrace1
-_gclongjmp:
+gclongjmp:
 	.ftrace2
 #ifdef __x86_64__
 	push	%rbp
@@ -66,4 +65,4 @@ _gclongjmp:
 #else
 #error "unsupported architecture"
 #endif /* __x86_64__ */
-	.endfn	_gclongjmp,globl
+	.endfn	gclongjmp,globl

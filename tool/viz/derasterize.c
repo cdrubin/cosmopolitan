@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -22,13 +22,12 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
-#include "libc/fmt/fmt.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/runtime/runtime.h"
@@ -552,8 +551,8 @@ static int ParseNumberOption(const char *arg) {
   return x;
 }
 
-static void PrintUsage(int rc, FILE *f) {
-  fputs(HELPTEXT, f);
+static void PrintUsage(int rc, int fd) {
+  tinyprint(fd, HELPTEXT, NULL);
   exit(rc);
 }
 
@@ -574,9 +573,12 @@ static void GetOpts(int argc, char *argv[]) {
         break;
       case '?':
       case 'H':
-        PrintUsage(EXIT_SUCCESS, stdout);
       default:
-        PrintUsage(EX_USAGE, stderr);
+        if (opt == optopt) {
+          PrintUsage(EXIT_SUCCESS, STDOUT_FILENO);
+        } else {
+          PrintUsage(EX_USAGE, STDERR_FILENO);
+        }
     }
   }
 }

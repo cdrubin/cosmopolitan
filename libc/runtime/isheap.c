@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -20,13 +20,16 @@
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 
+// TODO(jart): DELETE
+
 /**
  * Returns true if address isn't stack and was malloc'd or mmap'd.
  *
  * @assume stack addresses are always greater than heap addresses
  * @assume stack memory isn't stored beneath %rsp (-mno-red-zone)
+ * @deprecated
  */
-optimizesize bool _isheap(void *p) {
+optimizesize bool32 _isheap(void *p) {
   intptr_t x, y;
   x = kAutomapStart;
   y = x + kAutomapSize;

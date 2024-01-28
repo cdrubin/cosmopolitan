@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,21 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/nt/thunk/msabi.h"
-#include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/syscall_fd.internal.h"
+#ifdef __x86_64__
 
 __msabi extern typeof(__sys_bind_nt) *const __imp_bind;
 
-textwindows int sys_bind_nt(struct Fd *fd, const void *addr,
-                            uint32_t addrsize) {
-  unassert(fd->kind == kFdSocket);
-  if (__imp_bind(fd->handle, addr, addrsize) != -1) {
+textwindows int sys_bind_nt(struct Fd *f, const void *addr, uint32_t addrsize) {
+  if (__imp_bind(f->handle, addr, addrsize) != -1) {
+    f->isbound = true;
     return 0;
   } else {
     return __winsockerr();
   }
 }
+
+#endif /* __x86_64__ */

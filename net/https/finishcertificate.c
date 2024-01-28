@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -37,8 +37,8 @@ struct Cert FinishCertificate(struct Cert *ca, mbedtls_x509write_cert *wcert,
   if ((rc = mbedtls_pk_check_pair(&cert->pk, key))) {
     FATALF("generate key (grep -0x%04x)", -rc);
   }
-  LogCertificate(_gc(xasprintf("generated %s certificate",
-                               mbedtls_pk_get_name(&cert->pk))),
-                 cert);
+  LogCertificate(
+      gc(xasprintf("generated %s certificate", mbedtls_pk_get_name(&cert->pk))),
+      cert);
   return (struct Cert){cert, key};
 }

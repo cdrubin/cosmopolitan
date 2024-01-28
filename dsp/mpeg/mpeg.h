@@ -1,9 +1,7 @@
 #ifndef COSMOPOLITAN_DSP_MPEG_MPEG_H_
 #define COSMOPOLITAN_DSP_MPEG_MPEG_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
+#include "libc/stdio/stdio.h"
 COSMOPOLITAN_C_START_
-
-struct FILE;
 
 typedef struct plm_t plm_t;
 typedef struct plm_buffer_t plm_buffer_t;
@@ -113,7 +111,7 @@ plm_t *plm_create_with_filename(const char *filename);
  * to let plmpeg call fclose() on the handle when plm_destroy() is
  * called.
  */
-plm_t *plm_create_with_file(struct FILE *fh, int close_when_done);
+plm_t *plm_create_with_file(FILE *fh, int close_when_done);
 
 /**
  * Create a plmpeg instance with pointer to memory as source. This assumes the
@@ -258,7 +256,7 @@ plm_buffer_t *plm_buffer_create_with_filename(const char *filename);
  * to let plmpeg call fclose() on the handle when plm_destroy() is
  * called.
  */
-plm_buffer_t *plm_buffer_create_with_file(struct FILE *fh, int close_when_done);
+plm_buffer_t *plm_buffer_create_with_file(FILE *fh, int close_when_done);
 
 /**
  * Create a buffer instance with a pointer to memory as source. This assumes
@@ -446,5 +444,4 @@ plm_samples_t *plm_audio_decode(plm_audio_t *self);
 extern long plmpegdecode_latency_;
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_DSP_MPEG_MPEG_H_ */

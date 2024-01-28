@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -25,7 +25,7 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/bits.h"
+#include "libc/serialize.h"
 #include "libc/intrin/getenv.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/limits.h"
@@ -96,10 +96,18 @@ static wontreturn void UnsupportedSyntax(unsigned char c) {
 }
 
 static void Open(const char *path, int fd, int flags) {
-  close(fd);
-  if (open(path, flags, 0644) == -1) {
+  int tmpfd;
+  // use open+dup2 to support things like >/dev/stdout
+  if ((tmpfd = open(path, flags, 0644)) == -1) {
     perror(path);
     _Exit(1);
+  }
+  if (tmpfd != fd) {
+    if (dup2(tmpfd, fd) == -1) {
+      perror("dup2");
+      _Exit(1);
+    }
+    close(tmpfd);
   }
 }
 
@@ -297,9 +305,11 @@ static int Chmod(void) {
 }
 
 static int Pwd(void) {
-  char path[PATH_MAX + 2];
-  if (getcwd(path, PATH_MAX)) {
-    strlcat(path, "\n", sizeof(path));
+  int got;
+  char path[PATH_MAX];
+  if ((got = __getcwd(path, PATH_MAX - 1)) != -1) {
+    path[got - 1] = '\n';
+    path[got] = 0;
     Write(1, path);
     return 0;
   } else {
@@ -590,13 +600,17 @@ static int Shift(int i) {
   return 0;
 }
 
-static int Fake(int main(int, char **)) {
+static int Fake(int main(int, char **), bool wantexec) {
   int pid;
+  if (wantexec) {
+    goto RunProgram;
+  }
   if ((pid = fork()) == -1) {
     perror("fork");
     return 127;
   }
   if (!pid) {
+  RunProgram:
     // TODO(jart): Maybe nuke stdio too?
     if (_weaken(optind)) {
       *_weaken(optind) = 1;
@@ -660,7 +674,7 @@ static wontreturn void Exec(void) {
   }
 }
 
-static int TryBuiltin(void) {
+static int TryBuiltin(bool wantexec) {
   if (!n) return exitstatus;
   if (!strcmp(args[0], "exit")) Exit();
   if (!strcmp(args[0], "exec")) Exec();
@@ -686,16 +700,24 @@ static int TryBuiltin(void) {
   if (!strcmp(args[0], "mktemp")) return Mktemp();
   if (!strcmp(args[0], "usleep")) return Usleep();
   if (!strcmp(args[0], "toupper")) return Toupper();
-  if (_weaken(_tr) && !strcmp(args[0], "tr")) return Fake(_weaken(_tr));
-  if (_weaken(_sed) && !strcmp(args[0], "sed")) return Fake(_weaken(_sed));
-  if (_weaken(_awk) && !strcmp(args[0], "awk")) return Fake(_weaken(_awk));
-  if (_weaken(_curl) && !strcmp(args[0], "curl")) return Fake(_weaken(_curl));
+  if (_weaken(_tr) && !strcmp(args[0], "tr")) {
+    return Fake(_weaken(_tr), wantexec);
+  }
+  if (_weaken(_sed) && !strcmp(args[0], "sed")) {
+    return Fake(_weaken(_sed), wantexec);
+  }
+  if (_weaken(_awk) && !strcmp(args[0], "awk")) {
+    return Fake(_weaken(_awk), wantexec);
+  }
+  if (_weaken(_curl) && !strcmp(args[0], "curl")) {
+    return Fake(_weaken(_curl), wantexec);
+  }
   return -1;
 }
 
 static int ShellExec(void) {
   int rc;
-  if ((rc = TryBuiltin()) == -1) {
+  if ((rc = TryBuiltin(true)) == -1) {
     rc = SystemExec();
   }
   return (n = 0), rc;
@@ -718,14 +740,15 @@ static void Pipe(void) {
     if (pfds[1] != 1) unassert(!close(pfds[1]));
     _Exit(ShellExec());
   }
-  unassert(!dup2(pfds[0], 0));
-  if (pfds[1]) unassert(!close(pfds[1]));
+  unassert(dup2(pfds[0], 0) == 0);
+  if (pfds[0] != 0) unassert(!close(pfds[0]));
+  if (pfds[1] != 0) unassert(!close(pfds[1]));
   n = 0;
 }
 
 static int ShellSpawn(void) {
   int rc, pid;
-  if ((rc = TryBuiltin()) == -1) {
+  if ((rc = TryBuiltin(false)) == -1) {
     switch ((pid = fork())) {
       case 0:
         _Exit(SystemExec());
@@ -769,7 +792,7 @@ static const char *GetVar(const char *key) {
   } else if (key[0] == '?' && !key[1]) {
     return IntToStr(exitstatus);
   } else if (!strcmp(key, "PWD")) {
-    npassert(getcwd(vbuf, sizeof(vbuf)));
+    npassert(__getcwd(vbuf, sizeof(vbuf)) != -1);
     return vbuf;
   } else if (!strcmp(key, "UID")) {
     FormatInt32(vbuf, getuid());

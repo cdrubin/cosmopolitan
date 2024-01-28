@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,15 +18,16 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dos.internal.h"
 #include "libc/elf/def.h"
-#include "libc/fmt/conv.h"
+#include "libc/fmt/wintime.internal.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/mem/gc.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/nt/enum/fileflagandattributes.h"
 #include "libc/runtime/zipos.internal.h"
+#include "libc/serialize.h"
 #include "libc/stdio/rand.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/s.h"
@@ -202,9 +203,9 @@ void elfwriter_zip(struct ElfWriter *elf, const char *symbol, const char *cname,
   EmitZipLfileHdr(lfile, name, namesize, crc, era, gflags, method, mtime, mdate,
                   compsize, uncompsize);
   elfwriter_commit(elf, lfilehdrsize + compsize);
-  lfilesym = elfwriter_appendsym(
-      elf, _gc(xasprintf("%s%s", "zip+lfile:", name)),
-      ELF64_ST_INFO(STB_LOCAL, STT_OBJECT), STV_DEFAULT, 0, lfilehdrsize);
+  lfilesym = elfwriter_appendsym(elf, gc(xasprintf("%s%s", "zip+lfile:", name)),
+                                 ELF64_ST_INFO(STB_LOCAL, STT_OBJECT),
+                                 STV_DEFAULT, 0, lfilehdrsize);
   elfwriter_appendsym(elf, symbol, ELF64_ST_INFO(STB_GLOBAL, STT_OBJECT),
                       STV_DEFAULT, lfilehdrsize, compsize);
   elfwriter_finishsection(elf);
@@ -216,7 +217,7 @@ void elfwriter_zip(struct ElfWriter *elf, const char *symbol, const char *cname,
       (cfile = elfwriter_reserve(elf, ZIP_CFILE_HDR_SIZE + namesize)), name,
       namesize, crc, era, gflags, method, mtime, mdate, iattrs, dosmode, mode,
       compsize, uncompsize, commentsize, mtim, atim, ctim);
-  elfwriter_appendsym(elf, _gc(xasprintf("%s%s", "zip+cdir:", name)),
+  elfwriter_appendsym(elf, gc(xasprintf("%s%s", "zip+cdir:", name)),
                       ELF64_ST_INFO(STB_LOCAL, STT_OBJECT), STV_DEFAULT, 0,
                       ZIP_CFILE_HDR_SIZE + namesize);
   elfwriter_appendrela(elf, kZipCfileOffsetOffset, lfilesym,

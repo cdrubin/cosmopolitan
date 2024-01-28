@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -22,11 +22,11 @@
 #include "libc/calls/sig.internal.h"
 #include "libc/calls/state.internal.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
@@ -41,45 +41,44 @@
 #include "libc/nt/thread.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/struct/pollfd.h"
 #include "libc/sock/struct/pollfd.internal.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/poll.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/tls.h"
-
 #ifdef __x86_64__
+
+#define POLL_INTERVAL_MS 10
 
 // Polls on the New Technology.
 //
 // This function is used to implement poll() and select(). You may poll
-// on both sockets and files at the same time. We also poll for signals
-// while poll is polling.
-textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint32_t *ms,
-                            const sigset_t *sigmask) {
+// on sockets, files and the console at the same time. We also poll for
+// both signals and posix thread cancelation, while the poll is polling
+static textwindows int sys_poll_nt_impl(struct pollfd *fds, uint64_t nfds,
+                                        uint32_t *ms, sigset_t sigmask) {
   bool ok;
-  uint64_t m;
-  bool interrupted;
-  sigset_t oldmask;
+  uint64_t millis;
   uint32_t cm, avail, waitfor;
   struct sys_pollfd_nt pipefds[8];
   struct sys_pollfd_nt sockfds[64];
   int pipeindices[ARRAYLEN(pipefds)];
   int sockindices[ARRAYLEN(sockfds)];
+  struct timespec started, deadline, remain, now;
   int i, rc, sn, pn, gotinvals, gotpipes, gotsocks;
 
-#if IsModeDbg()
-  struct timespec noearlier =
-      timespec_add(timespec_real(), timespec_frommillis(ms ? *ms : -1u));
-#endif
+  started = timespec_real();
+  deadline = timespec_add(started, timespec_frommillis(ms ? *ms : -1u));
 
   // do the planning
   // we need to read static variables
   // we might need to spawn threads and open pipes
-  m = atomic_exchange(&__get_tls()->tib_sigmask, -1);
   __fds_lock();
   for (gotinvals = rc = sn = pn = i = 0; i < nfds; ++i) {
     if (fds[i].fd < 0) continue;
@@ -114,7 +113,7 @@ textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint32_t *ms,
             pipefds[pn].events = fds[i].events & (POLLIN | POLLOUT);
             break;
           default:
-            __builtin_unreachable();
+            break;
         }
         ++pn;
       } else {
@@ -127,10 +126,9 @@ textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint32_t *ms,
     }
   }
   __fds_unlock();
-  atomic_store_explicit(&__get_tls()->tib_sigmask, m, memory_order_release);
   if (rc) {
     // failed to create a polling solution
-    goto Finished;
+    return rc;
   }
 
   // perform the i/o and sleeping and looping
@@ -155,8 +153,8 @@ textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint32_t *ms,
             pipefds[i].revents |= POLLERR;
           }
         } else if (GetConsoleMode(pipefds[i].handle, &cm)) {
-          if (CountConsoleInputBytes(pipefds[i].handle)) {
-            pipefds[i].revents |= POLLIN;
+          if (CountConsoleInputBytes()) {
+            pipefds[i].revents |= POLLIN;  // both >0 and -1 (eof) are pollin
           }
         } else {
           // we have no way of polling if a non-socket is readable yet
@@ -177,26 +175,30 @@ textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint32_t *ms,
     } else {
       gotsocks = 0;
     }
-    waitfor = MIN(__SIG_POLL_INTERVAL_MS, *ms);
-    if (!gotinvals && !gotsocks && !gotpipes && waitfor) {
-      POLLTRACE("poll() sleeping for %'d out of %'u ms", waitfor, *ms);
-      struct PosixThread *pt = _pthread_self();
-      pt->abort_errno = 0;
-      if (sigmask) __sig_mask(SIG_SETMASK, sigmask, &oldmask);
-      interrupted = _check_interrupts(0) || __pause_thread(waitfor);
-      if (sigmask) __sig_mask(SIG_SETMASK, &oldmask, 0);
-      if (interrupted) return -1;
-      if (*ms != -1u) {
-        if (waitfor < *ms) {
-          *ms -= waitfor;
-        } else {
-          *ms = 0;
+
+    // add some artificial delay, which we use as an opportunity to also
+    // check for pending signals, thread cancelation, etc.
+    waitfor = 0;
+    if (!gotinvals && !gotsocks && !gotpipes) {
+      now = timespec_real();
+      if (timespec_cmp(now, deadline) < 0) {
+        remain = timespec_sub(deadline, now);
+        millis = timespec_tomillis(remain);
+        waitfor = MIN(millis, 0xffffffffu);
+        waitfor = MIN(waitfor, POLL_INTERVAL_MS);
+        if (waitfor) {
+          POLLTRACE("poll() sleeping for %'d out of %'lu ms", waitfor,
+                    timespec_tomillis(remain));
+          if ((rc = _park_norestart(waitfor, sigmask)) == -1) {
+            return -1;  // eintr, ecanceled, etc.
+          }
         }
       }
     }
+
     // we gave all the sockets and all the named pipes a shot
     // if we found anything at all then it's time to end work
-    if (gotinvals || gotpipes || gotsocks || !*ms) {
+    if (gotinvals || gotpipes || gotsocks || !waitfor) {
       break;
     }
   }
@@ -218,18 +220,15 @@ textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint32_t *ms,
   }
 
   // and finally return
-  rc = gotinvals + gotpipes + gotsocks;
+  return gotinvals + gotpipes + gotsocks;
+}
 
-Finished:
-
-#if IsModeDbg()
-  struct timespec ended = timespec_real();
-  if (!rc && timespec_cmp(ended, noearlier) < 0) {
-    STRACE("poll() ended %'ld ns too soon!",
-           timespec_tonanos(timespec_sub(noearlier, ended)));
-  }
-#endif
-
+textwindows int sys_poll_nt(struct pollfd *fds, uint64_t nfds, uint32_t *ms,
+                            const sigset_t *sigmask) {
+  int rc;
+  BLOCK_SIGNALS;
+  rc = sys_poll_nt_impl(fds, nfds, ms, sigmask ? *sigmask : 0);
+  ALLOW_SIGNALS;
   return rc;
 }
 

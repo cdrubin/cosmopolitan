@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,7 +16,6 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/bo.internal.h"
 #include "libc/calls/cp.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
@@ -60,15 +59,14 @@
  *     was determined about the file descriptor
  * @raise ECANCELED if thread was cancelled in masked mode
  * @raise EINTR if signal was delivered
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
- * @threadsafe
  * @norestart
  */
 int poll(struct pollfd *fds, size_t nfds, int timeout_ms) {
   int rc;
   size_t n;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (IsAsan() &&
       (ckd_mul(&n, nfds, sizeof(struct pollfd)) || !__asan_is_valid(fds, n))) {
@@ -80,13 +78,11 @@ int poll(struct pollfd *fds, size_t nfds, int timeout_ms) {
       rc = sys_poll_metal(fds, nfds, timeout_ms);
     }
   } else {
-    BEGIN_BLOCKING_OPERATION;
     uint32_t ms = timeout_ms >= 0 ? timeout_ms : -1u;
     rc = sys_poll_nt(fds, nfds, &ms, 0);
-    END_BLOCKING_OPERATION;
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("poll(%s, %'zu, %'d) → %d% lm", DescribePollFds(rc, fds, nfds), nfds,
          timeout_ms, rc);
   return rc;

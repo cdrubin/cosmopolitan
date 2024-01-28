@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -39,7 +39,6 @@
  * @param n is byte length of deflated data
  * @param m is byte length of inflated data
  * @return pointer to inflated data
- * @threadsafe
  */
 void *xload(_Atomic(void *) *a, const void *p, size_t n, size_t m) {
   void *r, *z;

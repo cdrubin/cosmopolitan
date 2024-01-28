@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_INTRIN_GETENV_H_
 #define COSMOPOLITAN_LIBC_INTRIN_GETENV_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 struct Env {
@@ -8,8 +7,7 @@ struct Env {
   int i;
 };
 
-struct Env __getenv(char **, const char *);
+struct Env __getenv(char **, const char *) libcesque;
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_INTRIN_GETENV_H_ */

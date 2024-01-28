@@ -1,4 +1,3 @@
-// clang-format off
 /*
 *	$Id: vim.c 762 2010-07-28 11:38:19Z dfishburn $
 *
@@ -25,7 +24,6 @@
 #include "libc/calls/calls.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "third_party/musl/tempnam.h"

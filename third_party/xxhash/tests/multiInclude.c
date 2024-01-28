@@ -1,4 +1,3 @@
-// clang-format off
 /*
  * Multi-include test program
  * Validates that xxhash.h can be included multiple times and in any order
@@ -28,7 +27,6 @@
 
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"

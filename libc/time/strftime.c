@@ -1,5 +1,5 @@
 /*-*- mode:c; indent-tabs-mode:t; tab-width:8; coding:utf-8                 -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright (c) 1989 The Regents of the University of California.              │
 │ All rights reserved.                                                         │
@@ -16,7 +16,6 @@
 │ IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED               │
 │ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.          │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/fmt.h"
 #include "libc/inttypes.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/locale.h"

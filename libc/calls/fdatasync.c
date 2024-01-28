@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -29,6 +29,11 @@
 /**
  * Blocks until kernel flushes non-metadata buffers for fd to disk.
  *
+ * NOTE: For `IsXnu()` it's recommended that `fcntl(F_FULLFSYNC)` be
+ * favored instead of this function, and if that fails, the fallback
+ * path should call `fsync()` see the SQLite codebase. In the future
+ * Cosmopolitan might do this automatically.
+ *
  * @return 0 on success, or -1 w/ errno
  * @raise ECANCELED if thread was cancelled in masked mode
  * @raise EROFS if `fd` is on a read-only filesystem e.g. /zip
@@ -37,15 +42,15 @@
  * @raise EBADF if `fd` isn't an open file
  * @raise EINTR if signal was delivered
  * @raise EIO if an i/o error happened
- * @see sync(), fsync(), sync_file_range()
  * @see __nosync to secretly disable
- * @cancellationpoint
+ * @see sync(), fsync()
+ * @cancelationpoint
  * @asyncsignalsafe
  */
 int fdatasync(int fd) {
   int rc;
   bool fake = __nosync == 0x5453455454534146;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
   if (__isfdkind(fd, kFdZip)) {
     rc = erofs();
   } else if (!IsWindows()) {
@@ -57,7 +62,7 @@ int fdatasync(int fd) {
   } else {
     rc = sys_fdatasync_nt(fd, fake);
   }
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("fdatasync%s(%d) → %d% m", fake ? "_fake" : "", fd, rc);
   return rc;
 }

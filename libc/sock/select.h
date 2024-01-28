@@ -7,7 +7,6 @@
 
 #define FD_SETSIZE 1024 /* it's 64 on windows */
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 typedef struct fd_set {
@@ -20,10 +19,9 @@ typedef struct fd_set {
 #define FD_ZERO(SET)      bzero((SET)->fds_bits, sizeof((SET)->fds_bits))
 #define FD_SIZE(bits)     (((bits) + (sizeof(long) * 8) - 1) / sizeof(long))
 
-int select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
+int select(int, fd_set *, fd_set *, fd_set *, struct timeval *) libcesque;
 int pselect(int, fd_set *, fd_set *, fd_set *, const struct timespec *,
-            const sigset_t *);
+            const sigset_t *) libcesque;
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_SOCK_SELECT_H_ */

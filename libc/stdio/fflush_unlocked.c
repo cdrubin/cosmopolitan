@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=8 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=8 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/cxxabi.h"
 #include "libc/errno.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/pushpop.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/arraylist.internal.h"
@@ -111,7 +111,7 @@ textstartup int __fflush_register(FILE *f) {
   if (!sf->handles.p) {
     sf->handles.p = sf->handles_initmem;
     pushmov(&sf->handles.n, ARRAYLEN(sf->handles_initmem));
-    __cxa_atexit(fflush_unlocked, 0, 0);
+    __cxa_atexit((void *)fflush_unlocked, 0, 0);
   }
   for (i = sf->handles.i; i; --i) {
     if (!sf->handles.p[i - 1]) {

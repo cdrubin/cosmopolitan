@@ -1,5 +1,4 @@
 // -*- C++ -*-
-// clang-format off
 //===------------------------- execution ---------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -14,7 +13,7 @@
 #include "third_party/libcxx/__config"
 
 #if defined(_LIBCPP_HAS_PARALLEL_ALGORITHMS) && _LIBCPP_STD_VER >= 17
-# include "third_party/libcxx/__pstl_execution"
+//# include "third_party/libcxx/__pstl_execution"
 #endif
 
 #endif // _LIBCPP_EXECUTION

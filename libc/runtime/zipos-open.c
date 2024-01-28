@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,11 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/calls/blocksigs.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
 #include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
@@ -31,11 +31,14 @@
 #include "libc/intrin/cmpxchg.h"
 #include "libc/intrin/directmap.internal.h"
 #include "libc/intrin/extend.internal.h"
+#include "libc/intrin/likely.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/limits.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/zipos.internal.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/fd.h"
 #include "libc/sysv/consts/map.h"
@@ -47,6 +50,8 @@
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 #include "libc/zip.internal.h"
+
+#define MAX_REFS SSIZE_MAX
 
 static char *__zipos_mapend;
 static size_t __zipos_maptotal;
@@ -77,7 +82,17 @@ static void *__zipos_mmap_space(size_t mapsize) {
   return start + offset;
 }
 
-void __zipos_free(struct ZiposHandle *h) {
+struct ZiposHandle *__zipos_keep(struct ZiposHandle *h) {
+  size_t refs = atomic_fetch_add_explicit(&h->refs, 1, memory_order_relaxed);
+  unassert(!VERY_UNLIKELY(refs > MAX_REFS));
+  return h;
+}
+
+void __zipos_drop(struct ZiposHandle *h) {
+  if (atomic_fetch_sub_explicit(&h->refs, 1, memory_order_release)) {
+    return;
+  }
+  atomic_thread_fence(memory_order_acquire);
   if (IsAsan()) {
     __asan_poison((char *)h + sizeof(struct ZiposHandle),
                   h->mapsize - sizeof(struct ZiposHandle), kAsanHeapFree);
@@ -99,7 +114,7 @@ StartOver:
   while ((h = *ph)) {
     if (h->mapsize >= mapsize) {
       if (!_cmpxchg(ph, h, h->next)) goto StartOver;
-      h->next = 0;
+      atomic_store_explicit(&h->refs, 0, memory_order_relaxed);
       break;
     }
     ph = &h->next;
@@ -141,7 +156,6 @@ static int __zipos_setfd(int fd, struct ZiposHandle *h, unsigned flags) {
   g_fds.p[fd].kind = kFdZip;
   g_fds.p[fd].handle = (intptr_t)h;
   g_fds.p[fd].flags = flags | O_CLOEXEC;
-  g_fds.p[fd].extra = 0;
   __fds_unlock();
   return fd;
 }
@@ -181,8 +195,9 @@ static int __zipos_load(struct Zipos *zipos, size_t cf, int flags,
         return eio();
     }
   }
-  h->pos = 0;
+  atomic_store_explicit(&h->pos, 0, memory_order_relaxed);
   h->cfile = cf;
+  unassert(size < SIZE_MAX);
   h->size = size;
   if (h->mem) {
     minfd = 3;
@@ -205,8 +220,29 @@ static int __zipos_load(struct Zipos *zipos, size_t cf, int flags,
     }
     __fds_unlock();
   }
-  __zipos_free(h);
+  __zipos_drop(h);
   return -1;
+}
+
+void __zipos_postdup(int oldfd, int newfd) {
+  if (oldfd == newfd) {
+    return;
+  }
+  BLOCK_SIGNALS;
+  __fds_lock();
+  if (__isfdkind(newfd, kFdZip)) {
+    __zipos_drop((struct ZiposHandle *)(intptr_t)g_fds.p[newfd].handle);
+    if (!__isfdkind(oldfd, kFdZip)) {
+      bzero(g_fds.p + newfd, sizeof(*g_fds.p));
+    }
+  }
+  if (__isfdkind(oldfd, kFdZip)) {
+    __zipos_keep((struct ZiposHandle *)(intptr_t)g_fds.p[oldfd].handle);
+    __ensurefds_unlocked(newfd);
+    g_fds.p[newfd] = g_fds.p[oldfd];
+  }
+  __fds_unlock();
+  ALLOW_SIGNALS;
 }
 
 /**
@@ -214,7 +250,6 @@ static int __zipos_load(struct Zipos *zipos, size_t cf, int flags,
  *
  * @param uri is obtained via __zipos_parseuri()
  * @asyncsignalsafe
- * @threadsafe
  */
 int __zipos_open(struct ZiposUri *name, int flags) {
 

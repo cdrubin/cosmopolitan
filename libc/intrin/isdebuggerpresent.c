@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -33,26 +33,30 @@
 #define kPid     "TracerPid:\t"
 
 static textwindows bool IsBeingDebugged(void) {
+#ifdef __x86_64__
   return !!NtGetPeb()->BeingDebugged;
+#else
+  return false;
+#endif
 }
 
 /**
  * Determines if gdb, strace, windbg, etc. is controlling process.
  * @return non-zero if attached, otherwise 0
  */
-int IsDebuggerPresent(bool force) {
+bool32 IsDebuggerPresent(bool32 force) {
   /* asan runtime depends on this function */
   ssize_t got;
   int e, fd, res;
   char *p, buf[1024];
   if (!force && IsGenuineBlink()) return 0;
-  if (!force && __getenv(environ, "HEISENDEBUG").s) return 0;
+  if (!force && environ && __getenv(environ, "HEISENDEBUG").s) return 0;
   if (IsWindows()) return IsBeingDebugged();
   if (__isworker) return false;
   if (!PLEDGED(RPATH)) return false;
   res = 0;
   e = errno;
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   if ((fd = __sys_openat(AT_FDCWD, "/proc/self/status", O_RDONLY, 0)) >= 0) {
     if ((got = sys_read(fd, buf, sizeof(buf) - 1)) > 0) {
       buf[got] = '\0';
@@ -63,7 +67,7 @@ int IsDebuggerPresent(bool force) {
     }
     sys_close(fd);
   }
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
   errno = e;
   return res;
 }

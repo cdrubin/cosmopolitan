@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,13 +18,11 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
-#include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/bisectcarleft.internal.h"
 #include "libc/nexgen32e/gc.internal.h"
 #include "libc/nexgen32e/stackframe.h"
 #include "libc/runtime/memtrack.internal.h"
@@ -74,20 +72,7 @@ dontinstrument dontasan int PrintBacktraceUsingSymbols(
     }
 #endif
     if (addr) {
-      if (
-#ifdef __x86_64__
-          /*
-           * we subtract one to handle the case of noreturn functions
-           * with a call instruction at the end, since %rip in such
-           * cases will point to the start of the next function.
-           * generally %rip always points to the byte after the
-           * instruction. one exception is in case like __restore_rt
-           * where the kernel creates a stack frame that points to the
-           * beginning of the function.
-           */
-          (symbol = __get_symbol(st, addr - 1)) != -1 ||
-#endif
-          (symbol = __get_symbol(st, addr)) != -1) {
+      if ((symbol = __get_symbol(st, addr)) != -1) {
         addend = addr - st->addr_base;
         addend -= st->symbols[symbol].x;
       } else {

@@ -35,7 +35,6 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/fmt/libgen.h"
 #include "libc/log/bsd.h"
 #include "libc/runtime/runtime.h"
@@ -47,7 +46,6 @@
 #include "third_party/sed/cmd.h"
 #include "third_party/sed/defs.h"
 #include "third_party/sed/extern.h"
-// clang-format off
 
 /*
  * Linked list of units (strings and files) to be compiled

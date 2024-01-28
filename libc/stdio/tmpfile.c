@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -42,7 +42,7 @@
  * On newer Linux only (c. 2013) it's possible to turn the anonymous
  * returned file back into a real file, by doing this:
  *
- *     linkat(AT_FDCWD, _gc(xasprintf("/proc/self/fd/%d", fileno(f))),
+ *     linkat(AT_FDCWD, gc(xasprintf("/proc/self/fd/%d", fileno(f))),
  *            AT_FDCWD, "real.txt", AT_SYMLINK_FOLLOW)
  *
  * On the New Technology, temporary files created by this function
@@ -55,9 +55,8 @@
  * @see tmpfd() if you don't want to link stdio/malloc
  * @raise ECANCELED if thread was cancelled in masked mode
  * @raise EINTR if signal was delivered
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 FILE *tmpfile(void) {

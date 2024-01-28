@@ -15,6 +15,11 @@
 #define FRAMERATE 23.976
 #define WRITE(s)  write(1, s, strlen(s))
 
+#ifdef __x86_64__
+__static_yoink("vga_console");
+__static_yoink("EfiMain");
+#endif
+
 struct Sphere {
   double cx, cy, cz, r;
 };

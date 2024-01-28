@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -46,7 +46,7 @@ void IgnoreStderr(void) {
 
 const char *SemPath(const char *name) {
   static _Thread_local char buf[PATH_MAX];
-  return sem_path_np(name, buf, sizeof(buf));
+  return shm_path_np(name, buf, sizeof(buf));
 }
 
 void SetUp(void) {
@@ -86,7 +86,7 @@ void *Worker(void *arg) {
 TEST(sem_open, test) {
   sem_t *a, *b;
   int i, r, n = 8;
-  pthread_t *t = _gc(malloc(sizeof(pthread_t) * n));
+  pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
   errno = 0;
   ASSERT_EQ(0, pthread_barrier_init(&barrier, 0, n));
   ASSERT_NE(SEM_FAILED, (a = sem_open(name1, O_CREAT, 0644, 0)));
@@ -118,7 +118,7 @@ TEST(sem_close, withUnnamedSemaphore_isUndefinedBehavior) {
   SPAWN(fork);
   IgnoreStderr();
   sem_close(&sem);
-  TERMS(SIGABRT);  // see __assert_fail
+  TERMS(SIGILL);  // see __assert_fail
   ASSERT_SYS(0, 0, sem_destroy(&sem));
 }
 

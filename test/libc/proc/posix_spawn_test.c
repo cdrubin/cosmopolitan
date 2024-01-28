@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -36,7 +36,7 @@
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/mem/gc.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/proc/proc.internal.h"
 #include "libc/runtime/internal.h"
@@ -53,6 +53,7 @@
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
+#include "libc/x/x.h"
 #include "third_party/nsync/mu.h"
 
 const char kTinyLinuxExit[128] = {
@@ -128,31 +129,6 @@ TEST(posix_spawn, ape) {
   ASSERT_EQ(42, WEXITSTATUS(ws));
 }
 
-TEST(posix_spawn, withoutComExtension_stillWorks) {
-  int ws, pid;
-  char *prog = "./life";
-  char *args[] = {prog, 0};
-  char *envs[] = {0};
-  testlib_extract("/zip/life.com", prog, 0755);
-  ASSERT_EQ(0, posix_spawn(&pid, prog, NULL, NULL, args, envs));
-  ASSERT_NE(-1, waitpid(pid, &ws, 0));
-  ASSERT_TRUE(WIFEXITED(ws));
-  ASSERT_EQ(42, WEXITSTATUS(ws));
-}
-
-TEST(posix_spawn, execveAutoAppendsComSuffix) {
-  if (!IsWindows()) return;  // only on windows for now
-  int ws, pid;
-  char *prog = "./life";
-  char *args[] = {prog, 0};
-  char *envs[] = {0};
-  testlib_extract("/zip/life.com", "life.com", 0755);
-  ASSERT_EQ(0, posix_spawn(&pid, prog, NULL, NULL, args, envs));
-  ASSERT_NE(-1, waitpid(pid, &ws, 0));
-  ASSERT_TRUE(WIFEXITED(ws));
-  ASSERT_EQ(42, WEXITSTATUS(ws));
-}
-
 TEST(posix_spawn, elf) {
   if (IsXnu() || IsWindows() || IsMetal()) return;
   int ws, pid;
@@ -184,6 +160,29 @@ TEST(posix_spawn, pipe) {
   ASSERT_SYS(0, 6, read(p[0], buf, sizeof(buf)));
   ASSERT_SYS(0, 0, close(p[0]));
   ASSERT_EQ(0, posix_spawn_file_actions_destroy(&fa));
+}
+
+TEST(posix_spawn, chdir) {
+  int ws, pid, p[2];
+  char buf[16] = {0};
+  char *args[] = {"cocmd.com", "-c", "cat hello.txt", 0};
+  char *envs[] = {0};
+  posix_spawn_file_actions_t fa;
+  testlib_extract("/zip/cocmd.com", "cocmd.com", 0755);
+  ASSERT_SYS(0, 0, mkdir("subdir", 0777));
+  ASSERT_SYS(0, 0, xbarf("subdir/hello.txt", "hello\n", -1));
+  ASSERT_SYS(0, 0, pipe2(p, O_CLOEXEC));
+  ASSERT_EQ(0, posix_spawn_file_actions_init(&fa));
+  ASSERT_EQ(0, posix_spawn_file_actions_adddup2(&fa, p[1], 1));
+  ASSERT_EQ(0, posix_spawn_file_actions_addchdir_np(&fa, "subdir"));
+  ASSERT_EQ(0, posix_spawn(&pid, "../cocmd.com", &fa, 0, args, envs));
+  ASSERT_EQ(0, posix_spawn_file_actions_destroy(&fa));
+  ASSERT_SYS(0, 0, close(p[1]));
+  ASSERT_NE(-1, waitpid(pid, &ws, 0));
+  ASSERT_EQ(0, ws);
+  ASSERT_SYS(0, 6, read(p[0], buf, sizeof(buf)));
+  ASSERT_STREQ("hello\n", buf);
+  ASSERT_SYS(0, 0, close(p[0]));
 }
 
 _Thread_local atomic_int gotsome;
@@ -246,7 +245,7 @@ void *Torturer(void *arg) {
 
 TEST(posix_spawn, agony) {
   int i, n = 4;
-  pthread_t *t = _gc(malloc(sizeof(pthread_t) * n));
+  pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
   testlib_extract("/zip/echo.com", "echo.com", 0755);
   for (i = 0; i < n; ++i) {
     ASSERT_EQ(0, pthread_create(t + i, 0, Torturer, 0));

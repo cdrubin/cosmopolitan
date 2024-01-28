@@ -1,5 +1,5 @@
 /*bin/echo   ' -*- mode:sh; indent-tabs-mode:nil; tab-width:8; coding:utf-8 -*-│
-│vi: set net ft=sh ts=2 sts=2 sw=2 fenc=utf-8                               :vi│
+│ vi: set noet ft=sh ts=8 sts=8 sw=8 fenc=utf-8                            :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -45,7 +45,7 @@ scall	sys_ppoll		0xfff86da21ffff90f	0x849	globl hidden # consider INTON/INTOFF t
 scall	sys_lseek		0x0c70a61de20c7008	0x03e	globl hidden # netbsd:evilpad, OpenBSD 7.3+
 scall	__sys_mmap		0x0c50311dd20c5009	0x0de	globl hidden # netbsd:pad, OpenBSD 7.3+
 scall	sys_msync		0x915900841284181a	0x8e3	globl hidden
-scall	sys_mprotect		0x04a04a04a204a00a	0x0e2	globl hidden
+scall	__sys_mprotect		0x04a04a04a204a00a	0x0e2	globl hidden
 scall	__sys_munmap		0x049049049204900b	0x0d7	globl hidden
 scall	sys_sigaction		0x15402e1a0202e00d	0x086	globl hidden # rt_sigaction on Lunix; __sigaction_sigtramp() on NetBSD
 scall	__sys_sigprocmask	0x125030154214900e	0x087	globl hidden # a.k.a. rt_sigprocmask, openbsd:byvalue, a.k.a. pthread_sigmask
@@ -100,8 +100,8 @@ scall	sys_killpg		0x092fff092fffffff	0xfff	globl hidden
 scall	sys_clone		0x11fffffffffff038	0x0dc	globl hidden
 scall	sys_tkill		0x13e0771b121480c8	0x082	globl hidden # thr_kill() on FreeBSD; _lwp_kill() on NetBSD; thrkill() on OpenBSD where arg3 should be 0 or tcb; __pthread_kill() on XNU
 scall	sys_tgkill		0xffffff1e1ffff0ea	0x083	globl hidden # thr_kill2() on FreeBSD
-scall	sys_futex		0x0a60531c6ffff0ca	0x062	globl hidden # raises SIGSYS on NetBSD; _umtx_op() on FreeBSD
-scall	sys_futex_cp		0x8a68539c6ffff8ca	0x862	globl hidden # intended for futex wait ops
+scall	sys_futex		0x0a60531c622030ca	0x062	globl hidden # raises SIGSYS on NetBSD; _umtx_op() on FreeBSD
+scall	sys_futex_cp		0x8a68539c62a038ca	0x862	globl hidden # intended for futex wait ops
 scall	sys_set_robust_list	0x0a7ffffffffff111	0x063	globl # no wrapper
 scall	sys_get_robust_list	0x0a8ffffffffff112	0x064	globl # no wrapper
 scall	sys_uname		0x0a4fff0a4ffff03f	0x0a0	globl hidden
@@ -127,7 +127,6 @@ scall	sys_unlink		0x00a00a00a200a057	0x0b5	globl hidden
 scall	sys_fchmod		0x07c07c07c207c05b	0x034	globl hidden
 scall	sys_fchown		0x07b07b07b207b05d	0x037	globl hidden # @asyncsignalsafe
 scall	sys_umask		0x03c03c03c203c05f	0x0a6	globl hidden
-scall	sys_gettimeofday	0x1a20430742074060	0x0a9	globl hidden # xnu esi/edx=0
 scall	sys_getrlimit		0x0c20c20c220c2061	0x0a3	globl hidden
 scall	__sys_getrusage		0x1bd0130752075062	0x0a5	globl hidden
 scall	sys_sysinfo		0xfffffffffffff063	0x0b3	globl hidden
@@ -202,7 +201,6 @@ scall	sys_modify_ldt		0xfffffffffffff09a	0xfff	globl # no wrapper
 scall	sys_pivot_root		0xfffffffffffff09b	0x029	globl hidden
 #scall	prctl			0xfffffffffffff09d	0x0a7	globl # wrapped manually
 scall	sys_arch_prctl		0x0a50a50a5ffff09e	0xfff	globl hidden # sysarch() on bsd
-scall	sys_set_tls		0x13d1490a5300309e	0xfff	globl hidden # arch_prctl on linux, sysarch on freebsd, _lwp_setprivate on netbsd, __set_tcb on openbsd, _lwp_setprivate on netbsd, thread_fast_set_cthread_self on xnu
 scall	sys_adjtimex		0xfffffffffffff09f	0x0ab	globl # no wrapper
 scall	sys_swapon		0xffffff05520550a7	0x0e0	globl # no wrapper
 scall	sys_swapoff		0xffffff1a8ffff0a8	0x0e1	globl # no wrapper
@@ -251,7 +249,6 @@ scall	sys_ktimer_getoverrun	0xffffff0effffffff	0xfff	globl # no wrapper
 scall	sys_ktimer_gettime	0xffffff0eefffffff	0xfff	globl # no wrapper
 scall	sys_ktimer_settime	0xffffff0edfffffff	0xfff	globl # no wrapper
 scall	sys_clock_settime	0x1ac0580e9ffff0e3	0x070	globl hidden # no wrapper
-scall	sys_clock_gettime	0x1ab0570e8ffff0e4	0x071	globl hidden # Linux 2.6+ (c. 2003); XNU uses magic address
 scall	sys_clock_getres	0x1ad0590eaffff0e5	0x072	globl hidden
 scall	sys_mbind		0xfffffffffffff0ed	0x0eb	globl # no wrapper; numa numa yeah
 scall	set_mempolicy		0xfffffffffffff0ee	0x0ed	globl
@@ -291,7 +288,6 @@ scall	sys_faccessat		0x1ce1391e921d210d	0x030	globl hidden
 scall	sys_unshare		0xfffffffffffff110	0x061	globl # no wrapper
 scall	sys_splice		0xfffffffffffff113	0x04c	globl hidden # Linux 2.6.17+ (c. 2007)
 scall	sys_tee			0xfffffffffffff114	0x04d	globl        # Linux 2.6.17+; no wrapper
-scall	sys_sync_file_range	0xfffffffffffff115	0x054	globl hidden # Linux 2.6.17+
 scall	sys_vmsplice		0xfffffffffffff116	0x04b	globl hidden
 scall	sys_migrate_pages	0xfffffffffffff100	0x0ee	globl        # no wrapper; numa numa yay
 scall	sys_move_pages		0xfffffffffffff117	0x0ef	globl        # no wrapper; NOTE: We view Red Hat versions as "epochs" for all distros.
@@ -386,6 +382,8 @@ scall	sys_memfd_secret	0xfffffffffffff1bf	0xfff	globl # no wrapper
 scall	sys_process_mrelease	0xfffffffffffff1c0	0xfff	globl # no wrapper
 scall	sys_futex_waitv		0xfffffffffffff1c1	0xfff	globl # no wrapper
 scall	sys_set_mempolicy_home_node 0xfffffffffffff1c2	0xfff	globl # no wrapper
+scall	sys_cachestat		0xfffffffffffff1c3	0x1c3	globl # Linux 6.5+
+scall	sys_fchmodat2		0xfffffffffffff1c4	0x1c4	globl # no wrapper Linux 6.6+
 
 #	The Fifth Bell System Interface, Community Edition
 #	» besiyata dishmaya
@@ -410,7 +408,7 @@ scall	__bsd_seteuid		0xfff0b70b720b7fff	0xfff	globl hidden # wrapped via setreui
 scall	__bsd_setegid		0xfff0b60b620b6fff	0xfff	globl hidden # wrapped via setregid()
 scall	sys_fpathconf		0x0c00c00c020c0fff	0xfff	globl # no wrapper
 scall	sys_fhopen		0x18c10812a20f8fff	0xfff	globl # no wrapper
-scall	sys_issetugid		0xfff0fd0fd2147fff	0xfff	globl hidden
+scall	sys_issetugid		0x1310fd0fd2147fff	0xfff	globl hidden
 scall	sys_minherit		0x1110fa0fa20fafff	0xfff	globl # no wrapper
 scall	sys_pathconf		0x0bf0bf0bf20bffff	0xfff	globl # no wrapper
 scall	sys_sysctl		0x0ca0ca0ca20cafff	0xfff	globl # no wrapper

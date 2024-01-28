@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -21,10 +21,8 @@
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/intrin/xchg.internal.h"
 #include "libc/limits.h"
@@ -238,15 +236,15 @@ TEST(isheap, nullPtr) {
 }
 
 TEST(isheap, malloc) {
-  ASSERT_TRUE(_isheap(_gc(malloc(1))));
+  ASSERT_TRUE(_isheap(gc(malloc(1))));
 }
 
 /* TEST(isheap, emptyMalloc) { */
-/*   ASSERT_TRUE(_isheap(_gc(malloc(0)))); */
+/*   ASSERT_TRUE(_isheap(gc(malloc(0)))); */
 /* } */
 
 /* TEST(isheap, mallocOffset) { */
-/*   char *p = _gc(malloc(131072)); */
+/*   char *p = gc(malloc(131072)); */
 /*   ASSERT_TRUE(_isheap(p + 100000)); */
 /* } */
 

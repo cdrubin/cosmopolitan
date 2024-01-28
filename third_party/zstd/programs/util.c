@@ -1,4 +1,3 @@
-// clang-format off
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  * All rights reserved.
@@ -35,7 +34,6 @@ extern "C" {
 #include "third_party/musl/rand48.h"     /* malloc, realloc, free */
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
@@ -1631,7 +1629,7 @@ failed:
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/rusage.h"
-#include "libc/calls/sysparam.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/limits.h"
 #include "libc/sysv/consts/endian.h"

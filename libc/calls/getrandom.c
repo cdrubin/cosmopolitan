@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -23,6 +23,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
@@ -30,7 +31,6 @@
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/asmflag.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
@@ -42,7 +42,6 @@
 #include "libc/nt/runtime.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/rand.h"
-#include "libc/stdio/xorshift.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/auxv.h"
@@ -55,77 +54,9 @@
 __static_yoink("rdrand_init");
 
 int sys_getentropy(void *, size_t) asm("sys_getrandom");
+ssize_t sys_getrandom_metal(char *, size_t, int);
 
 static bool have_getrandom;
-
-static bool GetRandomRdseed(uint64_t *out) {
-  int i;
-  char cf;
-  uint64_t x;
-  for (i = 0; i < 10; ++i) {
-    asm volatile(CFLAG_ASM("rdseed\t%1")
-                 : CFLAG_CONSTRAINT(cf), "=r"(x)
-                 : /* no inputs */
-                 : "cc");
-    if (cf) {
-      *out = x;
-      return true;
-    }
-    asm volatile("pause");
-  }
-  return false;
-}
-
-static bool GetRandomRdrand(uint64_t *out) {
-  int i;
-  char cf;
-  uint64_t x;
-  for (i = 0; i < 10; ++i) {
-    asm volatile(CFLAG_ASM("rdrand\t%1")
-                 : CFLAG_CONSTRAINT(cf), "=r"(x)
-                 : /* no inputs */
-                 : "cc");
-    if (cf) {
-      *out = x;
-      return true;
-    }
-    asm volatile("pause");
-  }
-  return false;
-}
-
-static ssize_t GetRandomCpu(char *p, size_t n, int f, bool impl(uint64_t *)) {
-  uint64_t x;
-  size_t i, j;
-  for (i = 0; i < n; i += j) {
-  TryAgain:
-    if (!impl(&x)) {
-      if (f || i >= 256) break;
-      goto TryAgain;
-    }
-    for (j = 0; j < 8 && i + j < n; ++j) {
-      p[i + j] = x;
-      x >>= 8;
-    }
-  }
-  return n;
-}
-
-static ssize_t GetRandomMetal(char *p, size_t n, int f) {
-  if (f & GRND_RANDOM) {
-    if (X86_HAVE(RDSEED)) {
-      return GetRandomCpu(p, n, f, GetRandomRdseed);
-    } else {
-      return enosys();
-    }
-  } else {
-    if (X86_HAVE(RDRND)) {
-      return GetRandomCpu(p, n, f, GetRandomRdrand);
-    } else {
-      return enosys();
-    }
-  }
-}
 
 static void GetRandomEntropy(char *p, size_t n) {
   unassert(n <= 256);
@@ -143,21 +74,12 @@ static void GetRandomArnd(char *p, size_t n) {
 }
 
 static ssize_t GetRandomBsd(char *p, size_t n, void impl(char *, size_t)) {
-  errno_t e;
   size_t m, i;
-  if (_weaken(pthread_testcancel_np) &&
-      (e = _weaken(pthread_testcancel_np)())) {
-    errno = e;
-    return -1;
-  }
   for (i = 0;;) {
     m = MIN(n - i, 256);
     impl(p + i, m);
     if ((i += m) == n) {
       return n;
-    }
-    if (_weaken(pthread_testcancel)) {
-      _weaken(pthread_testcancel)();
     }
   }
 }
@@ -165,11 +87,16 @@ static ssize_t GetRandomBsd(char *p, size_t n, void impl(char *, size_t)) {
 static ssize_t GetDevUrandom(char *p, size_t n) {
   int fd;
   ssize_t rc;
+  BLOCK_SIGNALS;
+  BLOCK_CANCELATION;
   fd = sys_openat(AT_FDCWD, "/dev/urandom", O_RDONLY | O_CLOEXEC, 0);
-  if (fd == -1) return -1;
-  pthread_cleanup_push((void *)sys_close, (void *)(intptr_t)fd);
-  rc = sys_read(fd, p, n);
-  pthread_cleanup_pop(1);
+  if (fd != -1) {
+    rc = sys_read(fd, p, n);
+  } else {
+    rc = -1;
+  }
+  ALLOW_CANCELATION;
+  ALLOW_SIGNALS;
   return rc;
 }
 
@@ -181,18 +108,20 @@ ssize_t __getrandom(void *p, size_t n, unsigned f) {
     if (IsXnu() || IsOpenbsd()) {
       rc = GetRandomBsd(p, n, GetRandomEntropy);
     } else {
-      BEGIN_CANCELLATION_POINT;
+      BEGIN_CANCELATION_POINT;
       rc = sys_getrandom(p, n, f);
-      END_CANCELLATION_POINT;
+      END_CANCELATION_POINT;
     }
   } else if (IsFreebsd() || IsNetbsd()) {
     rc = GetRandomBsd(p, n, GetRandomArnd);
+#ifdef __x86_64__
   } else if (IsMetal()) {
-    rc = GetRandomMetal(p, n, f);
+    rc = sys_getrandom_metal(p, n, f);
+#endif
   } else {
-    BEGIN_CANCELLATION_POINT;
+    BEGIN_CANCELATION_POINT;
     rc = GetDevUrandom(p, n);
-    END_CANCELLATION_POINT;
+    END_CANCELATION_POINT;
   }
   return rc;
 }
@@ -222,7 +151,7 @@ ssize_t __getrandom(void *p, size_t n, unsigned f) {
  * On BSD OSes, this entire process is uninterruptible so be careful
  * when using large sizes if interruptibility is needed.
  *
- * Unlike getentropy() this function is a cancellation point. But it
+ * Unlike getentropy() this function is a cancelation point. But it
  * shouldn't be a problem, unless you're using masked mode, in which
  * case extra care must be taken to consider the result.
  *
@@ -243,7 +172,7 @@ ssize_t __getrandom(void *p, size_t n, unsigned f) {
  * @raise ECANCELED if thread was cancelled in masked mode
  * @raise EFAULT if the `n` bytes at `p` aren't valid memory
  * @raise EINTR if we needed to block and a signal was delivered instead
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
  * @restartable
  * @vforksafe
@@ -252,7 +181,7 @@ ssize_t getrandom(void *p, size_t n, unsigned f) {
   ssize_t rc;
   if ((!p && n) || (IsAsan() && !__asan_is_valid(p, n))) {
     rc = efault();
-  } else if ((f & ~(GRND_RANDOM | GRND_NONBLOCK))) {
+  } else if (f & ~(GRND_RANDOM | GRND_NONBLOCK)) {
     rc = einval();
   } else {
     rc = __getrandom(p, n, f);
@@ -264,13 +193,13 @@ ssize_t getrandom(void *p, size_t n, unsigned f) {
 __attribute__((__constructor__)) static textstartup void getrandom_init(void) {
   int e, rc;
   if (IsWindows() || IsMetal()) return;
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   e = errno;
   if (!(rc = sys_getrandom(0, 0, 0))) {
     have_getrandom = true;
   } else {
     errno = e;
   }
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
   STRACE("sys_getrandom(0,0,0) → %d% m", rc);
 }

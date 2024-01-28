@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_SYSCALL_SYSV_INTERNAL_H_
 #define COSMOPOLITAN_LIBC_CALLS_SYSCALL_SYSV_INTERNAL_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 #define i32 int32_t
 #define i64 int64_t
@@ -13,8 +12,6 @@ COSMOPOLITAN_C_START_
 axdx_t __sys_fork(void);
 axdx_t __sys_pipe(i32[hasatleast 2], i32);
 axdx_t sys_getpid(void);
-char *sys_getcwd(char *, u64);
-char *sys_getcwd_xnu(char *, u64);
 i32 __sys_dup3(i32, i32, i32);
 i32 __sys_execve(const char *, char *const[], char *const[]);
 i32 __sys_fcntl(i32, i32, ...);
@@ -22,6 +19,7 @@ i32 __sys_fcntl_cp(i32, i32, ...);
 i32 __sys_fstat(i32, void *);
 i32 __sys_fstatat(i32, const char *, void *, i32);
 i32 __sys_gettid(i64 *);
+i32 __sys_mprotect(void *, u64, i32);
 i32 __sys_munmap(void *, u64);
 i32 __sys_openat(i32, const char *, i32, u32);
 i32 __sys_openat_nc(i32, const char *, i32, u32);
@@ -53,6 +51,7 @@ i32 sys_fork(void);
 i32 sys_fsync(i32);
 i32 sys_ftruncate(i32, i64, i64);
 i32 sys_getcontext(void *);
+i32 sys_getcwd(char *, u64);
 i32 sys_getpgid(i32);
 i32 sys_getppid(void);
 i32 sys_getpriority(i32, u32);
@@ -85,9 +84,9 @@ i32 sys_posix_openpt(i32);
 i32 sys_renameat(i32, const char *, i32, const char *);
 i32 sys_sem_close(i64);
 i32 sys_sem_destroy(i64);
+i32 sys_sem_destroy(i64);
 i32 sys_sem_getvalue(i64, u32 *);
 i32 sys_sem_init(u32, i64 *);
-i32 sys_sem_destroy(i64);
 i32 sys_sem_open(const char *, int, u32, i64 *);
 i32 sys_sem_post(i64);
 i32 sys_sem_trywait(i64);
@@ -109,7 +108,6 @@ i32 sys_sigaction(i32, const void *, void *, i64, i64);
 i32 sys_sigaltstack(const void *, void *);
 i32 sys_symlinkat(const char *, i32, const char *);
 i32 sys_sync(void);
-i32 sys_sync_file_range(i32, i64, i64, u32);
 i32 sys_syncfs(i32);
 i32 sys_syslog(i32, char *, i32);
 i32 sys_tgkill(i32, i32, i32);
@@ -147,5 +145,4 @@ void sys_exit(i32);
 #undef u32
 #undef u64
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_SYSCALL_SYSV_INTERNAL_H_ */

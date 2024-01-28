@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,109 +16,78 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/sig.internal.h"
-#include "libc/calls/struct/metatermios.internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/calls/struct/termios.h"
 #include "libc/calls/syscall-nt.internal.h"
-#include "libc/calls/termios.h"
-#include "libc/calls/termios.internal.h"
 #include "libc/calls/ttydefaults.h"
-#include "libc/dce.h"
-#include "libc/errno.h"
-#include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/nomultics.internal.h"
-#include "libc/intrin/strace.internal.h"
-#include "libc/macros.internal.h"
 #include "libc/nt/console.h"
 #include "libc/nt/enum/consolemodeflags.h"
-#include "libc/nt/enum/version.h"
-#include "libc/nt/runtime.h"
 #include "libc/nt/version.h"
-#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
-#include "libc/sysv/consts/fileno.h"
-#include "libc/sysv/consts/o.h"
-#include "libc/sysv/consts/sicode.h"
-#include "libc/sysv/consts/sig.h"
+#include "libc/sysv/consts/baud.internal.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
-
 #ifdef __x86_64__
 
 textwindows int tcsetattr_nt(int fd, int opt, const struct termios *tio) {
-  bool32 ok;
   int64_t hInput, hOutput;
   uint32_t inmode, outmode;
 
-  if (__isfdkind(fd, kFdConsole)) {
-    hInput = g_fds.p[fd].handle;
-    hOutput = g_fds.p[fd].extra;
-  } else if (fd == STDIN_FILENO ||   //
-             fd == STDOUT_FILENO ||  //
-             fd == STDERR_FILENO) {
-    hInput = g_fds.p[STDIN_FILENO].handle;
-    hOutput = g_fds.p[MAX(STDOUT_FILENO, fd)].handle;
-  } else {
-    return enotty();
-  }
+  // validate file descriptor
+  if (!__isfdopen(fd)) return ebadf();
+  if (!__isfdkind(fd, kFdConsole)) return enotty();
 
-  if (!GetConsoleMode(hInput, &inmode) || !GetConsoleMode(hOutput, &outmode)) {
-    return enotty();
-  }
+  // then completely ignore it
+  hInput = GetConsoleInputHandle();
+  hOutput = GetConsoleOutputHandle();
+  unassert(GetConsoleMode(hInput, &inmode));
+  unassert(GetConsoleMode(hOutput, &outmode));
+  if (opt == TCSAFLUSH) FlushConsoleInputBytes();
 
-  if (opt == TCSAFLUSH) {
-    FlushConsoleInputBytes(hInput);
-  }
+  // now work on the configuration
   inmode &= ~(kNtEnableLineInput | kNtEnableEchoInput |
               kNtEnableProcessedInput | kNtEnableVirtualTerminalInput);
   inmode |= kNtEnableWindowInput;
-  __ttymagic = 0;
+  __ttyconf.magic = 0;
   if (tio->c_lflag & ICANON) {
-    inmode |=
-        kNtEnableLineInput | kNtEnableProcessedInput | kNtEnableQuickEditMode;
+    inmode |= kNtEnableLineInput | kNtEnableQuickEditMode;
   } else {
+    // protip: hold down shift and you can use the mouse normally
     inmode &= ~kNtEnableQuickEditMode;
-    __ttymagic |= kFdTtyUncanon;
-    if (!tio->c_cc[VMIN]) {
-      __ttymagic |= kFdTtyNoBlock;
-    }
-    __vtime = tio->c_cc[VTIME];
+    __ttyconf.magic |= kTtyUncanon;
   }
   if (!(tio->c_iflag & ICRNL)) {
-    __ttymagic |= kFdTtyNoCr2Nl;
+    __ttyconf.magic |= kTtyNoCr2Nl;
   }
   if (!(tio->c_lflag & ECHOCTL)) {
-    __ttymagic |= kFdTtyEchoRaw;
+    __ttyconf.magic |= kTtyEchoRaw;
   }
   if (tio->c_lflag & ECHO) {
     // "kNtEnableEchoInput can be used only if the
     //  kNtEnableLineInput mode is also enabled." -MSDN
     if (tio->c_lflag & ICANON) {
       inmode |= kNtEnableEchoInput;
-    } else {
-      // If ECHO is enabled in raw mode, then read(0) needs to
-      // magically write(1) to simulate echoing. This normally
-      // visualizes control codes, e.g. \r → ^M unless ECHOCTL
-      // hasn't been specified.
-      __ttymagic |= kFdTtyEchoing;
     }
+  } else {
+    __ttyconf.magic |= kTtySilence;
   }
   if (!(tio->c_lflag & ISIG)) {
-    __ttymagic |= kFdTtyNoIsigs;
+    __ttyconf.magic |= kTtyNoIsigs;
   }
-  __veof = tio->c_cc[VEOF];
-  __vintr = tio->c_cc[VINTR];
-  __vquit = tio->c_cc[VQUIT];
-  if ((tio->c_lflag & ISIG) &&  //
-      tio->c_cc[VINTR] == CTRL('C')) {
+  memcpy(__ttyconf.c_cc, tio->c_cc, NCCS);
+  if ((tio->c_lflag & ISIG) &&     //
+      !(tio->c_lflag & ICANON) &&  //
+      __ttyconf.vintr == CTRL('C')) {
     // allows ctrl-c to be delivered asynchronously via win32
+    // we normally don't want win32 doing this 24/7 in the bg
+    // because we don't have job control, tcsetpgrp, etc. yet
+    // it's normally much better to let read-nt.c raise a sig
+    // because read-nt only manages your tty whilst it's used
     inmode |= kNtEnableProcessedInput;
   }
-  ok = SetConsoleMode(hInput, inmode);
-  (void)ok;
-  NTTRACE("SetConsoleMode(%p, %s) → %hhhd", hInput,
-          DescribeNtConsoleInFlags(inmode), ok);
-
   outmode &= ~kNtDisableNewlineAutoReturn;
   outmode |= kNtEnableProcessedOutput;
   if (!(tio->c_oflag & ONLCR)) {
@@ -127,11 +96,10 @@ textwindows int tcsetattr_nt(int fd, int opt, const struct termios *tio) {
   if (IsAtLeastWindows10()) {
     outmode |= kNtEnableVirtualTerminalProcessing;
   }
-  ok = SetConsoleMode(hOutput, outmode);
-  (void)ok;
-  NTTRACE("SetConsoleMode(%p, %s) → %hhhd", hOutput,
-          DescribeNtConsoleOutFlags(outmode), ok);
 
+  // tune the win32 configuration
+  unassert(SetConsoleMode(hInput, inmode));
+  unassert(SetConsoleMode(hOutput, outmode));
   return 0;
 }
 

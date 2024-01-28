@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,7 +16,6 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/ntmagicpaths.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
@@ -36,22 +35,33 @@ static inline int IsAlpha(int c) {
   return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
 }
 
-textwindows static const char *FixNtMagicPath(const char *path,
-                                              unsigned flags) {
-  const struct NtMagicPaths *mp = &kNtMagicPaths;
-  asm("" : "+r"(mp));
-  if (!IsSlash(path[0])) return path;
-  if (strcmp(path, mp->devtty) == 0) {
-    if ((flags & O_ACCMODE) == O_RDONLY) {
-      return mp->conin;
-    } else if ((flags & O_ACCMODE) == O_WRONLY) {
-      return mp->conout;
+textwindows size_t __normntpath(char16_t *p, size_t n) {
+  size_t i, j;
+  for (j = i = 0; i < n; ++i) {
+    int c = p[i];
+    if (c == '/') {
+      c = '\\';
+    }
+    if (j > 1 && c == '\\' && p[j - 1] == '\\') {
+      // matched "^/" or "//" but not "^//"
+    } else if ((j && p[j - 1] == '\\') &&  //
+               c == '.' &&                 //
+               (i + 1 == n || IsSlash(p[i + 1]))) {
+      // matched "/./" or "/.$"
+      i += !(i + 1 == n);
+    } else if ((j && p[j - 1] == '\\') &&         //
+               c == '.' &&                        //
+               (i + 1 < n && p[i + 1] == '.') &&  //
+               (i + 2 == n || IsSlash(p[i + 2]))) {
+      // matched "/../" or "/..$"
+      while (j && p[j - 1] == '\\') --j;
+      while (j && p[j - 1] != '\\') --j;
+    } else {
+      p[j++] = c;
     }
   }
-  if (strcmp(path, mp->devnull) == 0) return mp->nul;
-  if (strcmp(path, mp->devstdin) == 0) return mp->conin;
-  if (strcmp(path, mp->devstdout) == 0) return mp->conout;
-  return path;
+  p[j] = 0;
+  return j;
 }
 
 textwindows int __mkntpath(const char *path,
@@ -78,7 +88,6 @@ textwindows int __mkntpath(const char *path,
  */
 textwindows int __mkntpath2(const char *path,
                             char16_t path16[hasatleast PATH_MAX], int flags) {
-
   // 1. Need +1 for NUL-terminator
   // 2. Need +1 for UTF-16 overflow
   // 3. Need ≥2 for SetCurrentDirectory trailing slash requirement
@@ -88,7 +97,6 @@ textwindows int __mkntpath2(const char *path,
   if (!path || (IsAsan() && !__asan_is_valid_str(path))) {
     return efault();
   }
-  path = FixNtMagicPath(path, flags);
 
   size_t x, z;
   char16_t *p = path16;
@@ -165,32 +173,7 @@ textwindows int __mkntpath2(const char *path,
   // normalize path
   // we need it because \\?\... paths have to be normalized
   // we don't remove the trailing slash since it is special
-  size_t i, j;
-  for (j = i = 0; i < n; ++i) {
-    int c = p[i];
-    if (c == '/') {
-      c = '\\';
-    }
-    if (j > 1 && c == '\\' && p[j - 1] == '\\') {
-      // matched "^/" or "//" but not "^//"
-    } else if ((j && p[j - 1] == '\\') &&  //
-               c == '.' &&                 //
-               (i + 1 == n || IsSlash(p[i + 1]))) {
-      // matched "/./" or "/.$"
-      i += !(i + 1 == n);
-    } else if ((j && p[j - 1] == '\\') &&         //
-               c == '.' &&                        //
-               (i + 1 < n && p[i + 1] == '.') &&  //
-               (i + 2 == n || IsSlash(p[i + 2]))) {
-      // matched "/../" or "/..$"
-      while (j && p[j - 1] == '\\') --j;
-      while (j && p[j - 1] != '\\') --j;
-    } else {
-      p[j++] = c;
-    }
-  }
-  p[j] = 0;
-  n = j;
+  n = __normntpath(p, n);
 
   // our path is now stored at `path16` with length `n`
   n = x + m + n;

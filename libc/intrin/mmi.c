@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -25,4 +25,4 @@ __static_yoink("_init__mmi");
 #endif
 
 struct MemoryIntervals _mmi;
-pthread_mutex_t __mmi_lock_obj;  // recursive :'(
+pthread_mutex_t __mmi_lock_obj = {._type = PTHREAD_MUTEX_RECURSIVE};

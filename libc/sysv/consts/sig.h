@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_SIG_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_SIG_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 extern const int SIGABRT;
@@ -48,7 +47,6 @@ extern const int SIG_SETMASK;
 extern const int SIG_UNBLOCK;
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 
 #define SIGABRT   6
 #define SIGALRM   14
@@ -80,21 +78,22 @@ COSMOPOLITAN_C_END_
  *   hasn't fleshed them out yet.
  *
  * - SIGTHR doesn't have a macro since it's internal to posix threads.
+ *
+ * - SIGSTKFLT is Linux-only so no macro is defined.
  */
 
-#define SIGBUS    SIGBUS
-#define SIGCHLD   SIGCHLD
-#define SIGCONT   SIGCONT
-#define SIGEMT    SIGEMT
-#define SIGINFO   SIGINFO
-#define SIGPWR    SIGPWR
-#define SIGSTKFLT SIGSTKFLT
-#define SIGSTOP   SIGSTOP
-#define SIGSYS    SIGSYS
-#define SIGTSTP   SIGTSTP
-#define SIGURG    SIGURG
-#define SIGUSR1   SIGUSR1
-#define SIGUSR2   SIGUSR2
+#define SIGBUS  SIGBUS
+#define SIGCHLD SIGCHLD
+#define SIGCONT SIGCONT
+#define SIGEMT  SIGEMT
+#define SIGINFO SIGINFO
+#define SIGPWR  SIGPWR
+#define SIGSTOP SIGSTOP
+#define SIGSYS  SIGSYS
+#define SIGTSTP SIGTSTP
+#define SIGURG  SIGURG
+#define SIGUSR1 SIGUSR1
+#define SIGUSR2 SIGUSR2
 
 #define SIG_BLOCK   SIG_BLOCK
 #define SIG_SETMASK SIG_SETMASK

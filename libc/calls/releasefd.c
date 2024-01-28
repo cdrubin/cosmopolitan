@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -25,6 +25,7 @@
 void __releasefd(int fd) {
   int f1, f2;
   if (!(0 <= fd && fd < g_fds.n)) return;
+  g_fds.p[fd].kind = kFdEmpty;
   bzero(g_fds.p + fd, sizeof(*g_fds.p));
   f1 = atomic_load_explicit(&g_fds.f, memory_order_relaxed);
   do {

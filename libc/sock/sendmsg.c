@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -27,6 +27,7 @@
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/msghdr.h"
@@ -45,7 +46,7 @@
  * @return number of bytes transmitted, or -1 w/ errno
  * @error EINTR, EHOSTUNREACH, ECONNRESET (UDP ICMP Port Unreachable),
  *     EPIPE (if MSG_NOSIGNAL), EMSGSIZE, ENOTSOCK, EFAULT, etc.
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
  * @restartable (unless SO_RCVTIMEO)
  */
@@ -54,7 +55,7 @@ ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
   struct msghdr msg2;
   union sockaddr_storage_bsd bsd;
 
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
   if (IsAsan() && !__asan_is_valid_msghdr(msg)) {
     rc = efault();
   } else if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
@@ -84,11 +85,12 @@ ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
   } else {
     rc = ebadf();
   }
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
 
-#if defined(SYSDEBUG) && _DATATRACE
-  if (__strace > 0 && strace_enabled(0) > 0) {
-    kprintf(STRACE_PROLOGUE "sendmsg(");
+#if SYSDEBUG && _DATATRACE
+  // TODO(jart): Write a DescribeMsg() function.
+  if (strace_enabled(0) > 0) {
+    kprintf(STRACE_PROLOGUE "sendmsg(%d, ", fd);
     if ((!IsAsan() && kisdangerous(msg)) ||
         (IsAsan() && !__asan_is_valid(msg, sizeof(*msg)))) {
       kprintf("%p", msg);

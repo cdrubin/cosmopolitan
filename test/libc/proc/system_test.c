@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -21,7 +21,7 @@
 #include "libc/dce.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/mem/gc.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/paths.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -73,7 +73,7 @@ TEST(system, haveShell) {
 
 TEST(system, echo) {
   ASSERT_EQ(0, system("echo hello >\"hello there.txt\""));
-  EXPECT_STREQ("hello\n", _gc(xslurp("hello there.txt", 0)));
+  EXPECT_STREQ("hello\n", gc(xslurp("hello there.txt", 0)));
 }
 
 TEST(system, exit) {
@@ -83,13 +83,13 @@ TEST(system, exit) {
 TEST(system, testStdoutRedirect) {
   testlib_extract("/zip/echo.com", "echo.com", 0755);
   ASSERT_EQ(0, system("./echo.com hello >hello.txt"));
-  EXPECT_STREQ("hello\n", _gc(xslurp("hello.txt", 0)));
+  EXPECT_STREQ("hello\n", gc(xslurp("hello.txt", 0)));
 }
 
 TEST(system, testStdoutRedirect_withSpacesInFilename) {
   testlib_extract("/zip/echo.com", "echo.com", 0755);
   ASSERT_EQ(0, system("./echo.com hello >\"hello there.txt\""));
-  EXPECT_STREQ("hello\n", _gc(xslurp("hello there.txt", 0)));
+  EXPECT_STREQ("hello\n", gc(xslurp("hello there.txt", 0)));
 }
 
 TEST(system, testStderrRedirect_toStdout) {
@@ -192,6 +192,15 @@ TEST(system, exitStatusPreservedAfterSemiColon) {
   ASSERT_EQ(0, GETEXITSTATUS(system("echo -n hi")));
   EXPECT_EQ(2, read(pipefd[0], buf, 8));
   ASSERT_STREQ("hi", buf);
+  RestoreStdout();
+}
+
+TEST(system, devStdout) {
+  CaptureStdout();
+  ASSERT_EQ(0, GETEXITSTATUS(system("echo sup >/dev/stdout")));
+  char buf[16] = {0};
+  ASSERT_EQ(4, read(pipefd[0], buf, 16));
+  ASSERT_STREQ("sup\n", buf);
   RestoreStdout();
 }
 

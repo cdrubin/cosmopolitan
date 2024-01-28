@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -31,7 +31,7 @@ int xwrite(int fd, const void *p, uint64_t n) {
   int64_t i;
   uint64_t m;
   const char *buf;
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   rc = 0;
   buf = p;
   while (n) {
@@ -46,6 +46,6 @@ int xwrite(int fd, const void *p, uint64_t n) {
     buf += i;
     n -= i;
   }
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
   return rc;
 }

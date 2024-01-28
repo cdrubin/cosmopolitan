@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,11 +19,11 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/strace.internal.h"
@@ -36,16 +36,10 @@
 #define FIODGNAME 0x80106678  // freebsd
 
 static textwindows errno_t sys_ttyname_nt(int fd, char *buf, size_t size) {
-  uint32_t cmode;
-  if (GetConsoleMode(g_fds.p[fd].handle, &cmode)) {
-    if (strlcpy(buf, "/dev/tty", size) < size) {
-      return 0;
-    } else {
-      return ERANGE;
-    }
-  } else {
-    return ENOTTY;
-  }
+  if (fd + 0u >= g_fds.n) return EBADF;
+  if (g_fds.p[fd].kind != kFdConsole) return ENOTTY;
+  if (strlcpy(buf, "/dev/tty", size) >= size) return ERANGE;
+  return 0;
 }
 
 // clobbers errno
@@ -85,7 +79,6 @@ static errno_t ttyname_linux(int fd, char *buf, size_t size) {
  * @return 0 on success, or error number on error
  * @raise ERANGE if `size` was too small
  * @returnserrno
- * @threadsafe
  */
 errno_t ttyname_r(int fd, char *buf, size_t size) {
   errno_t e, res;
@@ -95,16 +88,17 @@ errno_t ttyname_r(int fd, char *buf, size_t size) {
   } else if (IsFreebsd()) {
     res = ttyname_freebsd(fd, buf, size);
   } else if (IsWindows()) {
-    if (__isfdopen(fd)) {
-      res = sys_ttyname_nt(fd, buf, size);
-    } else {
-      res = EBADF;
-    }
+    res = sys_ttyname_nt(fd, buf, size);
   } else {
-    res = ENOSYS;
+    // TODO(jart): Use that fstat(dev/ino) + readdir(/dev/) trick.
+    if (strlcpy(buf, "/dev/tty", size) < size) {
+      res = 0;
+    } else {
+      res = ERANGE;
+    }
   }
   errno = e;
-  STRACE("ttyname_r(%d, %#.*hhs) → %s", fd, (int)size, buf,
+  STRACE("ttyname_r(%d, %#.*hhs) → %s", fd, (int)strnlen(buf, size), buf,
          !res ? "0" : _strerrno(res));
   return res;
 }

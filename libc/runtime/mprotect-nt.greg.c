@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/intrin/directmap.internal.h"
 #include "libc/nt/memory.h"
 #include "libc/runtime/internal.h"
@@ -26,6 +27,7 @@ textwindows int sys_mprotect_nt(void *addr, size_t size, int prot) {
   unsigned i;
   uint32_t op;
   char *a, *b, *x, *y, *p;
+  BLOCK_SIGNALS;
   __mmi_lock();
   size = (size + 4095) & -4096;
   p = addr;
@@ -62,5 +64,6 @@ textwindows int sys_mprotect_nt(void *addr, size_t size, int prot) {
     }
   }
   __mmi_unlock();
+  ALLOW_SIGNALS;
   return rc;
 }

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -24,20 +24,13 @@
 #include "libc/str/str.h"
 
 static textwindows bool SubpathExistsThatsNotDirectory(char16_t *path) {
-  int e;
   char16_t *p;
   uint32_t attrs;
-  e = errno;
   while ((p = strrchr16(path, '\\'))) {
     *p = u'\0';
-    if ((attrs = GetFileAttributes(path)) != -1u) {
-      if (attrs & kNtFileAttributeDirectory) {
-        return false;
-      } else {
-        return true;
-      }
-    } else {
-      errno = e;
+    if ((attrs = GetFileAttributes(path)) != -1u &&
+        !(attrs & kNtFileAttributeDirectory)) {
+      return true;
     }
   }
   return false;

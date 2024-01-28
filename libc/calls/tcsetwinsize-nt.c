@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,24 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/nt/console.h"
-#include "libc/str/str.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/nt/struct/coord.h"
 
 textwindows int tcsetwinsize_nt(int fd, const struct winsize *ws) {
-  uint32_t mode;
   struct NtCoord coord;
-  if (!ws) return efault();
-  if (!__isfdkind(fd, kFdFile)) return ebadf();
-  if (!GetConsoleMode(__getfdhandleactual(fd), &mode)) return enotty();
+  if (!sys_isatty(fd)) return -1;  // ebadf, enotty
   coord.X = ws->ws_col;
   coord.Y = ws->ws_row;
-  if (!SetConsoleScreenBufferSize(__getfdhandleactual(fd), coord))
+  if (SetConsoleScreenBufferSize(fd, coord)) {
+    return 0;
+  } else {
     return __winerr();
-  return 0;
+  }
 }

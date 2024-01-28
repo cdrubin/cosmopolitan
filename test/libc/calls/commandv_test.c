@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -48,31 +48,41 @@ void TearDown(void) {
 }
 
 TEST(commandv, testPathSearch) {
-  EXPECT_SYS(0, 0, touch("bin/sh", 0755));
+  EXPECT_SYS(0, 3, creat("bin/sh", 0755));
+  EXPECT_SYS(0, 2, write(3, "MZ", 2));
+  EXPECT_SYS(0, 0, close(3));
   EXPECT_STREQ("bin/sh", commandv("sh", pathbuf, sizeof(pathbuf)));
 }
 
 TEST(commandv, testSlashes_wontSearchPath_butChecksAccess) {
-  EXPECT_SYS(0, 0, touch("home/sh.com", 0755));
+  EXPECT_SYS(0, 3, creat("home/sh.com", 0755));
+  EXPECT_SYS(0, 2, write(3, "MZ", 2));
+  EXPECT_SYS(0, 0, close(3));
   EXPECT_STREQ("home/sh.com",
                commandv("home/sh.com", pathbuf, sizeof(pathbuf)));
 }
 
 TEST(commandv, testSameDir_doesntHappenByDefaultUnlessItsWindows) {
-  EXPECT_SYS(0, 0, touch("bog.com", 0755));
+  EXPECT_SYS(0, 3, creat("bog.com", 0755));
+  EXPECT_SYS(0, 2, write(3, "MZ", 2));
+  EXPECT_SYS(0, 0, close(3));
   EXPECT_STREQ(NULL, commandv("bog.com", pathbuf, sizeof(pathbuf)));
   EXPECT_EQ(ENOENT, errno);
 }
 
 TEST(commandv, testSameDir_willHappenWithColonBlank) {
   ASSERT_NE(-1, setenv("PATH", "bin:", true));
-  EXPECT_SYS(0, 0, touch("bog.com", 0755));
+  EXPECT_SYS(0, 3, creat("bog.com", 0755));
+  EXPECT_SYS(0, 2, write(3, "MZ", 2));
+  EXPECT_SYS(0, 0, close(3));
   EXPECT_STREQ("bog.com", commandv("bog.com", pathbuf, sizeof(pathbuf)));
 }
 
 TEST(commandv, testSameDir_willHappenWithColonBlank2) {
   ASSERT_NE(-1, setenv("PATH", ":bin", true));
-  EXPECT_SYS(0, 0, touch("bog.com", 0755));
+  EXPECT_SYS(0, 3, creat("bog.com", 0755));
+  EXPECT_SYS(0, 2, write(3, "MZ", 2));
+  EXPECT_SYS(0, 0, close(3));
   EXPECT_STREQ("bog.com", commandv("bog.com", pathbuf, sizeof(pathbuf)));
 }
 

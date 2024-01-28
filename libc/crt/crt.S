@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,7 +19,6 @@
 #include "libc/dce.h"
 #include "libc/macros.internal.h"
 #include "libc/notice.inc"
-#include "libc/runtime/internal.h"
 .section .start,"ax",@progbits
 
 #if SupportsXnu() && defined(__x86_64__)
@@ -30,6 +29,15 @@
 _apple:	mov	$_HOSTXNU,%cl
 	jmp	1f
 	.endfn	_apple,weak,hidden
+#endif
+
+#if SupportsWindows() && defined(__x86_64__) && !IsTiny()
+//	implements all win32 apis on non-windows hosts
+//	it is just enough code to get a good backtrace
+__oops_win32:
+	ud2
+	nop
+	.endfn	__oops_win32
 #endif
 
 //	System Five userspace program entrypoint.
@@ -54,6 +62,8 @@ _start:
 //	set operating system when already detected
 1:	mov	%cl,__hostos(%rip)
 
+	mov	%rdx,__program_executable_name(%rip)
+
 //	get startup timestamp as early as possible
 //	its used by --strace flag and kprintf() %T
 	rdtsc
@@ -76,7 +86,6 @@ _start:
 //	make win32 imps crash
 	.weak	ape_idata_iat
 	.weak	ape_idata_iatend
-	.weak	__oops_win32
 	ezlea	__oops_win32,ax
 	ezlea	ape_idata_iat,di
 	ezlea	ape_idata_iatend,cx
@@ -116,6 +125,11 @@ _start:
 ////////////////////////////////////////////////////////////////////////////////
 #elif defined(__aarch64__)
 
+#if SupportsFreebsd()
+//	save first arg
+	mov	x4,x0
+#endif
+
 //	save original stack pointer
 //	this is the first argument to cosmo() below
 	mov	x0,sp
@@ -132,6 +146,9 @@ _start:
 //	used to talk to apple's authoritarian libraries
 //	should be set to zero on other platforms
 	mov	x1,x15
+
+//	third arg is program path passed by loader
+//	fourth arg is detected os passed by loader
 
 //	switch to c code
 	bl	cosmo

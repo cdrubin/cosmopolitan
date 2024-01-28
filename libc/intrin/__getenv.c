@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,9 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
 #include "libc/intrin/getenv.internal.h"
-
-#define ToUpper(c) \
-  (IsWindows() && (c) >= 'a' && (c) <= 'z' ? (c) - 'a' + 'A' : (c))
+#include "libc/intrin/kprintf.h"
 
 privileged struct Env __getenv(char **p, const char *k) {
   char *t;
@@ -32,7 +30,7 @@ privileged struct Env __getenv(char **p, const char *k) {
         if (t[j] == '=') return (struct Env){t + j + 1, i};
         break;
       }
-      if (ToUpper(k[j] & 255) != ToUpper(t[j] & 255)) {
+      if (k[j] != t[j]) {
         break;
       }
     }

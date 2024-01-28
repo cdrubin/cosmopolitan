@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │  Copyright (C) 2002-2013 Mark Adler, all rights reserved                     │
 │  version 2.3, 21 Jan 2013                                                    │
@@ -24,7 +24,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "third_party/puff/puff.h"
 #include "libc/runtime/runtime.h"
-// clang-format off
 
 asm(".ident\t\"\\n\\n\
 puff (zlib License)\\n\

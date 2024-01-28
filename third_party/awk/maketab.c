@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │ Copyright (C) Lucent Technologies 1997                                       │
@@ -25,14 +25,12 @@
 │ THIS SOFTWARE.                                                               │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/fmt.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "third_party/awk/awk.h"
 #include "third_party/awk/awkgram.tab.h"
-// clang-format off
 
 /*
  * this program makes the table to link function names
@@ -126,13 +124,9 @@ int main(int argc, char *argv[])
 	char buf[200], name[200], def[200];
 	enum { TOK_UNKNOWN, TOK_ENUM, TOK_DEFINE } tokentype = TOK_UNKNOWN;
 
-	printf("#include \"libc/calls/calls.h\"\n");
-        printf("#include \"libc/fmt/fmt.h\"\n");
-        printf("#include \"libc/stdio/lock.h\"\n");
-        printf("#include \"libc/stdio/stdio.h\"\n");
-        printf("#include \"libc/stdio/temp.h\"\n");
-	printf("#include \"third_party/awk/awk.h\"\n");
-	printf("#include \"third_party/awk/awkgram.tab.h\"\n\n");
+	printf("#include <stdio.h>\n");
+	printf("#include \"awk.h\"\n");
+	printf("#include \"awkgram.tab.h\"\n\n");
 
 	if (argc != 2) {
 		fprintf(stderr, "usage: maketab YTAB_H\n");

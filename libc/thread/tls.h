@@ -3,16 +3,14 @@
 
 #define TLS_ALIGNMENT 64
 
-#define TIB_FLAG_TIME_CRITICAL 1
-#define TIB_FLAG_VFORKED       2
-#define TIB_FLAG_WINCRASHING   4
+#define TIB_FLAG_VFORKED 1
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 struct CosmoFtrace {   /* 16 */
-  bool ft_once;        /*  0 */
-  bool ft_noreentry;   /*  1 */
+  char ft_once;        /*  0 */
+  char ft_noreentry;   /*  1 */
   int ft_skew;         /*  4 */
   int64_t ft_lastaddr; /*  8 */
 };
@@ -39,16 +37,19 @@ struct CosmoTib {
   uint32_t tib_sigstack_size;
   uint32_t tib_sigstack_flags;
   void **tib_keys;
+  void *tib_nsync;
+  void *tib_todo[7];
 };
 
 extern int __threaded;
+extern char __tls_morphed;
 extern unsigned __tls_index;
 
-char *_mktls(struct CosmoTib **);
-void __bootstrap_tls(struct CosmoTib *, char *);
+char *_mktls(struct CosmoTib **) libcesque;
+void __bootstrap_tls(struct CosmoTib *, char *) libcesque;
 
 #ifdef __x86_64__
-extern bool __tls_enabled;
+extern char __tls_enabled;
 #define __tls_enabled_set(x) __tls_enabled = x
 #elif defined(__aarch64__)
 #define __tls_enabled        true
@@ -57,14 +58,14 @@ extern bool __tls_enabled;
 #error "unsupported architecture"
 #endif
 
-void __set_tls(struct CosmoTib *);
+void __set_tls(struct CosmoTib *) libcesque;
 
 /**
  * Returns location of thread information block.
  *
  * This can't be used in privileged functions.
  */
-__funline pureconst struct CosmoTib *__get_tls(void) {
+forceinline pureconst struct CosmoTib *__get_tls(void) {
 #ifdef __chibicc__
   return 0;
 #elif __x86_64__

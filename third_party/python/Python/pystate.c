@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
@@ -7,7 +7,7 @@
 #include "third_party/python/Include/pystate.h"
 #include "libc/errno.h"
 #include "libc/intrin/pushpop.internal.h"
-#include "libc/runtime/dlfcn.h"
+#include "libc/dlopen/dlfcn.h"
 #include "third_party/python/Include/ceval.h"
 #include "third_party/python/Include/dictobject.h"
 #include "third_party/python/Include/listobject.h"
@@ -16,7 +16,6 @@
 #include "third_party/python/Include/pydebug.h"
 #include "third_party/python/Include/pyerrors.h"
 #include "third_party/python/Include/pymem.h"
-/* clang-format off */
 
 #if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__)
 __static_yoink("__die"); /* to guarantee backtraces */

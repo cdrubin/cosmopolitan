@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -35,7 +35,6 @@
 //
 //	@return	pid of child process or 0 if forked process
 //	@returnstwice
-//	@threadsafe
 //	@vforksafe
 	.ftrace1
 vfork:
@@ -56,7 +55,7 @@ vfork:
 #if !IsTiny()
 	push	%rbp
 	mov	%rsp,%rbp
-#ifdef SYSDEBUG
+#if SYSDEBUG
 	ezlea	.Llog,di
 	call	__stracef
 #endif
@@ -88,21 +87,41 @@ vfork:
 
 #elif defined(__aarch64__)
 
-	adrp	x0,__hostos
-	ldr	w0,[x0,#:lo12:__hostos]
-	tbz	x0,3,1f			// bit 3 is xnu
+	adrp	x8,__hostos
+	ldr	w8,[x8,#:lo12:__hostos]
+	tbz	x8,3,1f			// bit 3 is xnu
 	b	fork			// which doesn't support vfork()
-1:	mov	x8,#220			// __NR_clone
+1:
+
+#if SYSDEBUG
+	stp	x29,x30,[sp,-16]!
+	adrp	x0,.Llog
+	add	x0,x0,:lo12:.Llog
+	mov	x29,sp
+	bl	__stracef
+	ldp	x29,x30,[sp],16
+#endif
+
+	tbnz	w8,5,1f			// bit 5 is freebsd
+
+	mov	x8,#220			// clone (linux)
 	mov	x0,#0x4111		// SIGCHLD | CLONE_VM | CLONE_VFORK
 	mov	x1,#0
 	svc	0
+	b	2f
+
+1:	mov	x8,#66			// vfork (freebsd)
+	svc	0			// call kernel
+	bcc	2f			// jump if not carry
+	neg	x0,x0			// linux style errno
+2:
 
 //	if (!rc) {
 //	  __get_tls()->tib_flags |= TIB_FLAG_VFORKED;
 //	} else {
 //	  __get_tls()->tib_flags &= ~TIB_FLAG_VFORKED;
 //	}
-	sub	x1,x28,#0x80		// RELIES ON TLS TIB ABI!
+	sub	x1,x28,#192		// sizeof(CosmoTib)
 	ldr	x2,[x1,64]
 	cbnz	x0,2f
 	orr	x2,x2,#TIB_FLAG_VFORKED
@@ -120,7 +139,7 @@ vfork:
 #endif
 	.endfn	vfork,globl
 
-#ifdef SYSDEBUG
+#if SYSDEBUG
 	.rodata.str1.1
 .Llog:	.ascii	STRACE_PROLOGUE
 	.asciz	"vfork()\n"

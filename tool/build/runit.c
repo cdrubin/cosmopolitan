@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -23,21 +23,17 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timespec.h"
-#include "libc/dns/dns.h"
 #include "libc/errno.h"
-#include "libc/fmt/conv.h"
 #include "libc/fmt/libgen.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
 #include "libc/mem/gc.h"
-#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
+#include "libc/serialize.h"
 #include "libc/sock/ipclassify.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -51,14 +47,12 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/sock.h"
-#include "libc/time/time.h"
-#include "libc/x/x.h"
+#include "libc/temp.h"
 #include "libc/x/xasprintf.h"
-#include "libc/x/xsigaction.h"
 #include "net/https/https.h"
-#include "third_party/mbedtls/debug.h"
 #include "third_party/mbedtls/net_sockets.h"
 #include "third_party/mbedtls/ssl.h"
+#include "third_party/musl/netdb.h"
 #include "third_party/zlib/zlib.h"
 #include "tool/build/lib/eztls.h"
 #include "tool/build/lib/psk.h"
@@ -155,20 +149,21 @@ void Connect(void) {
   int rc, err, expo;
   struct addrinfo *ai;
   struct timespec deadline;
-  if ((rc = getaddrinfo(g_hostname, _gc(xasprintf("%hu", g_runitdport)),
+  if ((rc = getaddrinfo(g_hostname, gc(xasprintf("%hu", g_runitdport)),
                         &kResolvHints, &ai)) != 0) {
     FATALF("%s:%hu: EAI_%s %m", g_hostname, g_runitdport, gai_strerror(rc));
     __builtin_unreachable();
   }
-  ip4 = (const char *)&ai->ai_addr4->sin_addr;
-  if (ispublicip(ai->ai_family, &ai->ai_addr4->sin_addr)) {
+  ip4 = (const char *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr;
+  if (ispublicip(ai->ai_family,
+                 &((struct sockaddr_in *)ai->ai_addr)->sin_addr)) {
     FATALF("%s points to %hhu.%hhu.%hhu.%hhu"
            " which isn't part of a local/private/testing subnet",
            g_hostname, ip4[0], ip4[1], ip4[2], ip4[3]);
     __builtin_unreachable();
   }
   DEBUGF("connecting to %d.%d.%d.%d port %d", ip4[0], ip4[1], ip4[2], ip4[3],
-         ntohs(ai->ai_addr4->sin_port));
+         ntohs(((struct sockaddr_in *)ai->ai_addr)->sin_port));
   CHECK_NE(-1,
            (g_sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)));
   expo = INITIAL_CONNECT_TIMEOUT;
@@ -191,7 +186,8 @@ TryAgain:
       expo *= 1.5;
       if (timespec_cmp(timespec_real(), deadline) >= 0) {
         FATALF("timeout connecting to %s (%hhu.%hhu.%hhu.%hhu:%d)", g_hostname,
-               ip4[0], ip4[1], ip4[2], ip4[3], ntohs(ai->ai_addr4->sin_port));
+               ip4[0], ip4[1], ip4[2], ip4[3],
+               ntohs(((struct sockaddr_in *)ai->ai_addr)->sin_port));
         __builtin_unreachable();
       }
       goto TryAgain;
@@ -214,7 +210,7 @@ bool Send(int tmpfd, const void *output, size_t outputsize) {
   static bool once;
   static z_stream zs;
   zsize = 32768;
-  zbuf = _gc(malloc(zsize));
+  zbuf = gc(malloc(zsize));
   if (!once) {
     CHECK_EQ(Z_OK, deflateInit2(&zs, 4, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL,
                                 Z_DEFAULT_STRATEGY));
@@ -253,7 +249,7 @@ bool SendRequest(int tmpfd) {
   CHECK_NE(MAP_FAILED, (p = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0)));
   CHECK_LE((namesize = strlen((name = basename(g_prog)))), PATH_MAX);
   CHECK_LE((progsize = st.st_size), INT_MAX);
-  CHECK_NOTNULL((hdr = _gc(calloc(1, (hdrsize = 17 + namesize)))));
+  CHECK_NOTNULL((hdr = gc(calloc(1, (hdrsize = 17 + namesize)))));
   crc = crc32_z(0, (unsigned char *)p, st.st_size);
   q = hdr;
   q = WRITE32BE(q, RUNITD_MAGIC);
@@ -273,7 +269,7 @@ bool SendRequest(int tmpfd) {
 
 void RelayRequest(void) {
   int i, rc, have, transferred;
-  char *buf = _gc(malloc(PIPE_BUF));
+  char *buf = gc(malloc(PIPE_BUF));
   for (transferred = 0;;) {
     rc = read(13, buf, PIPE_BUF);
     CHECK_NE(-1, rc);
@@ -391,8 +387,8 @@ int RunOnHost(char *spec) {
   }
   RelayRequest();
   int rc = ReadResponse();
-  kprintf("%s on %-16s %'11d µs %'8ld µs %'8ld µs\n", basename(g_prog),
-          g_hostname, execute_latency, connect_latency, handshake_latency);
+  kprintf("%s on %-16s %'8ld µs %'8ld µs %'11d µs\n", basename(g_prog),
+          g_hostname, connect_latency, handshake_latency, execute_latency);
   return rc;
 }
 
@@ -406,18 +402,16 @@ bool ShouldRunInParallel(void) {
 }
 
 int SpawnSubprocesses(int argc, char *argv[]) {
-  const char *tpath;
   sigset_t chldmask, savemask;
-  int i, ws, pid, tmpfd, *pids, exitcode;
+  int i, ws, pid, *pids, exitcode;
   struct sigaction ignore, saveint, savequit;
   char *args[5] = {argv[0], argv[1], argv[2]};
 
   // create compressed network request ahead of time
-  CHECK_NE(-1, (tmpfd = open(
-                    (tpath = _gc(xasprintf(
-                         "%s/runit.%d", firstnonnull(getenv("TMPDIR"), "/tmp"),
-                         getpid()))),
-                    O_WRONLY | O_CREAT | O_TRUNC, 0755)));
+  const char *tmpdir = firstnonnull(getenv("TMPDIR"), "/tmp");
+  char *tpath = gc(xasprintf("%s/runit.XXXXXX", tmpdir));
+  int tmpfd = mkstemp(tpath);
+  CHECK_NE(-1, tmpfd);
   CHECK(SendRequest(tmpfd));
   CHECK_NE(-1, close(tmpfd));
 

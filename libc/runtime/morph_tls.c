@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,9 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "ape/sections.internal.h"
-#include "libc/intrin/bits.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/serialize.h"
 #include "libc/thread/tls.h"
 
 typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
@@ -55,19 +55,22 @@ privileged void __morph_tls(void) {
     // address 0x30 was promised to us, according to Go team
     // https://github.com/golang/go/issues/23617
     dis = 0x30;
-  } else {
+  } else if (IsWindows()) {
     // MSVC __declspec(thread) generates binary code for this
     // %gs:0x1480 abi. So long as TlsAlloc() isn't called >64
     // times we should be good.
     dis = 0x1480 + __tls_index * 8;
+  } else {
+    dis = 0;
   }
 
   // iterate over modifiable code looking for 9 byte instruction
-  // this would take 30 ms using xed to enable tls on python.com
+  // this used to take 30ms with xed to enable tls on python.com
   for (p = _ereal; p + 9 <= __privileged_start; p += n) {
 
     // use sse to zoom zoom to fs register prefixes
     // that way it'll take 1 ms to morph python.com
+    // we recompiled a 13mb binary in 1 millisecond
     while (p + 9 + 16 <= __privileged_start) {
       if ((m = __builtin_ia32_pmovmskb128(
                *(xmm_t *)p == (xmm_t){0144, 0144, 0144, 0144, 0144, 0144, 0144,
@@ -111,6 +114,7 @@ privileged void __morph_tls(void) {
     }
   }
 
+  __tls_morphed = 1;
   __morph_end();
 #endif
 }

@@ -9,13 +9,7 @@
 #define lz4len    __lz4len
 #define lz4decode __lz4decode
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
-#if 0
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § standard library » compression                            ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-#endif
 
 struct RlDecode {
   uint8_t repititions;
@@ -30,6 +24,5 @@ size_t lz4len(const void *blockdata, size_t blocksize);
 void *lz4decode(void *dest, const void *src);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* _COSMO_SOURCE */
 #endif /* COSMOPOLITAN_LIBC_KOMPRESSOR_KOMPRESSOR_H_ */

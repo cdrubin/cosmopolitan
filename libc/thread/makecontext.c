@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -88,7 +88,6 @@ static void runcontext(struct Gadget *call, ucontext_t *link) {
  *     which if null will result in pthread_exit() being called
  * @param argc is effectively ignored (see notes above)
  * @see setcontext(), getcontext(), swapcontext()
- * @threadsafe
  */
 void makecontext(ucontext_t *uc, void func(), int argc, ...) {
   va_list va;

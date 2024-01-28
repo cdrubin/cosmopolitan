@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/atomic.h"
-#include "libc/calls/blocksigs.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/kprintf.h"
@@ -27,6 +27,7 @@
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/thread2.h"
@@ -59,7 +60,7 @@ void *CancelSelfWorkerDeferred(void *arg) {
   return 0;
 }
 
-TEST(pthread_cancel, self_deferred_waitsForCancellationPoint) {
+TEST(pthread_cancel, self_deferred_waitsForCancelationPoint) {
   void *rc;
   pthread_t th;
   ASSERT_SYS(0, 0, pipe(pfds));
@@ -96,6 +97,7 @@ TEST(pthread_cancel, synchronous) {
 TEST(pthread_cancel, synchronous_deferred) {
   void *rc;
   pthread_t th;
+  if (!IsWindows()) return;
   ASSERT_SYS(0, 0, pipe(pfds));
   ASSERT_EQ(0, pthread_create(&th, 0, Worker, 0));
   while (!ready) pthread_yield();
@@ -230,7 +232,7 @@ void *CpuBoundWorker(void *arg) {
   wontleak1 = malloc(123);
   (void)wontleak1;
   pthread_cleanup_push(free, wontleak1);
-  wontleak2 = _gc(malloc(123));
+  wontleak2 = gc(malloc(123));
   (void)wontleak2;
   ASSERT_EQ(0, pthread_setspecific(key, (void *)31337));
   ASSERT_EQ(0, pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0));
@@ -282,4 +284,29 @@ TEST(pthread_cancel, self_asynchronous_takesImmediateEffect) {
   ASSERT_TRUE(gotcleanup);
   ASSERT_SYS(0, 0, close(pfds[1]));
   ASSERT_SYS(0, 0, close(pfds[0]));
+}
+
+atomic_bool was_completed;
+
+void WaitUntilReady(void) {
+  while (!ready) pthread_yield();
+  ASSERT_EQ(0, errno);
+  ASSERT_SYS(0, 0, usleep(1000));
+}
+
+void *SleepWorker(void *arg) {
+  pthread_setcancelstate(PTHREAD_CANCEL_MASKED, 0);
+  ready = true;
+  ASSERT_SYS(ECANCELED, -1, usleep(30 * 1e6));
+  was_completed = true;
+  return 0;
+}
+
+TEST(pthread_cancel, canInterruptSleepOperation) {
+  pthread_t th;
+  ASSERT_EQ(0, pthread_create(&th, 0, SleepWorker, 0));
+  WaitUntilReady();
+  ASSERT_EQ(0, pthread_cancel(th));
+  ASSERT_EQ(0, pthread_join(th, 0));
+  ASSERT_TRUE(was_completed);
 }

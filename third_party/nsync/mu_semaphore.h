@@ -1,18 +1,14 @@
 #ifndef NSYNC_SEM_H_
 #define NSYNC_SEM_H_
 #include "third_party/nsync/time.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 typedef struct nsync_semaphore_s_ {
-  void *sem_space[32]; /* internal storage */
+  void *sem_space[3];
 } nsync_semaphore;
 
 /* Initialize *s; the initial value is 0. */
 void nsync_mu_semaphore_init(nsync_semaphore *s);
-
-/* Releases system resources associated with *s. */
-void nsync_mu_semaphore_destroy(nsync_semaphore *s);
 
 /* Wait until the count of *s exceeds 0, and decrement it. */
 errno_t nsync_mu_semaphore_p(nsync_semaphore *s);
@@ -27,5 +23,4 @@ errno_t nsync_mu_semaphore_p_with_deadline(nsync_semaphore *s,
 void nsync_mu_semaphore_v(nsync_semaphore *s);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* NSYNC_SEM_H_ */

@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -20,17 +20,10 @@
 
 //	Gets machine state.
 //
-//	This function goes 14x slower if sigaction() has ever been used to
-//	install a signal handling function. If you don't care about signal
-//	safety and just want fast fibers, then you may override the global
-//	variable `__interruptible` to disable the sigprocmask() calls, for
-//	pure userspace context switching.
-//
 //	@return	0 on success, or -1 w/ errno
 //	@see	makecontext()
 //	@see	swapcontext()
 //	@see	setcontext()
-//	@threadsafe
 	.ftrace1
 getcontext:
 	.ftrace2

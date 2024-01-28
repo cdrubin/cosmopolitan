@@ -1,5 +1,5 @@
 /usr/bin/env echo ' -*-mode:sh;indent-tabs-mode:nil;tab-width:8;coding:utf-8-*-│
-│vi: set net ft=sh ts=2 sts=2 sw=2 fenc=utf-8                               :vi│
+│ vi: set noet ft=sh ts=8 sts=8 sw=8 fenc=utf-8                            :vi │
 ╚────────────────────────────────────────────────────────────────'>/dev/null #*/
 . libc/nt/codegen.sh
 
@@ -9,7 +9,6 @@
 # KERNEL32.DLL
 #
 #	Name							Actual							DLL		Arity
-imp	''							CloseHandle						kernel32	1
 imp	''							CreateDirectoryW					kernel32	2
 imp	''							CreateFileA						kernel32	7
 imp	''							CreateFileMappingNumaW					kernel32	7
@@ -46,6 +45,7 @@ imp	''							WaitForMultipleObjects					kernel32	4
 imp	''							WaitForSingleObject					kernel32	2
 imp	'AcquireSRWLockExclusive'				AcquireSRWLockExclusive					kernel32	1
 imp	'AcquireSRWLockShared'					AcquireSRWLockShared					kernel32	1
+imp	'AddDllDirectory'					AddDllDirectory						kernel32	1
 imp	'AddVectoredContinueHandler'				AddVectoredContinueHandler				kernel32	2
 imp	'AddVectoredExceptionHandler'				AddVectoredExceptionHandler				kernel32	2
 imp	'AllocConsole'						AllocConsole						kernel32	0
@@ -57,6 +57,8 @@ imp	'CancelIoEx'						CancelIoEx						kernel32	2
 imp	'CancelSynchronousIo'					CancelSynchronousIo					kernel32	1
 imp	'CheckRemoteDebuggerPresent'				CheckRemoteDebuggerPresent				kernel32	2
 imp	'ClearCommBreak'					ClearCommBreak						kernel32	1
+imp	'CloseHandle'						CloseHandle						kernel32	1
+imp	'ClosePseudoConsole'					ClosePseudoConsole					kernel32	1	# Windows 10+
 imp	'ConnectNamedPipe'					ConnectNamedPipe					kernel32	2
 imp	'ContinueDebugEvent'					ContinueDebugEvent					kernel32	3
 imp	'CopyFile'						CopyFileW						kernel32	3
@@ -64,6 +66,7 @@ imp	'CreateEvent'						CreateEventW						kernel32	4
 imp	'CreateEventEx'						CreateEventExW						kernel32	4
 imp	'CreateHardLink'					CreateHardLinkW						kernel32	3
 imp	'CreateIoCompletionPort'				CreateIoCompletionPort					kernel32	4
+imp	'CreatePseudoConsole'					CreatePseudoConsole					kernel32	5	# Windows 10+
 imp	'CreateSemaphore'					CreateSemaphoreW					kernel32	4
 imp	'CreateToolhelp32Snapshot'				CreateToolhelp32Snapshot				kernel32	2
 imp	'CreateWaitableTimer'					CreateWaitableTimerW					kernel32	3
@@ -87,6 +90,7 @@ imp	'FindNextVolume'					FindNextVolumeW						kernel32	3
 imp	'FindVolumeClose'					FindVolumeClose						kernel32	1
 imp	'FlushConsoleInputBuffer'				FlushConsoleInputBuffer					kernel32	1
 imp	'FormatMessage'						FormatMessageW						kernel32	7
+imp	'FormatMessageA'					FormatMessageA						kernel32	7
 imp	'FreeConsole'						FreeConsole						kernel32	0
 imp	'FreeEnvironmentStrings'				FreeEnvironmentStringsW					kernel32	1
 imp	'FreeLibrary'						FreeLibrary						kernel32	1
@@ -162,6 +166,7 @@ imp	'GetSystemTimes'					GetSystemTimes						kernel32	3
 imp	'GetTempPath'						GetTempPathW						kernel32	2
 imp	'GetTempPathA'						GetTempPathA						kernel32	2
 imp	'GetThreadContext'					GetThreadContext					kernel32	2
+imp	'GetThreadDescription'					GetThreadDescription					kernel32	2
 imp	'GetThreadIOPendingFlag'				GetThreadIOPendingFlag					kernel32	2
 imp	'GetThreadId'						GetThreadId						kernel32	1
 imp	'GetThreadPriority'					GetThreadPriority					kernel32	1
@@ -224,6 +229,7 @@ imp	'ReleaseSemaphore'					ReleaseSemaphore					kernel32	3
 imp	'RemoveVectoredContinueHandler'				RemoveVectoredContinueHandler				kernel32	1
 imp	'RemoveVectoredExceptionHandler'			RemoveVectoredExceptionHandler				kernel32	1
 imp	'ResetEvent'						ResetEvent						kernel32	1
+imp	'ResizePseudoConsole'					ResizePseudoConsole					kernel32	2	# Windows 10+
 imp	'ResumeThread'						ResumeThread						kernel32	1
 imp	'SetConsoleActiveScreenBuffer'				SetConsoleActiveScreenBuffer				kernel32	1	# TODO(jart): 6.2 and higher
 imp	'SetConsoleCP'						SetConsoleCP						kernel32	1	# TODO(jart): 6.2 and higher
@@ -244,7 +250,7 @@ imp	'SetErrorMode'						SetErrorMode						kernel32	1
 imp	'SetEvent'						SetEvent						kernel32	1
 imp	'SetFileAttributes'					SetFileAttributesW					kernel32	2
 imp	'SetFileCompletionNotificationModes'			SetFileCompletionNotificationModes			kernel32	2
-imp	'SetFilePointerEx'					SetFilePointerEx					kernel32	4
+imp	'SetFileInformationByHandle'				SetFileInformationByHandle				kernel32	4
 imp	'SetFileTime'						SetFileTime						kernel32	4
 imp	'SetFileValidData'					SetFileValidData					kernel32	2
 imp	'SetHandleCount'					SetHandleCount						kernel32	1
@@ -259,6 +265,7 @@ imp	'SetProcessWorkingSetSizeEx'				SetProcessWorkingSetSizeEx				kernel32	4
 imp	'SetStdHandle'						SetStdHandle						kernel32	2
 imp	'SetThreadAffinityMask'					SetThreadAffinityMask					kernel32	2
 imp	'SetThreadContext'					SetThreadContext					kernel32	2
+imp	'SetThreadDescription'					SetThreadDescription					kernel32	2
 imp	'SetThreadPriority'					SetThreadPriority					kernel32	2
 imp	'SetThreadPriorityBoost'				SetThreadPriorityBoost					kernel32	2
 imp	'SetUnhandledExceptionFilter'				SetUnhandledExceptionFilter				kernel32	1
@@ -481,15 +488,6 @@ imp	'GetSaveFileName'					GetSaveFileNameW					comdlg32	1
 imp	'PrintDlg'						PrintDlgW						comdlg32	1
 imp	'ReplaceText'						ReplaceTextW						comdlg32	1
 
-# MSWSOCK.DLL
-#
-#	Name							Actual							DLL		Arity
-imp	'AcceptEx'						AcceptEx						MsWSock		8
-imp	'DisconnectEx'						DisconnectEx						MsWSock		4
-imp	'GetAcceptExSockaddrs'					GetAcceptExSockaddrs					MsWSock		8
-imp	'TransmitFile'						TransmitFile						MsWSock		7
-imp	'WSARecvEx'						WSARecvEx						MsWSock		4
-
 # WS2_32.DLL
 #
 #	Name							Actual							DLL		Arity
@@ -512,6 +510,7 @@ imp	''							send							ws2_32		4	# we're using WSASendTo()
 imp	''							sendto							ws2_32		6	# we're using WSASendTo()
 imp	''							setsockopt						ws2_32		5
 imp	''							shutdown						ws2_32		2
+imp	''							socket							ws2_32		3
 imp	''							socket							ws2_32		3
 imp	''							socket							ws2_32		3
 imp	'FreeAddrInfo'						FreeAddrInfoW						ws2_32		1
@@ -604,6 +603,10 @@ imp	'PdhOpenQuery'						PdhOpenQueryW						pdh		3	# Creates a new query that is 
 # PSAPI.DLL
 #
 #	Name							Actual							DLL		Arity
+imp	'EnumProcessModules'					EnumProcessModules					psapi		4
+imp	'EnumProcessModulesEx'					EnumProcessModulesEx					psapi		5
+imp	'EnumProcesses'						EnumProcesses						psapi		3
+imp	'GetModuleBaseName'					GetModuleBaseNameW					psapi		4
 imp	'GetProcessImageFileName'				GetProcessImageFileNameW				psapi		3
 imp	'GetProcessMemoryInfo'					GetProcessMemoryInfo					psapi		3
 

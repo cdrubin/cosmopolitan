@@ -6,7 +6,6 @@
 #include "libc/elf/struct/shdr.h"
 #include "libc/elf/struct/sym.h"
 #include "tool/build/lib/interner.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 struct ElfWriterSyms {
@@ -54,7 +53,7 @@ struct ElfWriter {
   struct Interner *shstrtab;
 };
 
-struct ElfWriter *elfwriter_open(const char *, int) __wur;
+struct ElfWriter *elfwriter_open(const char *, int, int) __wur;
 void elfwriter_cargoculting(struct ElfWriter *);
 void elfwriter_close(struct ElfWriter *);
 void elfwriter_align(struct ElfWriter *, size_t, size_t);
@@ -77,5 +76,4 @@ void elfwriter_zip(struct ElfWriter *, const char *, const char *, size_t,
                    struct timespec, struct timespec, bool);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_TOOL_BUILD_LIB_ELFWRITER_H_ */

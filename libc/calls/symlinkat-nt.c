@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -32,9 +32,8 @@
 #include "libc/nt/struct/tokenprivileges.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/runtime/stack.h"
+#include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
-
-__msabi extern typeof(GetFileAttributes) *const __imp_GetFileAttributesW;
 
 static struct {
   _Atomic(uint32_t) once;
@@ -72,7 +71,7 @@ textwindows int sys_symlinkat_nt(const char *target, int newdirfd,
   if ((targetlen = __mkntpath(target, M.target16)) == -1) return -1;
 
   // determine if we need directory flag
-  if ((attrs = __imp_GetFileAttributesW(M.target16)) != -1u) {
+  if ((attrs = GetFileAttributes(M.target16)) != -1u) {
     if (attrs & kNtFileAttributeDirectory) {
       flags = kNtSymbolicLinkFlagDirectory;
     } else {

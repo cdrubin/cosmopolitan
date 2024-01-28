@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
@@ -8,8 +8,6 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
-#include "libc/dns/dns.h"
-#include "libc/dns/ent.h"
 #include "libc/errno.h"
 #include "libc/nt/enum/version.h"
 #include "libc/nt/version.h"
@@ -55,8 +53,8 @@
 #include "third_party/python/Include/tupleobject.h"
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Include/yoink.h"
+#include "third_party/musl/netdb.h"
 #include "third_party/python/pyconfig.h"
-/* clang-format off */
 
 PYTHON_PROVIDE("_socket");
 PYTHON_PROVIDE("_socket.AF_APPLETALK");

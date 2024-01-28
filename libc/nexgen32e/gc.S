@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -32,7 +32,6 @@
 //
 //	@param	rax,rdx,xmm0,xmm1,st0,st1 is return value
 //	@see	test/libc/runtime/gc_test.c
-//	@threadsafe
 	.ftrace1
 __gc:	.ftrace2
 
@@ -68,7 +67,7 @@ __gc:	.ftrace2
 
 //	if this code fails
 //	check if CosmoTib's size changed
-	sub	x8,x28,#128			// __get_tls()
+	sub	x8,x28,#192			// __get_tls()
 	ldr	x9,[x8,0x18]			// tib::garbages
 	ldr	x10,[x9]			// g->i
 	ldr	x8,[x9,8]			// g->p

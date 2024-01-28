@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -21,18 +21,18 @@
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/describentoverlapped.internal.h"
 #include "libc/intrin/kprintf.h"
+#include "libc/intrin/likely.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sock/internal.h"
 
 __msabi extern typeof(WSARecv) *const __imp_WSARecv;
 
 /**
  * Receives data from Windows socket.
- *
  * @return 0 on success, or -1 on failure
- * @note this wrapper takes care of ABI, STRACE(), and __winerr()
  */
 textwindows int WSARecv(
     uint64_t s, const struct NtIovec *inout_lpBuffers, uint32_t dwBufferCount,
@@ -46,7 +46,7 @@ textwindows int WSARecv(
     // be NULL only if the lpOverlapped parameter is not NULL.
     unassert(!opt_out_lpNumberOfBytesRecvd);
   }
-#if defined(SYSDEBUG) && _NTTRACE
+#if SYSDEBUG && _NTTRACE
   uint32_t NumberOfBytesRecvd;
   if (opt_out_lpNumberOfBytesRecvd) {
     NumberOfBytesRecvd = *opt_out_lpNumberOfBytesRecvd;
@@ -56,9 +56,6 @@ textwindows int WSARecv(
                      opt_lpCompletionRoutine);
   if (opt_out_lpNumberOfBytesRecvd) {
     *opt_out_lpNumberOfBytesRecvd = NumberOfBytesRecvd;
-  }
-  if (rc == -1) {
-    __winsockerr();
   }
   if (UNLIKELY(__strace > 0) && strace_enabled(0) > 0) {
     kprintf(STRACE_PROLOGUE "WSARecv(%lu, [", s);
@@ -73,9 +70,6 @@ textwindows int WSARecv(
   rc = __imp_WSARecv(s, inout_lpBuffers, dwBufferCount,
                      opt_out_lpNumberOfBytesRecvd, inout_lpFlags,
                      opt_inout_lpOverlapped, opt_lpCompletionRoutine);
-  if (rc == -1) {
-    __winsockerr();
-  }
 #endif
   return rc;
 }

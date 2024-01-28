@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -55,5 +55,10 @@ const struct IdName kX86MarchNames[] = {
     {X86_MARCH_TREMONT, "Tremont"},                 //
     {X86_MARCH_KNIGHTSLANDING, "Knights Landing"},  //
     {X86_MARCH_KNIGHTSMILL, "Knights Mill"},        //
+    {X86_MARCH_SAPPHIRERAPIDS, "Sapphire Rapids"},  //
+    {X86_MARCH_ALDERLAKE, "Alder Lake"},            //
+    {X86_MARCH_COMETLAKE, "Comet Lake"},            //
+    {X86_MARCH_RAPTORLAKE, "Raptor Lake"},          //
+    {X86_MARCH_ROCKETLAKE, "Rocket Lake"},          //
     {0},                                            //
 };

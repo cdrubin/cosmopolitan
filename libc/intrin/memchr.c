@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -22,7 +22,7 @@
 #include "libc/str/str.h"
 #ifndef __aarch64__
 
-typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
+typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
 
 static inline const unsigned char *memchr_pure(const unsigned char *s,
                                                unsigned char c, size_t n) {
@@ -71,15 +71,7 @@ void *memchr(const void *s, int c, size_t n) {
 #if defined(__x86_64__) && !defined(__chibicc__)
   const void *r;
   if (IsAsan()) __asan_verify(s, n);
-  const unsigned char *p = (const unsigned char *)s;
-  while (n && ((intptr_t)p & 15)) {
-    if (*p == (unsigned char)c) {
-      return (void *)p;
-    }
-    ++p;
-    --n;
-  }
-  r = memchr_sse(p, c, n);
+  r = memchr_sse(s, c, n);
   return (void *)r;
 #else
   return (void *)memchr_pure(s, c, n);

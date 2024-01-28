@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -50,7 +50,7 @@ TryAgain:
                                    nDefaultTimeOutMs, opt_lpSecurityAttributes);
   if (hServer == -1 && __imp_GetLastError() == kNtErrorPipeBusy) {
     if (micros >= 1024) __imp_Sleep(micros / 1024);
-    if (micros / 1024 < __SIG_IO_INTERVAL_MS) micros <<= 1;
+    if (micros < 1024 * 1024) micros <<= 1;
     goto TryAgain;
   }
   if (hServer == -1) __winerr();

@@ -1,4 +1,3 @@
-// clang-format off
 /*
  * xxhsum - Command line interface for xxhash algorithms
  * Copyright (C) 2013-2021 Yann Collet
@@ -91,7 +90,6 @@
 #include "libc/nt/winsock.h" /* DeviceIoControl, HANDLE, FSCTL_SET_SPARSE */
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"

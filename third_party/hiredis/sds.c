@@ -1,4 +1,3 @@
-// clang-format off
 /* SDSLib 2.0 -- A C dynamic strings library
  *
  * Copyright (c) 2006-2015, Salvatore Sanfilippo <antirez at gmail dot com>
@@ -34,7 +33,6 @@
 #include "libc/calls/calls.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "third_party/musl/tempnam.h"
@@ -1145,7 +1143,6 @@ void sds_free(void *ptr) { s_free(ptr); }
 #include "libc/calls/calls.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "third_party/musl/tempnam.h"

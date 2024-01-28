@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -52,7 +52,7 @@ int fstat(int fd, struct stat *st) {
   } else if (IsMetal()) {
     rc = sys_fstat_metal(fd, st);
   } else if (IsWindows()) {
-    rc = sys_fstat_nt(__getfdhandleactual(fd), st);
+    rc = sys_fstat_nt(fd, st);
   } else {
     rc = enosys();
   }
@@ -60,4 +60,4 @@ int fstat(int fd, struct stat *st) {
   return rc;
 }
 
-__strong_reference(fstat, fstat64);
+__weak_reference(fstat, fstat64);

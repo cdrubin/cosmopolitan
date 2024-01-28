@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -64,7 +64,7 @@
  * @see pthread_spin_lock()
  * @vforksafe
  */
-int pthread_mutex_lock(pthread_mutex_t *mutex) {
+errno_t pthread_mutex_lock(pthread_mutex_t *mutex) {
   int t;
 
   LOCKTRACE("pthread_mutex_lock(%t)", mutex);
@@ -82,7 +82,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
 
   if (mutex->_type == PTHREAD_MUTEX_NORMAL) {
     while (atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
-      pthread_yield();
+      pthread_pause_np();
     }
     return 0;
   }
@@ -102,7 +102,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
   }
 
   while (atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
-    pthread_yield();
+    pthread_pause_np();
   }
 
   mutex->_depth = 0;

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,9 +18,11 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/createfileflags.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/flock.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/wincrash.internal.h"
@@ -95,7 +97,7 @@ static textwindows bool OverlapsFileLock(struct FileLock *fl, int64_t off,
   EndA = off + (len - 1);
   BegB = fl->off;
   EndB = fl->off + (fl->len - 1);
-  return MAX(BegA, BegB) < MIN(EndA, EndB);
+  return MAX(BegA, BegB) <= MIN(EndA, EndB);
 }
 
 static textwindows bool EncompassesFileLock(struct FileLock *fl, int64_t off,
@@ -125,11 +127,17 @@ textwindows void sys_fcntl_nt_lock_cleanup(int fd) {
   pthread_mutex_unlock(&g_locks.mu);
 }
 
+static textwindows int64_t GetfileSize(int64_t handle) {
+  struct NtByHandleFileInformation wst;
+  if (!GetFileInformationByHandle(handle, &wst)) return __winerr();
+  return (wst.nFileSizeHigh + 0ull) << 32 | wst.nFileSizeLow;
+}
+
 static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
                                          uintptr_t arg) {
   uint32_t flags;
   struct flock *l;
-  int64_t pos, off, len, end;
+  int64_t off, len, end;
   struct FileLock *fl, *ft, **flp;
 
   if (!_weaken(malloc)) {
@@ -144,16 +152,14 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
     case SEEK_SET:
       break;
     case SEEK_CUR:
-      pos = 0;
-      if (SetFilePointerEx(f->handle, 0, &pos, SEEK_CUR)) {
-        off = pos + off;
-      } else {
-        return __winerr();
-      }
+      off = f->pointer + off;
       break;
-    case SEEK_END:
-      off = INT64_MAX - off;
+    case SEEK_END: {
+      int64_t size;
+      if ((size = GetfileSize(f->handle)) == -1) return -1;
+      off = size - off;
       break;
+    }
     default:
       return einval();
   }
@@ -313,76 +319,32 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
 
 static textwindows int sys_fcntl_nt_dupfd(int fd, int cmd, int start) {
   if (start < 0) return einval();
-  return sys_dup_nt(fd, -1, (cmd == F_DUPFD_CLOEXEC ? O_CLOEXEC : 0), start);
-}
-
-static textwindows int sys_fcntl_nt_setfl(int fd, unsigned *flags,
-                                          unsigned mode, unsigned arg,
-                                          intptr_t *handle) {
-
-  // you may change the following:
-  //
-  // - O_NONBLOCK     make read() raise EAGAIN
-  // - O_APPEND       for toggling append mode
-  // - O_RANDOM       alt. for posix_fadvise()
-  // - O_SEQUENTIAL   alt. for posix_fadvise()
-  // - O_DIRECT       works but haven't tested
-  //
-  // the other bits are ignored.
-  unsigned allowed = O_APPEND | O_SEQUENTIAL | O_RANDOM | O_DIRECT | O_NONBLOCK;
-  unsigned needreo = O_APPEND | O_SEQUENTIAL | O_RANDOM | O_DIRECT;
-  unsigned newflag = (*flags & ~allowed) | (arg & allowed);
-
-  if ((*flags & needreo) ^ (arg & needreo)) {
-    unsigned perm, share, attr;
-    if (GetNtOpenFlags(newflag, mode, &perm, &share, 0, &attr) == -1) {
-      return -1;
-    }
-    // MSDN says only these are allowed, otherwise it returns EINVAL.
-    attr &= kNtFileFlagBackupSemantics | kNtFileFlagDeleteOnClose |
-            kNtFileFlagNoBuffering | kNtFileFlagOpenNoRecall |
-            kNtFileFlagOpenReparsePoint | kNtFileFlagOverlapped |
-            kNtFileFlagPosixSemantics | kNtFileFlagRandomAccess |
-            kNtFileFlagSequentialScan | kNtFileFlagWriteThrough;
-    intptr_t hand;
-    if ((hand = ReOpenFile(*handle, perm, share, attr)) != -1) {
-      if (hand != *handle) {
-        CloseHandle(*handle);
-        *handle = hand;
-      }
-    } else {
-      return __winerr();
-    }
-  }
-
-  // 1. ignore flags that aren't access mode flags
-  // 2. return zero if nothing's changed
-  *flags = newflag;
-  return 0;
+  return sys_dup_nt(fd, -1, (cmd == F_DUPFD_CLOEXEC ? _O_CLOEXEC : 0), start);
 }
 
 textwindows int sys_fcntl_nt(int fd, int cmd, uintptr_t arg) {
   int rc;
-  if (__isfdkind(fd, kFdFile) ||    //
-      __isfdkind(fd, kFdSocket) ||  //
-      __isfdkind(fd, kFdConsole)) {
+  BLOCK_SIGNALS;
+  if (__isfdkind(fd, kFdFile) ||     //
+      __isfdkind(fd, kFdSocket) ||   //
+      __isfdkind(fd, kFdConsole) ||  //
+      __isfdkind(fd, kFdDevNull)) {
     if (cmd == F_GETFL) {
-      rc = g_fds.p[fd].flags & (O_ACCMODE | O_APPEND | O_DIRECT | O_NONBLOCK |
-                                O_RANDOM | O_SEQUENTIAL);
+      rc = g_fds.p[fd].flags & (O_ACCMODE | _O_APPEND | _O_DIRECT |
+                                _O_NONBLOCK | _O_RANDOM | _O_SEQUENTIAL);
     } else if (cmd == F_SETFL) {
-      rc = sys_fcntl_nt_setfl(fd, &g_fds.p[fd].flags, g_fds.p[fd].mode, arg,
-                              &g_fds.p[fd].handle);
+      rc = sys_fcntl_nt_setfl(fd, arg);
     } else if (cmd == F_GETFD) {
-      if (g_fds.p[fd].flags & O_CLOEXEC) {
+      if (g_fds.p[fd].flags & _O_CLOEXEC) {
         rc = FD_CLOEXEC;
       } else {
         rc = 0;
       }
     } else if (cmd == F_SETFD) {
       if (arg & FD_CLOEXEC) {
-        g_fds.p[fd].flags |= O_CLOEXEC;
+        g_fds.p[fd].flags |= _O_CLOEXEC;
       } else {
-        g_fds.p[fd].flags &= ~O_CLOEXEC;
+        g_fds.p[fd].flags &= ~_O_CLOEXEC;
       }
       rc = 0;
     } else if (cmd == F_SETLK || cmd == F_SETLKW || cmd == F_GETLK) {
@@ -397,5 +359,6 @@ textwindows int sys_fcntl_nt(int fd, int cmd, uintptr_t arg) {
   } else {
     rc = ebadf();
   }
+  ALLOW_SIGNALS;
   return rc;
 }

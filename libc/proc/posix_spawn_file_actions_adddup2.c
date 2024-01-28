@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -26,14 +26,12 @@
  *
  * @param file_actions was initialized by posix_spawn_file_actions_init()
  * @return 0 on success, or errno on error
- * @raise ENOMEM if we require more vespene gas
  * @raise EBADF if 'fildes' or `newfildes` is negative
- * @raise ENOTSUP if `newfildes` isn't 0, 1, or 2 on Windows
+ * @raise ENOMEM if insufficient memory was available
  */
 int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *file_actions,
                                      int fildes, int newfildes) {
   if (fildes < 0 || newfildes < 0) return EBADF;
-  if (IsWindows() && newfildes > 2) return ENOTSUP;
   return __posix_spawn_add_file_action(file_actions,
                                        (struct _posix_faction){
                                            .action = _POSIX_SPAWN_DUP2,

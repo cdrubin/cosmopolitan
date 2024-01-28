@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_WEIRDTYPES_H_
 #define COSMOPOLITAN_LIBC_CALLS_WEIRDTYPES_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 
 /**
  * @fileoverview Types we'd prefer hadn't been invented.
@@ -64,6 +63,7 @@ typedef uint32_t nlink_t; /* uint16_t on xnu */
 #define fstat64           fstat
 #define fstatat64         fstatat
 #define fstatfs64         fstatfs
+#define fstatvfs64        fstatvfs
 #define getrlimit64       getrlimit
 #define ino64_t           ino_t
 #define lockf64           lockf
@@ -83,8 +83,8 @@ typedef uint32_t nlink_t; /* uint16_t on xnu */
 #define setrlimit64       setrlimit
 #define stat64            stat
 #define statfs64          statfs
+#define statvfs64         statvfs
 #define versionsort64     versionsort
 #endif
 
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_WEIRDTYPES_H_ */

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
 #include "libc/stdio/stdio.h"
@@ -28,12 +28,12 @@ void *Worker(void *arg) {
   int i;
   char *volatile p;
   char *volatile q;
-  for (i = 0; i < 256; ++i) {
+  for (i = 0; i < 3000; ++i) {
     p = malloc(17);
     free(p);
     p = malloc(17);
     q = malloc(17);
-    sched_yield();
+    pthread_yield();
     free(p);
     free(q);
   }
@@ -45,7 +45,7 @@ void SetUpOnce(void) {
 }
 
 TEST(memory, test) {
-  int i, n = 32;
+  int i, n = 8;
   pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
   for (i = 0; i < n; ++i) {
     ASSERT_EQ(0, pthread_create(t + i, 0, Worker, 0));

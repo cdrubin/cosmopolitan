@@ -2,52 +2,57 @@
 #define COSMOPOLITAN_LIBC_PROC_H_
 #include "libc/atomic.h"
 #include "libc/calls/struct/rusage.h"
+#include "libc/intrin/atomic.h"
 #include "libc/intrin/dll.h"
 #include "libc/thread/thread.h"
-#include "libc/thread/tls.h"
-#include "third_party/nsync/cv.h"
 #include "third_party/nsync/mu.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
+
+#define PROC_ALIVE  0
+#define PROC_ZOMBIE 1
+#define PROC_UNDEAD 2
 
 #define PROC_CONTAINER(e) DLL_CONTAINER(struct Proc, elem, e)
 
 struct Proc {
   int pid;
+  int status;
   int waiters;
-  bool iszombie;
   bool wasforked;
   uint32_t wstatus;
   int64_t handle;
   struct Dll elem;
-  nsync_cv onexit;
+  struct rusage ru;
 };
 
 struct Procs {
   int waiters;
   atomic_uint once;
   nsync_mu lock;
-  nsync_cv onexit;
   intptr_t thread;
-  intptr_t onstart;
+  intptr_t onbirth;
+  intptr_t haszombies;
   struct Dll *list;
   struct Dll *free;
+  struct Dll *undead;
   struct Dll *zombies;
   struct Proc pool[8];
   unsigned allocated;
-  struct CosmoTib tls;
+  struct rusage ruchlds;
 };
 
 extern struct Procs __proc;
 
-void __proc_wipe(void);
-void __proc_lock(void);
-void __proc_unlock(void);
-struct Proc *__proc_new(void);
-void __proc_add(struct Proc *);
-void __proc_free(struct Proc *);
-int sys_wait4_nt(int, int *, int, struct rusage *);
+void __proc_wipe(void) libcesque;
+void __proc_lock(void) libcesque;
+void __proc_unlock(void) libcesque;
+int64_t __proc_handle(int) libcesque;
+int64_t __proc_search(int) libcesque;
+struct Proc *__proc_new(void) libcesque;
+void __proc_add(struct Proc *) libcesque;
+void __proc_free(struct Proc *) libcesque;
+int __proc_harvest(struct Proc *, bool) libcesque;
+int sys_wait4_nt(int, int *, int, struct rusage *) libcesque;
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_PROC_H_ */

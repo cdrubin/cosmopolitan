@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=8 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=8 sts=2 sw=2 fenc=utf-8                               :vi │
 ╚══════════════════════════════════════════════════════════════════════════════╝
 │ @author (c) Marco Paland (info@paland.com)                                   │
 │             2014-2019, PALANDesign Hannover, Germany                         │
@@ -39,7 +39,7 @@
 #include "libc/x/xasprintf.h"
 
 char buffer[1000];
-/* #define Format(...) _gc(xasprintf(__VA_ARGS__)) */
+/* #define Format(...) gc(xasprintf(__VA_ARGS__)) */
 #define Format(...) (snprintf(buffer, sizeof(buffer), __VA_ARGS__), buffer)
 
 TEST(sprintf, test_space_flag) {
@@ -572,13 +572,13 @@ TEST(xasprintf, hugeNtoa) {
   ASSERT_STREQ(
       "0b1111111111111111111111111111111111111111111111111111111111111111111111"
       "1111111111111111111111111111111111111111111111111111111111",
-      _gc(xasprintf("%#jjb", UINT128_MAX)));
+      gc(xasprintf("%#jjb", UINT128_MAX)));
 }
 
 TEST(xasprintf, twosBane) {
-  ASSERT_STREQ("-2147483648", _gc(xasprintf("%d", 0x80000000)));
+  ASSERT_STREQ("-2147483648", gc(xasprintf("%d", 0x80000000)));
   ASSERT_STREQ("-9223372036854775808",
-               _gc(xasprintf("%ld", 0x8000000000000000)));
+               gc(xasprintf("%ld", 0x8000000000000000)));
 }
 
 TEST(snprintf, testFixedWidthString_wontOverrunInput) {
@@ -657,8 +657,6 @@ BENCH(palandprintf, bench) {
   EZBENCH2("LONG_MIN %ld", donothing, Format("%ld", __veil("r", LONG_MIN)));
   EZBENCH2("INT128_MIN %jjd", donothing, Format("%jjd", INT128_MIN));
   EZBENCH2("INT128_MIN %jjx", donothing, Format("%jjx", INT128_MIN));
-  EZBENCH2("int64toarray 23", donothing, FormatInt64(buffer, 23));
-  EZBENCH2("int64toarray min", donothing, FormatInt64(buffer, INT_MIN));
 #ifdef __x86__
   EZBENCH2("%Lf M_PI", donothing, Format("%Lf", __veil("t", M_PI)));
   EZBENCH2("%Lg M_PI", donothing, Format("%Lg", __veil("t", M_PI)));

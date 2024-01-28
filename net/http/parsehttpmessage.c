@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/intrin/bits.h"
+#include "libc/serialize.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/alg.h"
@@ -57,7 +57,7 @@ void DestroyHttpMessage(struct HttpMessage *r) {
  * This parser is responsible for determining the length of a message
  * and slicing the strings inside it. Performance is attained using
  * perfect hash tables. No memory allocation is performed for normal
- * messages. Line folding is forbidden. State persists across calls so
+ * messagesy. Line folding is forbidden. State persists across calls so
  * that fragmented messages can be handled efficiently. A limitation on
  * message size is imposed to make the header data structures smaller.
  *

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,14 +18,13 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timeval.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/fmt/fmt.h"
 #include "libc/fmt/libgen.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/log/internal.h"
@@ -81,7 +80,6 @@ static void vflogf_onfail(FILE *f) {
  * time that it took to connect. This is great in forking applications.
  *
  * @asyncsignalsafe
- * @threadsafe
  */
 void(vflogf)(unsigned level, const char *file, int line, FILE *f,
              const char *fmt, va_list va) {
@@ -96,7 +94,8 @@ void(vflogf)(unsigned level, const char *file, int line, FILE *f,
   if (!f) return;
   flockfile(f);
   strace_enabled(-1);
-  BLOCK_CANCELLATIONS;
+  BLOCK_SIGNALS;
+  BLOCK_CANCELATION;
 
   // We display TIMESTAMP.MICROS normally. However, when we log multiple
   // times in the same second, we display TIMESTAMP+DELTAMICROS instead.
@@ -135,10 +134,11 @@ void(vflogf)(unsigned level, const char *file, int line, FILE *f,
     (dprintf)(STDERR_FILENO,
               "exiting due to aforementioned error (host %s pid %d tid %d)\n",
               buf32, getpid(), gettid());
-    __die();
+    _Exit(22);
   }
 
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
+  ALLOW_SIGNALS;
   strace_enabled(+1);
   funlockfile(f);
 }

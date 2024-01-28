@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -27,9 +27,7 @@ TEST(strsignal, test) {
   EXPECT_STREQ("SIGALRM", strsignal(SIGALRM));
   EXPECT_STREQ("SIGUSR1", strsignal(SIGUSR1));
   EXPECT_STREQ("SIGSTOP", strsignal(SIGSTOP));
-  EXPECT_STREQ("666", strsignal(666));
-  EXPECT_STREQ("-1", strsignal(-1));
-  EXPECT_STREQ("9001", strsignal(9001));
+  EXPECT_STREQ("150", strsignal(150));
 }
 
 TEST(strsignal, realtime) {

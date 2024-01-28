@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -122,7 +122,7 @@ TEST(sqlite, test) {
                                   ")"));
   ASSERT_EQ(SQLITE_OK, sqlite3_close(db));
   int i, n = 4;
-  pthread_t *t = _gc(malloc(sizeof(pthread_t) * n));
+  pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
   for (i = 0; i < n; ++i) {
     ASSERT_EQ(0, pthread_create(t + i, 0, Worker, 0));
   }

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Musl Libc                                                                   │
@@ -28,7 +28,7 @@
 #include "libc/tinymath/internal.h"
 // clang-format off
 
-float __math_uflowf(uint32_t sign)
+dontinstrument float __math_uflowf(uint32_t sign)
 {
 	return __math_xflowf(sign, 0x1p-95f);
 }

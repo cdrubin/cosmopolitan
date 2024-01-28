@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -134,10 +134,10 @@ BENCH(write, bench) {
   ASSERT_SYS(0, 3, open("/dev/null", O_WRONLY));
   EZBENCH2("write", donothing, write(3, "hello", 5));
   EZBENCH2("writev", donothing, writev(3, &(struct iovec){"hello", 5}, 1));
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
   EZBENCH2("sys_write", donothing, sys_write(3, "hello", 5));
   EZBENCH2("sys_writev", donothing,
            sys_writev(3, &(struct iovec){"hello", 5}, 1));
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   ASSERT_SYS(0, 0, close(3));
 }

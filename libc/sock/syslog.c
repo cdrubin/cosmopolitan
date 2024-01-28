@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -23,7 +23,6 @@
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/log/internal.h"
 #include "libc/macros.internal.h"
@@ -125,7 +124,7 @@ void vsyslog(int priority, const char *message, va_list ap) {
   int l, l2;
   int hlen; /* If LOG_CONS is specified, use to store the point in
              * the header message after the timestamp */
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   if (log_fd < 0) __openlog();
   if (!(priority & LOG_FACMASK)) priority |= log_facility;
   /* Build the time string */
@@ -210,7 +209,7 @@ void vsyslog(int priority, const char *message, va_list ap) {
       dprintf(2, "%.*s", l - hlen, buf + hlen);
     }
   }
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
 }
 
 /**
@@ -261,7 +260,7 @@ int setlogmask(int maskpri) {
  * @asyncsignalsafe
  */
 void openlog(const char *ident, int opt, int facility) {
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   if (log_facility == -1) __initlog();
   if (!ident) ident = firstnonnull(program_invocation_short_name, "unknown");
   tprecode8to16(log_ident, ARRAYLEN(log_ident), ident);
@@ -269,7 +268,7 @@ void openlog(const char *ident, int opt, int facility) {
   log_facility = facility;
   log_id = 0;
   if ((opt & LOG_NDELAY) && log_fd < 0) __openlog();
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
 }
 
 /**

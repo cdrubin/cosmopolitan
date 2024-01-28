@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Musl Libc                                                                   │
@@ -28,7 +28,7 @@
 #include "libc/tinymath/internal.h"
 // clang-format off
 
-double __math_xflow(uint32_t sign, double y)
+dontinstrument double __math_xflow(uint32_t sign, double y)
 {
 	return eval_as_double(fp_barrier(sign ? -y : y) * y);
 }

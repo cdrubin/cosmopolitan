@@ -1,10 +1,7 @@
 #ifndef COSMOPOLITAN_DSP_MPEG_BUFFER_H_
 #define COSMOPOLITAN_DSP_MPEG_BUFFER_H_
 #include "dsp/mpeg/mpeg.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
-
-struct FILE;
 
 enum plm_buffer_mode {
   PLM_BUFFER_MODE_FILE,
@@ -18,7 +15,7 @@ typedef struct plm_buffer_t {
   unsigned length;
   int free_when_done;
   int close_when_done;
-  struct FILE *fh;
+  FILE *fh;
   plm_buffer_load_callback load_callback;
   void *load_callback_user_data;
   unsigned char *bytes;
@@ -159,5 +156,4 @@ forceinline uint16_t plm_buffer_read_vlc_uint(plm_buffer_t *self,
 }
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_DSP_MPEG_BUFFER_H_ */

@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_APE_SECTIONS_INTERNAL_H_
 #define COSMOPOLITAN_APE_SECTIONS_INTERNAL_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 extern const char __comment_start[] __attribute__((__weak__));
@@ -23,7 +22,7 @@ extern uint8_t __data_start[] __attribute__((__weak__));
 extern uint8_t __data_end[] __attribute__((__weak__));
 extern uint8_t __bss_start[] __attribute__((__weak__));
 extern uint8_t __bss_end[] __attribute__((__weak__));
+extern unsigned char ape_phdrs[] __attribute__((__weak__));
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_APE_SECTIONS_INTERNAL_H_ */

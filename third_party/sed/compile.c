@@ -1,4 +1,3 @@
-// clang-format off
 /*	$NetBSD: compile.c,v 1.48 2019/10/05 20:23:55 christos Exp $	*/
 
 /*-
@@ -47,7 +46,7 @@
 #include "libc/calls/weirdtypes.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/utime.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/time/time.h"
 
 #include "libc/str/str.h"
@@ -62,7 +61,6 @@
 #include "libc/sysv/consts/_posix.h"
 #include "third_party/regex/regex.h"
 #include "libc/calls/calls.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "libc/mem/alg.h"

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,24 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
+#include "ape/sections.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/sig.internal.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/calls/wincrash.internal.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/atomic.h"
 #include "libc/intrin/directmap.internal.h"
-#include "libc/intrin/dll.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/mem.h"
-#include "libc/nt/console.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -41,39 +35,33 @@
 #include "libc/nt/enum/pageflags.h"
 #include "libc/nt/enum/startf.h"
 #include "libc/nt/errors.h"
-#include "libc/nt/files.h"
 #include "libc/nt/ipc.h"
 #include "libc/nt/memory.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/signals.h"
 #include "libc/nt/struct/ntexceptionpointers.h"
-#include "libc/nt/synchronization.h"
-#include "libc/nt/thread.h"
-#include "libc/nt/thunk/msabi.h"
 #include "libc/proc/ntspawn.h"
 #include "libc/proc/proc.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/limits.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/itimer.internal.h"
-#include "libc/thread/posixthread.internal.h"
 #include "libc/thread/tls.h"
-
 #ifdef __x86_64__
 
-extern long __klog_handle;
-extern int64_t __wincrashearly;
-bool32 __onntconsoleevent(uint32_t);
+void WipeKeystrokes(void);
 
 static textwindows wontreturn void AbortFork(const char *func) {
-#ifdef SYSDEBUG
+#if SYSDEBUG
   kprintf("fork() %s() failed with win32 error %d\n", func, GetLastError());
 #endif
   TerminateThisProcess(SIGSTKFLT);
@@ -116,7 +104,7 @@ static dontinline textwindows bool WriteAll(int64_t h, void *buf, size_t n) {
 #ifndef NDEBUG
   if (ok) ok = ForkIo2(h, &n, sizeof(n), WriteFile, "WriteFile", false);
 #endif
-#ifdef SYSDEBUG
+#if SYSDEBUG
   if (!ok) {
     kprintf("failed to write %zu bytes to forked child: %d\n", n,
             GetLastError());
@@ -130,7 +118,6 @@ static textwindows dontinline void ReadOrDie(int64_t h, void *buf, size_t n) {
   if (!ForkIo2(h, buf, n, ReadFile, "ReadFile", true)) {
     AbortFork("ReadFile1");
   }
-  if (_weaken(__klog_handle)) *_weaken(__klog_handle) = 0;
 #ifndef NDEBUG
   size_t got;
   if (!ForkIo2(h, &got, sizeof(got), ReadFile, "ReadFile", true)) {
@@ -207,7 +194,7 @@ textwindows void WinMainForked(void) {
   if (!varlen || varlen >= ARRAYLEN(fvar)) return;
   NTTRACE("WinMainForked()");
   SetEnvironmentVariable(u"_FORK", NULL);
-#ifdef SYSDEBUG
+#if SYSDEBUG
   int64_t oncrash = AddVectoredExceptionHandler(1, (void *)OnForkCrash);
 #endif
   ParseInt(fvar, &reader);
@@ -283,17 +270,8 @@ textwindows void WinMainForked(void) {
   fds->p[1].handle = GetStdHandle(kNtStdOutputHandle);
   fds->p[2].handle = GetStdHandle(kNtStdErrorHandle);
 
-  // untrack children of parent since we specify with both
-  // CreateProcess() and CreateThread() as non-inheritable
-  for (i = 0; i < fds->n; ++i) {
-    if (fds->p[i].kind == kFdProcess) {
-      fds->p[i].kind = 0;
-      atomic_store_explicit(&fds->f, MIN(i, fds->f), memory_order_relaxed);
-    }
-  }
-
   // restore the crash reporting stuff
-#ifdef SYSDEBUG
+#if SYSDEBUG
   RemoveVectoredExceptionHandler(oncrash);
 #endif
   if (_weaken(__sig_init)) {
@@ -302,24 +280,6 @@ textwindows void WinMainForked(void) {
 
   // jump back into function below
   longjmp(jb, 1);
-}
-
-static void __hand_inherit(bool32 bInherit) {
-  struct CosmoTib *tib = __get_tls();
-  SetHandleInformation(tib->tib_syshand, kNtHandleFlagInherit, bInherit);
-  SetHandleInformation(tib->tib_syshand, kNtHandleFlagInherit, bInherit);
-  for (int i = 0; i < _mmi.i; ++i) {
-    if ((_mmi.p[i].flags & MAP_TYPE) == MAP_SHARED) {
-      SetHandleInformation(_mmi.p[i].h, kNtHandleFlagInherit, bInherit);
-    }
-  }
-  for (int i = 0; i < g_fds.n; ++i) {
-    if (g_fds.p[i].kind == kFdEmpty) continue;
-    SetHandleInformation(g_fds.p[i].handle, kNtHandleFlagInherit, bInherit);
-    if (g_fds.p[i].kind == kFdConsole) {
-      SetHandleInformation(g_fds.p[i].extra, kNtHandleFlagInherit, bInherit);
-    }
-  }
 }
 
 textwindows int sys_fork_nt(uint32_t dwCreationFlags) {
@@ -333,8 +293,8 @@ textwindows int sys_fork_nt(uint32_t dwCreationFlags) {
   char16_t pipename[64];
   int64_t reader, writer;
   struct NtStartupInfo startinfo;
-  char *p, forkvar[6 + 21 + 1 + 21 + 1];
   struct NtProcessInformation procinfo;
+  char *p, forkvar[6 + 21 + 1 + 21 + 1];
   tib = __get_tls();
   ftrace_enabled(-1);
   strace_enabled(-1);
@@ -350,11 +310,11 @@ textwindows int sys_fork_nt(uint32_t dwCreationFlags) {
       bzero(&startinfo, sizeof(startinfo));
       startinfo.cb = sizeof(struct NtStartupInfo);
       startinfo.dwFlags = kNtStartfUsestdhandles;
-      startinfo.hStdInput = __getfdhandleactual(0);
-      startinfo.hStdOutput = __getfdhandleactual(1);
-      startinfo.hStdError = __getfdhandleactual(2);
+      startinfo.hStdInput = g_fds.p[0].handle;
+      startinfo.hStdOutput = g_fds.p[1].handle;
+      startinfo.hStdError = g_fds.p[2].handle;
       args = __argv;
-#ifdef SYSDEBUG
+#if SYSDEBUG
       // If --strace was passed to this program, then propagate it the
       // forked process since the flag was removed by __intercept_flag
       if (strace_enabled(0) > 0) {
@@ -372,12 +332,10 @@ textwindows int sys_fork_nt(uint32_t dwCreationFlags) {
         args = args2;
       }
 #endif
-      __hand_inherit(true);
       NTTRACE("STARTING SPAWN");
-      int spawnrc =
-          ntspawn(GetProgramExecutableName(), args, environ, forkvar, 0, 0,
-                  true, dwCreationFlags, 0, &startinfo, &procinfo);
-      __hand_inherit(false);
+      int spawnrc = ntspawn(AT_FDCWD, GetProgramExecutableName(), args, environ,
+                            (char *[]){forkvar, 0}, dwCreationFlags, 0, 0, 0, 0,
+                            &startinfo, &procinfo);
       if (spawnrc != -1) {
         CloseHandle(procinfo.hThread);
         ok = WriteAll(writer, jb, sizeof(jb)) &&
@@ -426,22 +384,24 @@ textwindows int sys_fork_nt(uint32_t dwCreationFlags) {
     __set_tls(tib);
     __morph_tls();
     __tls_enabled_set(true);
-    // clear pending signals
-    tib->tib_sigpending = 0;
-    __sig.pending = 0;
+    // the child's pending signals is initially empty
+    atomic_store_explicit(&__sig.pending, 0, memory_order_relaxed);
+    atomic_store_explicit(&tib->tib_sigpending, 0, memory_order_relaxed);
     // re-enable threads
     __enable_threads();
     // re-apply code morphing for function tracing
     if (ftrace_stackdigs) {
       _weaken(__hook)(_weaken(ftrace_hook), _weaken(GetSymbolTable)());
     }
-    // reset alarms
-    if (_weaken(__itimer_reset)) {
-      _weaken(__itimer_reset)();
+    // reset core runtime services
+    __proc_wipe();
+    WipeKeystrokes();
+    if (_weaken(__itimer_wipe)) {
+      _weaken(__itimer_wipe)();
     }
   }
   if (rc == -1) {
-    __proc_free(proc);
+    dll_make_first(&__proc.free, &proc->elem);
   }
   ftrace_enabled(+1);
   strace_enabled(+1);

@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_ERRNO_H_
 #define COSMOPOLITAN_LIBC_ERRNO_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 /**
@@ -28,11 +27,11 @@ COSMOPOLITAN_C_START_
 /* this header is included by 700+ files; therefore we */
 /* hand-roll &__get_tls()->tib_errno to avoid #include */
 /* cosmopolitan uses x28 as the tls register b/c apple */
-#define errno                            \
-  (*({                                   \
-    errno_t *__ep;                       \
-    asm("sub\t%0,x28,#68" : "=r"(__ep)); \
-    __ep;                                \
+#define errno                                  \
+  (*({                                         \
+    errno_t *__ep;                             \
+    asm("sub\t%0,x28,#192-0x3c" : "=r"(__ep)); \
+    __ep;                                      \
   }))
 #else
 #define errno (*__errno_location())
@@ -667,5 +666,4 @@ extern char *program_invocation_name;
 #endif
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_ERRNO_H_ */

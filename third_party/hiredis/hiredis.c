@@ -1,4 +1,3 @@
-// clang-format off
 /*
  * Copyright (c) 2009-2011, Salvatore Sanfilippo <antirez at gmail dot com>
  * Copyright (c) 2010-2014, Pieter Noordhuis <pcnoordhuis at gmail dot com>
@@ -977,7 +976,7 @@ redisPushFn *redisSetPushCallback(redisContext *c, redisPushFn *fn) {
  * After this function is called, you may use redisGetReplyFromReader to
  * see if there is a reply available. */
 int redisBufferRead(redisContext *c) {
-    char *buf = _gc(malloc(1024*16));
+    char *buf = gc(malloc(1024*16));
     int nread;
 
     /* Return early when the context has seen an error. */

@@ -1,4 +1,3 @@
-// clang-format off
 /*
  * Brute force collision tester for 64-bit hashes
  * Part of the xxHash project
@@ -65,7 +64,6 @@
 #include "libc/str/str.h"   /* memset */
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"

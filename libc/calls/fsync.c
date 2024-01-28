@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -37,15 +37,15 @@
  * @raise EBADF if `fd` isn't an open file
  * @raise EINTR if signal was delivered
  * @raise EIO if an i/o error happened
- * @see fdatasync(), sync_file_range()
  * @see __nosync to secretly disable
- * @cancellationpoint
+ * @see fdatasync()
+ * @cancelationpoint
  * @asyncsignalsafe
  */
 int fsync(int fd) {
   int rc;
   bool fake = __nosync == 0x5453455454534146;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
   if (__isfdkind(fd, kFdZip)) {
     rc = erofs();
   } else if (!IsWindows()) {
@@ -57,7 +57,7 @@ int fsync(int fd) {
   } else {
     rc = sys_fdatasync_nt(fd, fake);
   }
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("fsync%s(%d) → %d% m", fake ? "_fake" : "", fd, rc);
   return rc;
 }

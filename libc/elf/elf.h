@@ -4,7 +4,6 @@
 #include "libc/elf/struct/phdr.h"
 #include "libc/elf/struct/shdr.h"
 #include "libc/elf/struct/sym.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 #ifdef _COSMO_SOURCE
 COSMOPOLITAN_C_START_
 /*───────────────────────────────────────────────────────────────────────────│─╗
@@ -12,8 +11,8 @@ COSMOPOLITAN_C_START_
 ╚────────────────────────────────────────────────────────────────────────────│*/
 /* clang-format off */
 
-bool IsElfSymbolContent(const Elf64_Sym *);
-bool IsElf64Binary(const Elf64_Ehdr *, size_t);
+bool32 IsElfSymbolContent(const Elf64_Sym *);
+bool32 IsElf64Binary(const Elf64_Ehdr *, size_t);
 char *GetElfStringTable(const Elf64_Ehdr *, size_t, const char *);
 Elf64_Sym *GetElfSymbols(const Elf64_Ehdr *, size_t, int, Elf64_Xword *);
 Elf64_Shdr *GetElfSymbolTable(const Elf64_Ehdr *, size_t, int, Elf64_Xword *);
@@ -28,5 +27,4 @@ char *GetElfSectionNameStringTable(const Elf64_Ehdr *, size_t);
 
 COSMOPOLITAN_C_END_
 #endif /* _COSMO_SOURCE */
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_ELF_H_ */

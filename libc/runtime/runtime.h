@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_RUNTIME_RUNTIME_H_
 #define COSMOPOLITAN_LIBC_RUNTIME_RUNTIME_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § runtime                                                   ─╬─│┼
@@ -8,10 +7,10 @@ COSMOPOLITAN_C_START_
 
 #ifdef __x86_64__
 typedef long jmp_buf[8];
-typedef long sigjmp_buf[12];
+typedef long sigjmp_buf[11];
 #elif defined(__aarch64__)
 typedef long jmp_buf[22];
-typedef long sigjmp_buf[26];
+typedef long sigjmp_buf[25];
 #elif defined(__powerpc64__)
 typedef unsigned __int128 jmp_buf[32];
 #elif defined(__s390x__)
@@ -36,7 +35,6 @@ void _exit(int) libcesque wontreturn;
 void _Exit(int) libcesque wontreturn;
 void quick_exit(int) wontreturn;
 void abort(void) wontreturn;
-int __cxa_atexit(void *, void *, void *) paramsnonnull((1)) libcesque;
 int atexit(void (*)(void)) paramsnonnull() libcesque;
 char *getenv(const char *) paramsnonnull() __wur nosideeffect libcesque;
 int putenv(char *);
@@ -72,8 +70,8 @@ extern int __argc;
 extern char **__argv;
 extern char **__envp;
 extern unsigned long *__auxv;
-extern bool __interruptible;
 extern intptr_t __oldstack;
+extern char *__program_executable_name;
 extern uint64_t __nosync;
 extern int __strace;
 extern int __ftrace;
@@ -83,21 +81,18 @@ extern const char kNtSystemDirectory[];
 extern const char kNtWindowsDirectory[];
 extern size_t __virtualmax;
 extern size_t __stackmax;
-extern bool __isworker;
+extern bool32 __isworker;
 /* utilities */
 void _intsort(int *, size_t);
 void _longsort(long *, size_t);
 /* diagnostics */
 void ShowCrashReports(void);
-void __printargs(const char *);
 int ftrace_install(void);
 int ftrace_enabled(int);
 int strace_enabled(int);
-bool strace_enter(void);
-void _bt(const char *, ...);
 void __print_maps(void);
-long _GetMaxFd(void);
-/* builtin shell language */
+void __printargs(const char *);
+/* builtin sh-like system/popen dsl */
 int _cocmd(int, char **, char **);
 /* executable program */
 char *GetProgramExecutableName(void);
@@ -105,9 +100,6 @@ char *GetInterpreterExecutableName(char *, size_t);
 int __open_executable(void);
 /* execution control */
 int verynice(void);
-axdx_t setlongerjmp(jmp_buf)
-libcesque returnstwice paramsnonnull();
-void longerjmp(jmp_buf, intptr_t) libcesque wontreturn paramsnonnull();
 void __warn_if_powersave(void);
 void _Exit1(int) libcesque wontreturn;
 void __paginate(int, const char *);
@@ -119,19 +111,21 @@ void CheckForMemoryLeaks(void);
 void CheckForFileLeaks(void);
 void __enable_threads(void);
 void __oom_hook(size_t);
-bool _isheap(void *);
+bool32 _isheap(void *);
 /* code morphing */
 void __morph_begin(void);
 void __morph_end(void);
+void __jit_begin(void);
+void __jit_end(void);
+void __clear_cache(void *, void *);
 /* portability */
 int NtGetVersion(void) pureconst;
-bool IsGenuineBlink(void);
-bool IsCygwin(void);
+bool32 IsGenuineBlink(void);
+bool32 IsCygwin(void);
 const char *GetCpuidOs(void);
 const char *GetCpuidEmulator(void);
 void GetCpuidBrand(char[13], uint32_t);
 long __get_rlimit(int);
-int __set_rlimit(int, int64_t);
 const char *__describe_os(void);
 long __get_sysctl(int, int);
 int __get_arg_max(void) pureconst;
@@ -142,17 +136,16 @@ long __get_minsigstksz(void) pureconst;
 void __get_main_stack(void **, size_t *, int *);
 long __get_safe_size(long, long);
 char *__get_tmpdir(void);
-__funline int __trace_disabled(int x) {
+forceinline int __trace_disabled(int x) {
   return 0;
 }
 #ifndef FTRACE
-#define ftrace_enabled __trace_disabled
+#define ftrace_enabled(...) __trace_disabled(__VA_ARGS__)
 #endif
 #ifndef SYSDEBUG
-#define strace_enabled __trace_disabled
+#define strace_enabled(...) __trace_disabled(__VA_ARGS__)
 #endif
 #endif /* _COSMO_SOURCE */
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_RUNTIME_RUNTIME_H_ */

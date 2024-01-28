@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -40,7 +40,7 @@
  * @raise EINTR if we needed to block and a signal was delivered instead
  * @raise EINVAL if `MS_SYNC` and `MS_ASYNC` were both specified
  * @raise EINVAL if unknown `flags` were passed
- * @cancellationpoint
+ * @cancelationpoint
  */
 int msync(void *addr, size_t size, int flags) {
   int rc;
@@ -84,13 +84,13 @@ int msync(void *addr, size_t size, int flags) {
     sysflags >>= 1;
   }
 
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
   if (!IsWindows()) {
     rc = sys_msync(addr, size, sysflags);
   } else {
     rc = sys_msync_nt(addr, size, sysflags);
   }
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
 
 Finished:
   STRACE("msync(%p, %'zu, %#x) → %d% m", addr, size, flags, rc);

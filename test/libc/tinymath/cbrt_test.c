@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -29,22 +29,22 @@ float _cbrtf(float) asm("cbrtf");
 long double _cbrtl(long double) asm("cbrtl");
 
 TEST(cbrt, test) {
-  EXPECT_STREQ("0", _gc(xasprintf("%.15g", _cbrt(0.))));
-  EXPECT_STREQ("-0", _gc(xasprintf("%.15g", _cbrt(-0.))));
-  EXPECT_STREQ("0.7937005259841", _gc(xasprintf("%.15g", _cbrt(.5))));
-  EXPECT_STREQ("-0.7937005259841", _gc(xasprintf("%.15g", _cbrt(-.5))));
-  EXPECT_STREQ("1", _gc(xasprintf("%.15g", _cbrt(1.))));
-  EXPECT_STREQ("-1", _gc(xasprintf("%.15g", _cbrt(-1.))));
-  EXPECT_STREQ("1.14471424255333", _gc(xasprintf("%.15g", _cbrt(1.5))));
-  EXPECT_STREQ("-1.14471424255333", _gc(xasprintf("%.15g", _cbrt(-1.5))));
-  EXPECT_STREQ("nan", _gc(xasprintf("%.15g", _cbrt(NAN))));
-  EXPECT_STREQ("-nan", _gc(xasprintf("%.15g", _cbrt(-NAN))));
-  EXPECT_STREQ("inf", _gc(xasprintf("%.15g", _cbrt(INFINITY))));
-  EXPECT_STREQ("-inf", _gc(xasprintf("%.15g", _cbrt(-INFINITY))));
+  EXPECT_STREQ("0", gc(xasprintf("%.15g", _cbrt(0.))));
+  EXPECT_STREQ("-0", gc(xasprintf("%.15g", _cbrt(-0.))));
+  EXPECT_STREQ("0.7937005259841", gc(xasprintf("%.15g", _cbrt(.5))));
+  EXPECT_STREQ("-0.7937005259841", gc(xasprintf("%.15g", _cbrt(-.5))));
+  EXPECT_STREQ("1", gc(xasprintf("%.15g", _cbrt(1.))));
+  EXPECT_STREQ("-1", gc(xasprintf("%.15g", _cbrt(-1.))));
+  EXPECT_STREQ("1.14471424255333", gc(xasprintf("%.15g", _cbrt(1.5))));
+  EXPECT_STREQ("-1.14471424255333", gc(xasprintf("%.15g", _cbrt(-1.5))));
+  EXPECT_STREQ("nan", gc(xasprintf("%.15g", _cbrt(NAN))));
+  EXPECT_STREQ("-nan", gc(xasprintf("%.15g", _cbrt(-NAN))));
+  EXPECT_STREQ("inf", gc(xasprintf("%.15g", _cbrt(INFINITY))));
+  EXPECT_STREQ("-inf", gc(xasprintf("%.15g", _cbrt(-INFINITY))));
   EXPECT_STREQ("2.81264428523626e-103",
-               _gc(xasprintf("%.15g", _cbrt(__DBL_MIN__))));
+               gc(xasprintf("%.15g", _cbrt(__DBL_MIN__))));
   EXPECT_STREQ("5.64380309412236e+102",
-               _gc(xasprintf("%.15g", _cbrt(__DBL_MAX__))));
+               gc(xasprintf("%.15g", _cbrt(__DBL_MAX__))));
 }
 
 BENCH(cbrt, bench) {

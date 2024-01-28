@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -26,7 +26,7 @@
  * @param opt_out_addr will receive the remote address
  * @param opt_inout_addrsize provides and receives addr's byte length
  * @return client fd which needs close(), or -1 w/ errno
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
  * @restartable (unless SO_RCVTIMEO)
  */

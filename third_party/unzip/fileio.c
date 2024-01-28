@@ -1,4 +1,3 @@
-// clang-format off
 /*
   Copyright (c) 1990-2010 Info-ZIP.  All rights reserved.
 
@@ -66,10 +65,6 @@
 #include "third_party/unzip/ttyio.h"
 
 #define st_mtime st_mtim.tv_sec
-
-#if defined( UNIX) && defined( __APPLE__)
-#include "third_party/unzip/unix/macosx.h"
-#endif /* defined( UNIX) && defined( __APPLE__) */
 
 /* setup of codepage conversion for decryption passwords */
 #if CRYPT

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,12 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/sig.internal.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
@@ -35,6 +37,7 @@
 #include "libc/nt/errors.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
+#include "libc/nt/struct/byhandlefileinformation.h"
 #include "libc/nt/struct/genericmapping.h"
 #include "libc/nt/struct/privilegeset.h"
 #include "libc/nt/struct/securitydescriptor.h"
@@ -62,8 +65,10 @@ textwindows int ntaccesscheck(const char16_t *pathname, uint32_t flags) {
   struct NtGenericMapping mapping;
   struct NtPrivilegeSet privileges;
   uint32_t secsize, granted, privsize;
+  struct NtByHandleFileInformation wst;
   int64_t hToken, hImpersonatedToken, hFile;
   intptr_t buffer[1024 / sizeof(intptr_t)];
+  BLOCK_SIGNALS;
   if (flags & X_OK) flags |= R_OK;
   granted = 0;
   result = false;
@@ -100,7 +105,9 @@ textwindows int ntaccesscheck(const char16_t *pathname, uint32_t flags) {
                        0, kNtOpenExisting,
                        kNtFileAttributeNormal | kNtFileFlagBackupSemantics,
                        0)) != -1) {
-                if (IsWindowsExecutable(hFile)) {
+                unassert(GetFileInformationByHandle(hFile, &wst));
+                if ((wst.dwFileAttributes & kNtFileAttributeDirectory) ||
+                    IsWindowsExecutable(hFile, pathname)) {
                   rc = 0;
                 } else {
                   rc = eacces();
@@ -143,5 +150,6 @@ textwindows int ntaccesscheck(const char16_t *pathname, uint32_t flags) {
   if (hToken != -1) {
     CloseHandle(hToken);
   }
+  ALLOW_SIGNALS;
   return rc;
 }

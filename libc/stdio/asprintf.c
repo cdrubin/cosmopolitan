@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -26,7 +26,6 @@
  *     portability, since that's guaranteed to work with all libraries
  * @return bytes written (excluding NUL) or -1 w/ errno
  * @see xasprintf() for a better API
- * @threadsafe
  */
 int asprintf(char **strp, const char *fmt, ...) {
   int res;

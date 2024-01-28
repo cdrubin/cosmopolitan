@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -47,7 +47,7 @@ errno_t pthread_kill(pthread_t thread, int sig) {
     err = EINVAL;
   } else if (thread == __get_tls()->tib_pthread) {
     err = raise(sig);  // XNU will EDEADLK it otherwise
-  } else if (atomic_load_explicit(&pt->status, memory_order_acquire) >=
+  } else if (atomic_load_explicit(&pt->pt_status, memory_order_acquire) >=
              kPosixThreadTerminated) {
     err = ESRCH;
   } else if (IsWindows()) {

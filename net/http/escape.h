@@ -5,7 +5,6 @@
 #define kControlC0 2
 #define kControlC1 4
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 extern const char kEscapeAuthority[256];
@@ -34,9 +33,10 @@ char *EncodeLatin1(const char *, size_t, size_t *, int);
 char *EncodeHttpHeaderValue(const char *, size_t, size_t *);
 char *VisualizeControlCodes(const char *, size_t, size_t *);
 char *IndentLines(const char *, size_t, size_t *, size_t);
+char *EncodeBase32(const char *, size_t, const char *, size_t, size_t *);
+char *DecodeBase32(const char *, size_t, const char *, size_t, size_t *);
 char *EncodeBase64(const char *, size_t, size_t *);
 char *DecodeBase64(const char *, size_t, size_t *);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_NET_HTTP_ESCAPE_H_ */

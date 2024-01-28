@@ -37,13 +37,11 @@
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/fileno.h"
 #include "libc/sysv/consts/termios.h"
 #include "third_party/finger/finger.h"
-// clang-format off
 
 int
 getscreenwidth(void)

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -28,6 +28,8 @@
 #include "libc/sysv/consts/rlim.h"
 #include "libc/sysv/consts/rlimit.h"
 
+// Hack for guessing boundaries of _start()'s stack
+//
 // Every UNIX system in our support vector creates arg blocks like:
 //
 //     <HIGHEST-STACK-ADDRESS>
@@ -53,6 +55,11 @@
 // up to the microprocessor page size (this computes the top addr)
 // and the bottom is computed by subtracting RLIMIT_STACK rlim_cur
 // It's simple but gets tricky if we consider environ can be empty
+//
+// This code always guesses correctly on Windows because WinMain()
+// is written to allocate a stack ourself. Local testing on Linux,
+// XNU, FreeBSD, OpenBSD, and NetBSD says that accuracy is ±1 page
+// and that error rate applies to both beginning and end addresses
 
 static char *__get_last(char **list) {
   char *res = 0;
@@ -96,7 +103,7 @@ void __get_main_stack(void **out_addr, size_t *out_size, int *out_guardsize) {
   if (IsWindows()) {
     *out_addr = (void *)GetStaticStackAddr(0);
     *out_size = GetStaticStackSize();
-    *out_guardsize = 4096;
+    *out_guardsize = GetGuardSize();
     return;
   }
   int pagesz = getauxval(AT_PAGESZ);

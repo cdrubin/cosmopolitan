@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -20,7 +20,6 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/elf/def.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/popcnt.h"
 #include "libc/log/check.h"
@@ -38,6 +37,7 @@
 #include "libc/x/xasprintf.h"
 #include "third_party/chibicc/file.h"
 #include "third_party/gdtoa/gdtoa.h"
+#include "libc/serialize.h"
 #include "tool/build/lib/elfwriter.h"
 
 #define OSZ  0x66
@@ -3944,7 +3944,7 @@ static void Objectify(struct As *a, int path) {
   char *p;
   int i, j, s, e;
   struct ElfWriter *elf;
-  elf = elfwriter_open(a->strings.p[path], 0644);
+  elf = elfwriter_open(a->strings.p[path], 0644, EM_NEXGEN32E);
   for (i = 0; i < a->symbols.n; ++i) {
     if (!IsLiveSymbol(a, i)) continue;
     p = strndup(a->slices.p[a->symbols.p[i].name].p,

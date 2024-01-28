@@ -37,7 +37,6 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/limits.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/struct/msg.h"
@@ -51,7 +50,6 @@
 #include "libc/time/time.h"
 #include "third_party/getopt/getopt.internal.h"
 #include "third_party/musl/passwd.h"
-// clang-format off
 
 /*
  * Mail status reporting added 931007 by Luke Mewburn, <zak@rmit.edu.au>.

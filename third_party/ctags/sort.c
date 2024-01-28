@@ -1,4 +1,3 @@
-// clang-format off
 /*
 *   $Id: sort.c 747 2009-11-06 02:33:37Z dhiebert $
 *
@@ -39,7 +38,6 @@
 #include "libc/calls/calls.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "third_party/musl/tempnam.h"

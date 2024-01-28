@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -45,7 +45,7 @@ CreateProcess(const char16_t *opt_lpApplicationName, char16_t *lpCommandLine,
                             opt_lpCurrentDirectory, lpStartupInfo,
                             opt_out_lpProcessInformation);
   if (!ok) __winerr();
-  NTTRACE("CreateProcess(%#hs, %#!hs, %s, %s, %hhhd, %u, %p, %#hs, %p, %p) → "
+  NTTRACE("CreateProcess(%#!hs, %#!hs, %s, %s, %hhhd, %u, %p, %#!hs, %p, %p) → "
           "%hhhd% m",
           opt_lpApplicationName, lpCommandLine,
           DescribeNtSecurityAttributes(opt_lpProcessAttributes),

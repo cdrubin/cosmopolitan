@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -46,7 +46,6 @@
  *     status that can be accessed using macros like WEXITSTATUS(s),
  *     WIFSIGNALED(s), WTERMSIG(s), etc.
  * @see system()
- * @threadsafe
  */
 int systemvpe(const char *prog, char *const argv[], char *const envp[]) {
   char *exe;
@@ -74,14 +73,14 @@ int systemvpe(const char *prog, char *const argv[], char *const envp[]) {
     sigemptyset(&ignore.sa_mask);
     sigaction(SIGINT, &ignore, &saveint);
     sigaction(SIGQUIT, &ignore, &savequit);
-    BLOCK_CANCELLATIONS;
+    BLOCK_CANCELATION;
     while (wait4(pid, &wstatus, 0, 0) == -1) {
       if (errno != EINTR) {
         wstatus = -1;
         break;
       }
     }
-    ALLOW_CANCELLATIONS;
+    ALLOW_CANCELATION;
     sigaction(SIGQUIT, &savequit, 0);
     sigaction(SIGINT, &saveint, 0);
   }

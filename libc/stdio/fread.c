@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=8 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=8 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,7 +19,7 @@
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/stdio.h"
+#include "libc/stdio/internal.h"
 
 /**
  * Reads data from stream.
@@ -27,7 +27,6 @@
  * @param stride specifies the size of individual items
  * @param count is the number of strides to fetch
  * @return count on success, [0,count) on eof, or 0 on error or count==0
- * @threadsafe
  */
 size_t fread(void *buf, size_t stride, size_t count, FILE *f) {
   size_t rc;

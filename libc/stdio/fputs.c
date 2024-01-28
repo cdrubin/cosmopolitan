@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=8 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=8 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -28,7 +28,6 @@
  * @param s is a NUL-terminated string that's non-NULL
  * @param f is an open stream
  * @return bytes written, or -1 w/ errno
- * @threadsafe
  */
 int fputs(const char *s, FILE *f) {
   int rc;

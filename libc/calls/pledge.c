@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -24,6 +24,7 @@
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/intrin/promises.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/nexgen32e/vendor.internal.h"
@@ -234,7 +235,6 @@
  * @raise ENOSYS if `pledge(0, 0)` was used and security is not possible
  * @raise EINVAL if `execpromises` on Linux isn't a subset of `promises`
  * @raise EINVAL if `promises` allows exec and `execpromises` is null
- * @threadsafe
  * @vforksafe
  */
 int pledge(const char *promises, const char *execpromises) {
@@ -260,19 +260,21 @@ int pledge(const char *promises, const char *execpromises) {
     return -1;
   } else if (!IsTiny() && IsGenuineBlink()) {
     rc = 0;  // blink doesn't support seccomp; avoid noisy log warnings
-  } else if (!ParsePromises(promises, &ipromises) &&
-             !ParsePromises(execpromises, &iexecpromises)) {
+  } else if (!ParsePromises(promises, &ipromises, __promises) &&
+             !ParsePromises(execpromises, &iexecpromises, __execpromises)) {
     if (IsLinux()) {
       // copy exec and execnative from promises to execpromises
       iexecpromises = ~(~iexecpromises | (~ipromises & (1ul << PROMISE_EXEC)));
       // if bits are missing in execpromises that exist in promises
       // then execpromises wouldn't be a monotonic access reduction
       // this check only matters when exec / execnative are allowed
-      if ((ipromises & ~iexecpromises) &&
-          (~ipromises & (1ul << PROMISE_EXEC))) {
+      bool notsubset = ((ipromises & ~iexecpromises) &&
+                        (~ipromises & (1ul << PROMISE_EXEC)));
+      if (notsubset && execpromises) {
         STRACE("execpromises must be a subset of promises");
         rc = einval();
       } else {
+        if (notsubset) iexecpromises = ipromises;
         rc = sys_pledge_linux(ipromises, __pledge_mode);
         if (rc > -4096u) errno = -rc, rc = -1;
       }

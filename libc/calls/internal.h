@@ -5,11 +5,10 @@
 #include "libc/calls/struct/sigval.h"
 #include "libc/dce.h"
 #include "libc/macros.internal.h"
+#include "libc/stdbool.h"
 
-#define kSigactionMinRva  8 /* >SIG_{ERR,DFL,IGN,...} */
-#define kSigOpRestartable 1
+#define kSigactionMinRva 8 /* >SIG_{ERR,DFL,IGN,...} */
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 #define kIoMotion ((const int8_t[3]){1, 0, 0})
@@ -22,17 +21,15 @@ int __reservefd(int);
 int __reservefd_unlocked(int);
 void __releasefd(int);
 int __ensurefds(int);
-int __ensurefds_unlocked(int);
-void __printfds(void);
 uint32_t sys_getuid_nt(void);
-int __pause_thread(uint32_t);
-int IsWindowsExecutable(int64_t);
-int CountConsoleInputBytes(int64_t);
-int FlushConsoleInputBytes(int64_t);
-
-forceinline int64_t __getfdhandleactual(int fd) {
-  return g_fds.p[fd].handle;
-}
+int __ensurefds_unlocked(int);
+void __printfds(struct Fd *, size_t);
+int CountConsoleInputBytes(void);
+int FlushConsoleInputBytes(void);
+int64_t GetConsoleInputHandle(void);
+int64_t GetConsoleOutputHandle(void);
+int IsWindowsExecutable(int64_t, const char16_t *);
+void InterceptTerminalCommands(const char *, size_t);
 
 forceinline bool __isfdopen(int fd) {
   return 0 <= fd && fd < g_fds.n && g_fds.p[fd].kind != kFdEmpty;
@@ -42,10 +39,18 @@ forceinline bool __isfdkind(int fd, int kind) {
   return 0 <= fd && fd < g_fds.n && g_fds.p[fd].kind == kind;
 }
 
-int _check_interrupts(int);
-int sys_close_nt(struct Fd *, int);
+int _check_signal(bool);
+int _check_cancel(void);
+int sys_close_nt(int, int);
+int _park_norestart(uint32_t, uint64_t);
+int _park_restartable(uint32_t, uint64_t);
 int sys_openat_metal(int, const char *, int, unsigned);
 
+#ifdef __x86_64__
+bool __iswsl1(void);
+#else
+#define __iswsl1() false
+#endif
+
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_INTERNAL_H_ */

@@ -10,12 +10,12 @@
 
 #define RUNLEVEL_MALLOC 1
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 extern int __pid;
 extern char __runlevel;
 extern int ftrace_stackdigs;
+extern const signed char kNtStdio[3];
 extern const char v_ntsubsystem[] __attribute__((__weak__));
 extern const uintptr_t __fini_array_end[] __attribute__((__weak__));
 extern const uintptr_t __fini_array_start[] __attribute__((__weak__));
@@ -35,7 +35,6 @@ int ftrace_init(void);
 void ftrace_hook(void);
 void __morph_tls(void);
 void __enable_tls(void);
-void *__cxa_finalize(void *);
 void __stack_chk_fail(void) wontreturn relegated;
 void __stack_chk_fail_local(void) wontreturn relegated;
 long _setstack(void *, void *, ...);
@@ -48,8 +47,8 @@ void *__mmap_unlocked(void *, size_t, int, int, int, int64_t);
 int __munmap_unlocked(char *, size_t);
 void __on_arithmetic_overflow(void);
 void __init_fds(int, char **, char **);
+void __init_program_executable_name(void);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* ANSI */
 #endif /* COSMOPOLITAN_LIBC_RUNTIME_INTERNAL_H_ */

@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -592,7 +592,7 @@ ape_disk:
 
 #ifdef APE_IS_SHELL_SCRIPT
 apesh:	.ascii	"\n@\n#'\"\n"			// sixth edition shebang
-	.ascii	"m=\"$(uname -m)\"\n"
+	.ascii	"m=$(uname -m 2>/dev/null) || m=x86_64\n"
 
 	.ascii	"if [ \"$m\" = x86_64 ] || [ \"$m\" = amd64 ]; then\n"
 //	Until all operating systems can be updated to support APE,
@@ -700,36 +700,9 @@ apesh:	.ascii	"\n@\n#'\"\n"			// sixth edition shebang
 #endif /* APE_NO_MODIFY_SELF */
 	.ascii	  "exit $?\n"
 	.ascii	"fi\n"				// x86_64
-//	...
-//	decentralized section (.apesh)
-//	...
-	.ascii	"PHDRS='' <<'@'\n"
-	.endobj	apesh
-
-//	elf program headers get inserted here
-//	because they need to be in the first 4096 bytes
-        .section .emushprologue,"a",@progbits
-emush:	.ascii	"\n@\n#'\"\n"
-	.ascii	"s=\"$(uname -s)\"\n"
-//	our script is running on a non-x86_64 architecture
-//	1. `dd` out the appropriate blink vm blob
-//	2. gunzip the blink virtual machine executable
-//	3. relaunch this program inside the blink vm
-	.ascii	"o=\"$(command -v \"$0\")\"\n"
-	.ascii	"e=\"${TMPDIR:-${HOME:-.}}/.ape-blink-1.0.0\"\n"
-	.previous
-//	...
-//	decentralized section (.emush)
-//	- __static_yoink("blink_linux_aarch64");  // for raspberry pi
-//	- __static_yoink("blink_xnu_aarch64");    // is apple silicon
-//	...
-        .section .emushepilogue,"a",@progbits
-	.ascii	"echo \"$0: this ape binary lacks $m support\" >&2\n"
-	.rept	16
-	.ascii	"exit 127\n"
-	.endr
+	.ascii	"echo error: this ape binary only supports x86_64 >&2\n"
 	.ascii	"exit 1\n"
-	.previous
+	.endobj	apesh
 
 #ifdef APE_LOADER
         .section .ape.loader,"a",@progbits
@@ -748,6 +721,8 @@ ape_loader_end:
 #if SupportsSystemv() || SupportsMetal()
 	.section .elf.phdrs,"a",@progbits
 
+	.globl	ape_phdrs
+ape_phdrs:
 	.long	PT_LOAD
 	.long	PF_R|PF_X
 	.stub	ape_cod_offset,quad

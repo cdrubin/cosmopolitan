@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -165,10 +165,9 @@
  * @raise ELOOP if `flags` had `O_NOFOLLOW` and `path` is a symbolic link
  * @raise ELOOP if a loop was detected resolving components of `path`
  * @raise EISDIR if writing is requested and `path` names a directory
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
  * @restartable
- * @threadsafe
  * @vforksafe
  */
 int openat(int dirfd, const char *path, int flags, ...) {
@@ -179,7 +178,7 @@ int openat(int dirfd, const char *path, int flags, ...) {
   va_start(va, flags);
   mode = va_arg(va, unsigned);
   va_end(va);
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (!path || (IsAsan() && !__asan_is_valid_str(path))) {
     rc = efault();
@@ -236,10 +235,10 @@ int openat(int dirfd, const char *path, int flags, ...) {
     rc = enosys();
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("openat(%s, %#s, %s%s) → %d% m", DescribeDirfd(dirfd), path,
          DescribeOpenFlags(flags), DescribeOpenMode(flags, mode), rc);
   return rc;
 }
 
-__strong_reference(openat, openat64);
+__weak_reference(openat, openat64);

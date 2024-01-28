@@ -2,7 +2,6 @@
 #define COSMOPOLITAN_TOOL_NET_LFUNCS_H_
 #include "net/http/url.h"
 #include "third_party/lua/lua.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 int LuaMaxmind(lua_State *);
@@ -19,11 +18,14 @@ int LuaCategorizeIp(lua_State *);
 int LuaCompress(lua_State *);
 int LuaCrc32(lua_State *);
 int LuaCrc32c(lua_State *);
+int LuaCurve25519(lua_State *);
 int LuaDecimate(lua_State *);
+int LuaDecodeBase32(lua_State *);
 int LuaDecodeBase64(lua_State *);
 int LuaDecodeHex(lua_State *);
 int LuaDecodeLatin1(lua_State *);
 int LuaDeflate(lua_State *);
+int LuaEncodeBase32(lua_State *);
 int LuaEncodeBase64(lua_State *);
 int LuaEncodeHex(lua_State *);
 int LuaEncodeLatin1(lua_State *);
@@ -94,5 +96,4 @@ void LuaPushUrlView(lua_State *, struct UrlView *);
 char *FormatUnixHttpDateTime(char *, int64_t);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_TOOL_NET_LFUNCS_H_ */

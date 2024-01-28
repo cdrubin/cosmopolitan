@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 /* inffast_chunk.c -- fast decoding
  * Copyright (C) 1995-2017 Mark Adler
@@ -10,7 +10,6 @@
 asm(".ident\t\"\\n\\n\
 Chromium (BSD-3 License)\\n\
 Copyright 2017 The Chromium Authors\"");
-// clang-format off
 
 #include "third_party/zlib/zutil.internal.h"
 #include "third_party/zlib/inftrees.internal.h"

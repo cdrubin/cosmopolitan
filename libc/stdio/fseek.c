@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/strace.internal.h"
-#include "libc/stdio/stdio.h"
+#include "libc/stdio/internal.h"
 
 /**
  * Repositions open file stream.
@@ -32,7 +32,6 @@
  * @param offset is the byte delta
  * @param whence can be SEET_SET, SEEK_CUR, or SEEK_END
  * @returns 0 on success or -1 on error
- * @threadsafe
  */
 int fseek(FILE *f, int64_t offset, int whence) {
   int rc;

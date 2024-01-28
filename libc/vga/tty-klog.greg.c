@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ This is free and unencumbered software released into the public domain.      │
 │                                                                              │
@@ -33,8 +33,8 @@
 #ifdef __x86_64__
 
 /*
- * @fileoverview Instantiation of routines for emergency or system console
- * output in graphical video modes.
+ * @fileoverview Instantiation of routines for emergency console output in
+ * graphical video modes.
  *
  * @see libc/vga/tty-graph.inc
  */

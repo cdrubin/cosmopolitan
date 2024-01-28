@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -153,9 +153,7 @@ int munmap(void *p, size_t n) {
   int rc;
   __mmi_lock();
   rc = __munmap_unlocked(p, n);
-#if SYSDEBUG
   size_t toto = __strace > 0 ? __get_memtrack_size(&_mmi) : 0;
-#endif
   __mmi_unlock();
   STRACE("munmap(%.12p, %'zu) → %d% m (%'zu bytes total)", p, n, rc, toto);
   return rc;

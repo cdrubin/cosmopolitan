@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_TINYMATH_MAGICU_H_
 #define COSMOPOLITAN_LIBC_TINYMATH_MAGICU_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 struct magicu {
@@ -24,12 +23,11 @@ forceinline uint32_t __magicu_div(uint32_t x, struct magicu d) {
 /**
  * Checks if 𝑑 contains a valid initialized divisor.
  */
-static inline bool __magicu_valid(struct magicu d) {
+static inline bool32 __magicu_valid(struct magicu d) {
   if (!d.M && !d.s) return false;     /* uninitialized */
   if (d.s & ~(64 | 63)) return false; /* corrupted */
   return true;
 }
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_TINYMATH_MAGICU_H_ */

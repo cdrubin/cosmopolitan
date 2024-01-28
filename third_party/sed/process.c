@@ -36,7 +36,7 @@
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/log/bsd.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -48,7 +48,6 @@
 #include "libc/sysv/consts/termios.h"
 #include "third_party/sed/defs.h"
 #include "third_party/sed/extern.h"
-// clang-format off
 
 static SPACE HS, PS, SS, YS;
 #define	pd		PS.deleted

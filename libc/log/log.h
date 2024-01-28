@@ -1,7 +1,7 @@
 #ifndef COSMOPOLITAN_LIBC_LOG_LOG_H_
 #define COSMOPOLITAN_LIBC_LOG_LOG_H_
-#ifdef _COSMO_SOURCE
 #include "libc/stdio/stdio.h"
+#ifdef _COSMO_SOURCE
 
 #define kLogFatal   0
 #define kLogError   1
@@ -30,7 +30,6 @@
 #define _LOG_TINY 0
 #endif
 
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 extern FILE *__log_file;
@@ -39,12 +38,11 @@ int __watch(void *, size_t);
 void __die(void) relegated wontreturn; /* print backtrace and abort() */
 void _meminfo(int);                    /* shows malloc statistics &c. */
 void _memsummary(int);                 /* light version of same thing */
-bool IsTerminalInarticulate(void) nosideeffect;
 const char *commandvenv(const char *, const char *);
 const char *GetAddr2linePath(void);
 const char *GetGdbPath(void);
-bool32 IsDebuggerPresent(bool);
-bool IsRunningUnderMake(void);
+bool32 IsDebuggerPresent(bool32);
+bool32 IsRunningUnderMake(void);
 char *GetSymbolByAddr(int64_t);
 void PrintGarbage(void);
 void PrintGarbageNumeric(FILE *);
@@ -226,6 +224,5 @@ void vffatalf(ARGS, va_list) asm("vflogf") ATTRV relegated wontreturn libcesque;
 
 #endif /* __STRICT_ANSI__ */
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* _COSMO_SOURCE */
 #endif /* COSMOPOLITAN_LIBC_LOG_LOG_H_ */

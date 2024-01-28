@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -51,8 +51,7 @@
  * @raise ENOMEM if we require more vespene gas
  * @raise EAGAIN if `RLIMIT_NPROC` was exceeded
  * @raise EINTR if signal was delivered
- * @cancellationpoint
- * @threadsafe
+ * @cancelationpoint
  */
 FILE *popen(const char *cmdline, const char *mode) {
   FILE *f, *f2;

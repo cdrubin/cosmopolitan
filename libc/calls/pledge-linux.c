@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -535,7 +535,10 @@ static const struct thatispacked SyscallName {
 };
 
 static const uint16_t kPledgeDefault[] = {
-    __NR_linux_exit,  // thread return / exit()
+    __NR_linux_exit,          // thread return / exit()
+#ifdef __NR_linux_arch_prctl  //
+    __NR_linux_arch_prctl,    // or else launching musl process crashes (tls)
+#endif                        //
 };
 
 // stdio contains all the benign system calls. openbsd makes the
@@ -1641,7 +1644,7 @@ static privileged void AllowMmapNoexec(struct Filter *f) {
       /*L2*/ BPF_STMT(BPF_ALU | BPF_AND | BPF_K, ~(PROT_READ | PROT_WRITE)),
       /*L3*/ BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 8 - 4),
       /*L4*/ BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(args[3])),  // flags
-      /*L5*/ BPF_STMT(BPF_ALU | BPF_AND | BPF_K, 0x5a000),
+      /*L5*/ BPF_STMT(BPF_ALU | BPF_AND | BPF_K, 0x52000),
       /*L6*/ BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 1),
       /*L7*/ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
       /*L8*/ BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(nr)),
@@ -2297,7 +2300,6 @@ static privileged void AppendPledge(struct Filter *f,   //
  * @param ipromises is inverted integer bitmask of pledge() promises
  * @return 0 on success, or negative error number on error
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 privileged int sys_pledge_linux(unsigned long ipromises, int mode) {

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -38,13 +38,12 @@
 │ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF               │
 │ THIS SOFTWARE.                                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/fmt.h"
 #include "libc/assert.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/divmod10.internal.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/bits.h"
+#include "libc/serialize.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/nomultics.internal.h"
 #include "libc/intrin/safemacros.internal.h"
@@ -1048,7 +1047,7 @@ int __fmt(void *fn, void *arg, const char *format, va_list va) {
         // undocumented %r specifier
         // used for good carriage return
         // helps integrate loggers with repls
-        if (!__replstderr) {
+        if (!__ttyconf.replstderr) {
           break;
         } else {
           p = "\r\e[K";

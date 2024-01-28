@@ -18,11 +18,10 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/timespec.h"
+#include "libc/cxxabi.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/fmt/fmt.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/describebacktrace.internal.h"
 #include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
@@ -49,6 +48,7 @@
 #include "third_party/mbedtls/config.h"
 #include "third_party/mbedtls/endian.h"
 #include "third_party/mbedtls/error.h"
+#include "libc/serialize.h"
 #include "third_party/mbedtls/platform.h"
 
 asm(".ident\t\"\\n\\n\

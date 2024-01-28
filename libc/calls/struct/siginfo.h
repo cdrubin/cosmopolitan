@@ -1,7 +1,6 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_STRUCT_SIGINFO_H_
 #define COSMOPOLITAN_LIBC_CALLS_STRUCT_SIGINFO_H_
 #include "libc/calls/struct/sigval.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 struct siginfo {
@@ -58,10 +57,9 @@ struct siginfo {
 typedef struct siginfo siginfo_t;
 
 #ifdef _COSMO_SOURCE
-void __minicrash(int, siginfo_t *, void *);
-char __is_stack_overflow(siginfo_t *, void *);
+void __minicrash(int, siginfo_t *, void *) libcesque;
+char __is_stack_overflow(siginfo_t *, void *) libcesque;
 #endif
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_STRUCT_SIGINFO_H_ */

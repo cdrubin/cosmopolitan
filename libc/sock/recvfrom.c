@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -34,21 +34,21 @@
 /**
  * Receives data from network.
  *
+ * This function blocks unless MSG_DONTWAIT is passed. In that case, the
+ * non-error EWOULDBLOCK might be returned. It basically means we didn't
+ * wait around to learn an amount of bytes were written that we know in
+ * advance are guaranteed to be atomic.
+ *
  * @param fd is the file descriptor returned by socket()
  * @param buf is where received network data gets copied
  * @param size is the byte capacity of buf
- * @param flags is a bitmask which may contain any of the following:
- *     - `MSG_DONTWAIT` to force `O_NONBLOCK` behavior for this call
- *     - `MSG_OOB` is broadly supported (untested by cosmo)
- *     - `MSG_PEEK` is broadly supported (untested by cosmo)
- *     - `MSG_WAITALL` is broadly supported (untested by cosmo)
- *     - `MSG_DONTROUTE` is broadly supported (untested by cosmo)
+ * @param flags can have `MSG_OOB`, `MSG_PEEK`, and `MSG_DONTWAIT`
  * @param opt_out_srcaddr receives the binary ip:port of the data's origin
  * @param opt_inout_srcaddrsize is srcaddr capacity which gets updated
  * @return number of bytes received, 0 on remote close, or -1 w/ errno
  * @error EINTR, EHOSTUNREACH, ECONNRESET (UDP ICMP Port Unreachable),
  *     EPIPE (if MSG_NOSIGNAL), EMSGSIZE, ENOTSOCK, EFAULT, etc.
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
  * @restartable (unless SO_RCVTIMEO)
  */
@@ -58,7 +58,7 @@ ssize_t recvfrom(int fd, void *buf, size_t size, int flags,
   ssize_t rc;
   struct sockaddr_storage addr = {0};
   uint32_t addrsize = sizeof(addr);
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (IsAsan() && !__asan_is_valid(buf, size)) {
     rc = efault();
@@ -90,7 +90,7 @@ ssize_t recvfrom(int fd, void *buf, size_t size, int flags,
     __write_sockaddr(&addr, opt_out_srcaddr, opt_inout_srcaddrsize);
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   DATATRACE("recvfrom(%d, [%#.*hhs%s], %'zu, %#x) → %'ld% lm", fd,
             MAX(0, MIN(40, rc)), buf, rc > 40 ? "..." : "", size, flags, rc);
   return rc;

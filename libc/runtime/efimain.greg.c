@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,7 +19,6 @@
 #include "ape/relocations.h"
 #include "ape/sections.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/bits.h"
 #include "libc/intrin/newbie.h"
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
@@ -43,6 +42,8 @@ struct EfiArgs {
 
 static EFI_GUID kEfiLoadedImageProtocol = LOADED_IMAGE_PROTOCOL;
 static EFI_GUID kEfiGraphicsOutputProtocol = GRAPHICS_OUTPUT_PROTOCOL;
+static const EFI_GUID kEfiAcpi20TableGuid = ACPI_20_TABLE_GUID;
+static const EFI_GUID kEfiAcpi10TableGuid = ACPI_10_TABLE_GUID;
 
 extern const char vga_console[];
 extern void _EfiPostboot(struct mman *, uint64_t *, uintptr_t, char **);
@@ -117,6 +118,25 @@ static void EfiInitVga(struct mman *mm, EFI_SYSTEM_TABLE *SystemTable) {
                                     GraphMode->FrameBufferSize, 0);
 }
 
+static void EfiInitAcpi(struct mman *mm, EFI_SYSTEM_TABLE *SystemTable) {
+  void *rsdp1 = NULL, *rsdp2 = NULL;
+  uintptr_t n = SystemTable->NumberOfTableEntries, i;
+  EFI_CONFIGURATION_TABLE *tab;
+  for (i = 0, tab = SystemTable->ConfigurationTable; i < n; ++i, ++tab) {
+    EFI_GUID *guid = &tab->VendorGuid;
+    if (memcmp(guid, &kEfiAcpi20TableGuid, sizeof(EFI_GUID)) == 0) {
+      rsdp2 = tab->VendorTable;
+    } else if (memcmp(guid, &kEfiAcpi20TableGuid, sizeof(EFI_GUID)) == 0) {
+      rsdp1 = tab->VendorTable;
+    }
+  }
+  if (rsdp2) {
+    mm->pc_acpi_rsdp = (uintptr_t)rsdp2;
+  } else {
+    mm->pc_acpi_rsdp = (uintptr_t)rsdp1;
+  }
+}
+
 /**
  * EFI Application Entrypoint.
  *
@@ -152,6 +172,7 @@ __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
   uint64_t Address;
   uintptr_t Args, MapKey, DescSize;
   uint64_t *pd, *pml4t, *pdt1, *pdt2, *pdpt1, *pdpt2;
+  const char16_t *CmdLine;
 
   extern char os asm("__hostos");
   os = _HOSTMETAL;
@@ -173,7 +194,7 @@ __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
   Address = 0x79000;
   SystemTable->BootServices->AllocatePages(
       AllocateAddress, EfiRuntimeServicesData,
-      (0x7e000 - 0x79000 + sizeof(struct EfiArgs) + 4095) / 4096, &Address);
+      (0x7f000 - 0x79000 + sizeof(struct EfiArgs) + 4095) / 4096, &Address);
   Address = IMAGE_BASE_PHYSICAL;
   SystemTable->BootServices->AllocatePages(
       AllocateAddress, EfiRuntimeServicesData,
@@ -181,7 +202,7 @@ __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
   mm = __get_mm_phy();
   SystemTable->BootServices->SetMem(mm, sizeof(*mm), 0);
   SystemTable->BootServices->SetMem(
-      (void *)0x79000, 0x7e000 - 0x79000 + sizeof(struct EfiArgs), 0);
+      (void *)0x79000, 0x7f000 - 0x79000 + sizeof(struct EfiArgs), 0);
   SystemTable->BootServices->CopyMem((void *)IMAGE_BASE_PHYSICAL,
                                      __executable_start,
                                      _end - __executable_start);
@@ -189,10 +210,12 @@ __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
   /*
    * Converts UEFI shell arguments to argv.
    */
-  ArgBlock = (struct EfiArgs *)0x7e000;
+  ArgBlock = (struct EfiArgs *)0x7f000;
   SystemTable->BootServices->HandleProtocol(ImageHandle,
                                             &kEfiLoadedImageProtocol, &ImgInfo);
-  Args = GetDosArgv(ImgInfo->LoadOptions, ArgBlock->ArgBlock,
+  CmdLine = (const char16_t *)ImgInfo->LoadOptions;
+  if (!CmdLine || !CmdLine[0]) CmdLine = u"BOOTX64.EFI";
+  Args = GetDosArgv(CmdLine, ArgBlock->ArgBlock,
                     sizeof(ArgBlock->ArgBlock), ArgBlock->Args,
                     ARRAYLEN(ArgBlock->Args));
 
@@ -202,6 +225,11 @@ __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
    * type we support.
    */
   if (_weaken(vga_console)) EfiInitVga(mm, SystemTable);
+
+  /*
+   * Gets a pointer to the ACPI RSDP.
+   */
+  EfiInitAcpi(mm, SystemTable);
 
   /*
    * Asks UEFI which parts of our RAM we're allowed to use.

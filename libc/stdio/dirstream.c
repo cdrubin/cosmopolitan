@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,6 +19,7 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/sig.internal.h"
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -35,6 +36,7 @@
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
 #include "libc/nt/enum/fileflagandattributes.h"
+#include "libc/nt/enum/filesharemode.h"
 #include "libc/nt/enum/filetype.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
@@ -183,6 +185,11 @@ static textwindows uint8_t GetNtDirentType(struct NtWin32FindData *w) {
 }
 
 static textwindows dontinline struct dirent *readdir_nt(DIR *dir) {
+TryAgain:
+  while (!dir->isdone &&
+         (dir->windata.dwFileAttributes & kNtFileAttributeSystem)) {
+    dir->isdone = !FindNextFile(dir->hand, &dir->windata);
+  }
   if (dir->isdone) {
     return NULL;
   }
@@ -191,6 +198,7 @@ static textwindows dontinline struct dirent *readdir_nt(DIR *dir) {
   uint64_t ino = 0;
   char16_t jp[PATH_MAX];
   size_t i = dir->name16len - 1;  // foo\* -> foo\ (strip star)
+  bool pretend_this_file_doesnt_exist = false;
   memcpy(jp, dir->name16, i * sizeof(char16_t));
   char16_t *p = dir->windata.cFileName;
   if (p[0] == u'.' && p[1] == u'\0') {
@@ -213,7 +221,7 @@ static textwindows dontinline struct dirent *readdir_nt(DIR *dir) {
       if (i + 1 < ARRAYLEN(jp)) {
         jp[i++] = *p++;
       } else {
-        // ignore errors and set inode to zero
+        pretend_this_file_doesnt_exist = true;
         goto GiveUpOnGettingInode;
       }
     }
@@ -222,10 +230,13 @@ static textwindows dontinline struct dirent *readdir_nt(DIR *dir) {
 
   // get inode such that it's consistent with stat()
   // it's important that we not follow symlinks here
-  int64_t fh = CreateFile(jp, kNtFileReadAttributes, 0, 0, kNtOpenExisting,
-                          kNtFileAttributeNormal | kNtFileFlagBackupSemantics |
-                              kNtFileFlagOpenReparsePoint,
-                          0);
+  int64_t fh =
+      CreateFile(jp, kNtFileReadAttributes,
+                 kNtFileShareRead | kNtFileShareWrite | kNtFileShareDelete, 0,
+                 kNtOpenExisting,
+                 kNtFileAttributeNormal | kNtFileFlagBackupSemantics |
+                     kNtFileFlagOpenReparsePoint,
+                 0);
   if (fh != kNtInvalidHandleValue) {
     struct NtByHandleFileInformation wst;
     if (GetFileInformationByHandle(fh, &wst)) {
@@ -236,6 +247,7 @@ static textwindows dontinline struct dirent *readdir_nt(DIR *dir) {
     // ignore errors and set inode to zero
     STRACE("failed to get inode of path join(%#hs, %#hs) -> %#hs %m",
            dir->name16, dir->windata.cFileName, jp);
+    pretend_this_file_doesnt_exist = true;
   }
 
 GiveUpOnGettingInode:
@@ -247,6 +259,7 @@ GiveUpOnGettingInode:
                 dir->windata.cFileName);
   dir->ent.d_type = GetNtDirentType(&dir->windata);
   dir->isdone = !FindNextFile(dir->hand, &dir->windata);
+  if (pretend_this_file_doesnt_exist) goto TryAgain;
   return &dir->ent;
 }
 
@@ -351,7 +364,7 @@ DIR *fdopendir(int fd) {
  * @errors ENOENT, ENOTDIR, EACCES, EMFILE, ENFILE, ENOMEM
  * @raise ECANCELED if thread was cancelled in masked mode
  * @raise EINTR if we needed to block and a signal was delivered instead
- * @cancellationpoint
+ * @cancelationpoint
  * @see glob()
  */
 DIR *opendir(const char *name) {
@@ -513,6 +526,7 @@ static struct dirent *readdir_impl(DIR *dir) {
  * @param dir is the object opendir() or fdopendir() returned
  * @return next entry or NULL on end or error, which can be
  *     differentiated by setting errno to 0 beforehand
+ * @threadunsafe
  */
 struct dirent *readdir(DIR *dir) {
   struct dirent *e;
@@ -535,7 +549,6 @@ struct dirent *readdir(DIR *dir) {
  * @param result will receive `output` pointer, or null on eof
  * @return 0 on success, or errno on error
  * @returnserrno
- * @threadsafe
  */
 errno_t readdir_r(DIR *dir, struct dirent *output, struct dirent **result) {
   int err, olderr;
@@ -587,7 +600,6 @@ int closedir(DIR *dir) {
 
 /**
  * Returns offset into directory data.
- * @threadsafe
  */
 long telldir(DIR *dir) {
   long rc;
@@ -599,7 +611,6 @@ long telldir(DIR *dir) {
 
 /**
  * Returns file descriptor associated with DIR object.
- * @threadsafe
  */
 int dirfd(DIR *dir) {
   return dir->fd;
@@ -607,7 +618,6 @@ int dirfd(DIR *dir) {
 
 /**
  * Seeks to beginning of directory stream.
- * @threadsafe
  */
 void rewinddir(DIR *dir) {
   lockdir(dir);
@@ -634,7 +644,6 @@ void rewinddir(DIR *dir) {
 
 /**
  * Seeks in directory stream.
- * @threadsafe
  */
 void seekdir(DIR *dir, long tell) {
   lockdir(dir);

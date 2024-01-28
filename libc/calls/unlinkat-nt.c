@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -55,8 +55,7 @@ static textwindows bool IsDirectorySymlink(const char16_t *path) {
 }
 
 static textwindows int sys_rmdir_nt(const char16_t *path) {
-  int e, ms;
-  e = errno;
+  int ms;
   for (ms = 1;; ms *= 2) {
     if (RemoveDirectory(path)) {
       return 0;
@@ -67,14 +66,13 @@ static textwindows int sys_rmdir_nt(const char16_t *path) {
     // Alternative is use Microsoft internal APIs.
     // Never could have imagined it'd be this bad.
     if (GetLastError() == kNtErrorDirNotEmpty && ms <= 2048) {
-      errno = e;
       Sleep(ms);
       continue;
     } else {
       break;
     }
   }
-  return -1;
+  return __winerr();
 }
 
 static textwindows int sys_unlink_nt(const char16_t *path) {

@@ -10,7 +10,6 @@
 #include "third_party/nsync/note.h"
 #include "third_party/nsync/time.h"
 #include "third_party/nsync/wait_s.internal.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 #ifdef MODE_DBG
@@ -24,9 +23,6 @@ void nsync_yield_(void);
 
 /* Retrieve the per-thread cache of the waiter object.  Platform specific. */
 void *nsync_per_thread_waiter_(void (*dest)(void *));
-
-/* Set the per-thread cache of the waiter object.  Platform specific. */
-void nsync_set_per_thread_waiter_(void *v, void (*dest)(void *));
 
 /* Used in spinloops to delay resumption of the loop.
    Usage:
@@ -43,7 +39,7 @@ uint32_t nsync_spin_test_and_set_(nsync_atomic_uint32_ *w, uint32_t test,
                                   uint32_t set, uint32_t clear);
 
 /* Abort after printing the nul-temrinated string s[]. */
-void nsync_panic_(const char *s);
+void nsync_panic_(const char *s) wontreturn;
 
 /* ---------- */
 
@@ -244,8 +240,12 @@ waiter *nsync_dll_waiter_(struct Dll *e);
                : DLL_CONTAINER(struct waiter_s, same_condition, e))
 waiter *nsync_dll_waiter_samecond_(struct Dll *e);
 
-void nsync_waiter_init_(waiter *);
-void nsync_waiter_destroy_(waiter *);
+/* Return a pointer to an unused waiter struct.
+   Ensures that the enclosed timer is stopped and its channel drained. */
+waiter *nsync_waiter_new_(void);
+
+/* Return an unused waiter struct *w to the free pool. */
+void nsync_waiter_free_(waiter *w);
 
 /* ---------- */
 
@@ -277,5 +277,4 @@ int nsync_sem_wait_with_cancel_(waiter *w, nsync_time abs_deadline,
                                 nsync_note cancel_note);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* NSYNC_COMMON_H_ */

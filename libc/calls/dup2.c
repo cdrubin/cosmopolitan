@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,12 +18,15 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/state.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
+#include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -64,16 +67,25 @@ int dup2(int oldfd, int newfd) {
   int rc;
   // helps guarantee stderr log gets duplicated before user closes
   if (_weaken(kloghandle)) _weaken(kloghandle)();
-  if (__isfdkind(oldfd, kFdZip)) {
-    rc = enotsup();
 #ifdef __aarch64__
-  } else if (oldfd == newfd) {
+  if (oldfd == newfd) {
     // linux aarch64 defines dup3() but not dup2(), which wasn't such a
     // great decision, since the two syscalls don't behave the same way
     if (!(rc = read(oldfd, 0, 0))) rc = oldfd;
+  } else
 #endif
-  } else if (!IsWindows()) {
-    rc = sys_dup2(oldfd, newfd, 0);
+  if (!IsWindows()) {
+    if (__isfdkind(oldfd, kFdZip) || __isfdkind(newfd, kFdZip)) {
+      if (__vforked) {
+        return enotsup();
+      }
+      rc = sys_dup2(oldfd, newfd, 0);
+      if (rc != -1) {
+        _weaken(__zipos_postdup)(oldfd, newfd);
+      }
+    } else {
+      rc = sys_dup2(oldfd, newfd, 0);
+    }
   } else if (newfd < 0) {
     rc = ebadf();
   } else if (oldfd == newfd) {

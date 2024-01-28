@@ -1,4 +1,13 @@
-#define __COSMOPOLITAN__ 1
+#ifdef __COSMOPOLITAN__
+#undef __COSMOPOLITAN__
+#endif
+
+#define __COSMOPOLITAN_MAJOR__ 3
+#define __COSMOPOLITAN_MINOR__ 2
+#define __COSMOPOLITAN_PATCH__ 4
+#define __COSMOPOLITAN__                                                   \
+  (100000000 * __COSMOPOLITAN_MAJOR__ + 1000000 * __COSMOPOLITAN_MINOR__ + \
+   __COSMOPOLITAN_PATCH__)
 
 #ifndef __COUNTER__
 #define __COUNTER__ __LINE__
@@ -78,8 +87,6 @@
 #define FRAMESIZE 65536
 #define _PAGESIZE 4096
 #endif
-
-#define NSIG 128 /* b/c freebsd */
 
 #if defined(__LP64__) && !defined(__INT64_TYPE__)
 #include "libc/integral/lp64.inc"

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -54,6 +54,7 @@ static inline axdx_t tprecode8to16_sse2(char16_t *dst, size_t dstsize,
  * @param src is NUL-terminated UTF-8 input string
  * @return ax shorts written excluding nul
  * @return dx index of character after nul word in src
+ * @asyncsignalsafe
  */
 axdx_t tprecode8to16(char16_t *dst, size_t dstsize, const char *src) {
   axdx_t r;

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -91,8 +91,10 @@ void testlib_runtestcases(const testfn_t *start, const testfn_t *end,
   // the linker sorts into an array.
   char host[64];
   struct Dll *e;
+  const char *user;
   const testfn_t *fn;
   struct TestAspect *a;
+  user = getenv("USER");
   strcpy(host, "unknown");
   gethostname(host, sizeof(host)), errno = 0;
   for (fn = start; fn != end; ++fn) {
@@ -111,7 +113,7 @@ void testlib_runtestcases(const testfn_t *start, const testfn_t *end,
     if (warmup) warmup();
     testlib_clearxmmregisters();
     STRACE("");
-    STRACE("# running test %t on %s@%s", fn, __getenv(environ, "USER").s, host);
+    STRACE("# running test %t on %s@%s", fn, user, host);
     (*fn)();
     STRACE("");
     STRACE("# tearing down %t", fn);

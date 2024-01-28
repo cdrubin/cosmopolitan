@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ lsqlite3                                                                     │
 │ Copyright (C) 2002-2016 Tiago Dionizio, Doug Currie                          │
@@ -28,7 +28,7 @@
 │ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/weirdtypes.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "third_party/lua/lauxlib.h"
@@ -231,6 +231,12 @@ static sdb_vm *lsqlite_checkvm(lua_State *L, int index) {
 static int dbvm_isopen(lua_State *L) {
     sdb_vm *svm = lsqlite_getvm(L, 1);
     lua_pushboolean(L, svm->vm != NULL ? 1 : 0);
+    return 1;
+}
+
+static int dbvm_readonly(lua_State *L) {
+    sdb_vm *svm = lsqlite_checkvm(L, 1);
+    lua_pushboolean(L, sqlite3_stmt_readonly(svm->vm));
     return 1;
 }
 
@@ -906,6 +912,21 @@ static int pusherr(lua_State *L, int rc) {
     lua_pushnil(L);
     lua_pushinteger(L, rc);
     return 2;
+}
+
+static int pusherrstr(lua_State *L, char *str) {
+    lua_pushnil(L);
+    lua_pushstring(L, str);
+    return 2;
+}
+
+static int db_readonly(lua_State *L) {
+    sdb *db = lsqlite_checkdb(L, 1);
+    const char *zDb = luaL_optstring(L, 2, "main");
+    int res = sqlite3_db_readonly(db->db, zDb);
+    if (res == -1) return pusherrstr(L, "unknown (not attached) database name");
+    lua_pushboolean(L, res);
+    return 1;
 }
 
 static int db_wal_checkpoint(lua_State *L) {
@@ -1748,16 +1769,15 @@ static int db_gc(lua_State *L) {
     return 0;
 }
 
+#ifdef SQLITE_ENABLE_DESERIALIZE
+
 static int db_serialize(lua_State *L) {
-    sdb *db = lsqlite_getdb(L, 1);
+    sdb *db = lsqlite_checkdb(L, 1);
     sqlite_int64 size = 0;
 
-    if (db->db == NULL) /* ignore closed databases */
-        return 0;
-    
     char *buffer = (char *)sqlite3_serialize(db->db, "main", &size, 0);
-    if (buffer == NULL) /* ignore failed database serialization */
-        return 0;
+    if (buffer == NULL)
+        return pusherrstr(L, "failed to serialize");
 
     lua_pushlstring(L, buffer, size);
     free(buffer);
@@ -1765,21 +1785,20 @@ static int db_serialize(lua_State *L) {
 }
 
 static int db_deserialize(lua_State *L) {
-    sdb *db = lsqlite_getdb(L, 1);
+    sdb *db = lsqlite_checkdb(L, 1);
     size_t size = 0;
 
-    if (db->db == NULL) /* ignore closed databases */
-        return 0;
-
     const char *buffer = luaL_checklstring(L, 2, &size);
-    if (buffer == NULL || size == 0) /* ignore empty database content */
-        return 0;
+    if (buffer == NULL || size == 0)
+        return pusherrstr(L, "failed to deserialize");
 
     const char *sqlbuf = memcpy(sqlite3_malloc(size), buffer, size);
     sqlite3_deserialize(db->db, "main", (void *)sqlbuf, size, size,
         SQLITE_DESERIALIZE_FREEONCLOSE + SQLITE_DESERIALIZE_RESIZEABLE);
     return 0;
 }
+
+#endif
 
 #ifdef SQLITE_ENABLE_SESSION
 
@@ -2293,7 +2312,7 @@ static int db_concat_changeset(lua_State *L) {
     int rc = sqlite3changegroup_new(&pGrp);
     for (int i = 1; rc == SQLITE_OK && i <= n; i++) {
         lua_rawgeti(L, 2, i);
-        cset = gc(strdup(lua_tostring(L, -1)));
+        cset = (void *)lua_tostring(L, -1);
         nset = lua_rawlen(L, -1);
         rc = sqlite3changegroup_add(pGrp, nset, cset);
         lua_pop(L, 1);  // pop the string
@@ -2309,7 +2328,7 @@ static int db_concat_changeset(lua_State *L) {
 
 static int db_apply_changeset(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
-    char *cset = gc(strdup(luaL_checkstring(L, 2)));
+    void *cset = (void *)luaL_checkstring(L, 2);
     int nset = lua_rawlen(L, 2);
     int top = lua_gettop(L);
     int rc;
@@ -2602,6 +2621,7 @@ static const struct {
 
 static const luaL_Reg dblib[] = {
     {"isopen",              db_isopen               },
+    {"readonly",            db_readonly             },
     {"last_insert_rowid",   db_last_insert_rowid    },
     {"changes",             db_changes              },
     {"total_changes",       db_total_changes        },
@@ -2634,9 +2654,6 @@ static const luaL_Reg dblib[] = {
     {"close",               db_close                },
     {"close_vm",            db_close_vm             },
 
-    {"serialize",           db_serialize            },
-    {"deserialize",         db_deserialize          },
-
 #ifdef SQLITE_ENABLE_SESSION
     {"create_session",      db_create_session       },
     {"create_rebaser",      db_create_rebaser       },
@@ -2644,6 +2661,11 @@ static const luaL_Reg dblib[] = {
     {"invert_changeset",    db_invert_changeset     },
     {"concat_changeset",    db_concat_changeset     },
     {"iterate_changeset",   db_iterate_changeset    },
+#endif
+
+#ifdef SQLITE_ENABLE_DESERIALIZE
+    {"serialize",           db_serialize            },
+    {"deserialize",         db_deserialize          },
 #endif
 
     {"__tostring",          db_tostring             },
@@ -2654,6 +2676,7 @@ static const luaL_Reg dblib[] = {
 
 static const luaL_Reg vmlib[] = {
     {"isopen",              dbvm_isopen             },
+    {"readonly",            dbvm_readonly           },
 
     {"step",                dbvm_step               },
     {"reset",               dbvm_reset              },

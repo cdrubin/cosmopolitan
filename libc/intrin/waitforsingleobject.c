@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/nt/runtime.h"
 #include "libc/nt/synchronization.h"
 #include "libc/nt/thunk/msabi.h"
 
@@ -30,7 +31,7 @@ __msabi extern typeof(WaitForSingleObject) *const __imp_WaitForSingleObject;
 uint32_t WaitForSingleObject(int64_t hHandle, uint32_t dwMilliseconds) {
   uint32_t rc;
   rc = __imp_WaitForSingleObject(hHandle, dwMilliseconds);
-  POLLTRACE("WaitForSingleObject(%ld, %'d) → %d% m", hHandle, dwMilliseconds,
-            rc);
+  POLLTRACE("WaitForSingleObject(%ld, %'d) → %d %d", hHandle, dwMilliseconds,
+            rc, GetLastError());
   return rc;
 }

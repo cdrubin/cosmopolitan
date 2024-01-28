@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -25,9 +25,9 @@
 #include "libc/thread/posixthread.internal.h"
 
 errno_t _pthread_reschedule(struct PosixThread *pt) {
-  int policy = pt->attr.__schedpolicy;
+  int policy = pt->pt_attr.__schedpolicy;
   int e, rc, tid = _pthread_tid(pt);
-  struct sched_param param = {pt->attr.__schedparam};
+  struct sched_param param = {pt->pt_attr.__schedparam};
   e = errno;
   if (IsNetbsd()) {
     rc = sys_sched_setparam_netbsd(0, tid, policy, &param);

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -44,15 +44,14 @@
  * @return [1..size] bytes on success, or -1 w/ errno; noting zero is
  *     impossible unless size was passed as zero to do an error check
  * @see pread(), write()
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 ssize_t pwrite(int fd, const void *buf, size_t size, int64_t offset) {
   ssize_t rc;
   size_t wrote;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (offset < 0) {
     rc = einval();
@@ -66,7 +65,7 @@ ssize_t pwrite(int fd, const void *buf, size_t size, int64_t offset) {
     rc = sys_pwrite(fd, buf, size, offset, offset);
   } else if (__isfdkind(fd, kFdSocket)) {
     rc = espipe();
-  } else if (__isfdkind(fd, kFdFile)) {
+  } else if (__isfdkind(fd, kFdFile) || __isfdkind(fd, kFdDevNull)) {
     rc = sys_write_nt(fd, (struct iovec[]){{(void *)buf, size}}, 1, offset);
   } else {
     return ebadf();
@@ -80,10 +79,10 @@ ssize_t pwrite(int fd, const void *buf, size_t size, int64_t offset) {
     }
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   DATATRACE("pwrite(%d, %#.*hhs%s, %'zu, %'zd) → %'zd% m", fd,
             MAX(0, MIN(40, rc)), buf, rc > 40 ? "..." : "", size, offset, rc);
   return rc;
 }
 
-__strong_reference(pwrite, pwrite64);
+__weak_reference(pwrite, pwrite64);

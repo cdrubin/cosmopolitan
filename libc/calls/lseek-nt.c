@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -62,16 +62,16 @@ static textwindows int64_t Seek(struct Fd *f, int64_t offset, int whence) {
 }
 
 textwindows int64_t sys_lseek_nt(int fd, int64_t offset, int whence) {
-  if (__isfdkind(fd, kFdFile)) {
+  if (__isfdkind(fd, kFdDevNull)) {
+    return offset;
+  } else if (__isfdkind(fd, kFdFile)) {
     struct Fd *f = g_fds.p + fd;
     int filetype = GetFileType(f->handle);
     if (filetype != kNtFileTypePipe && filetype != kNtFileTypeChar) {
       int64_t res;
-      pthread_mutex_lock(&f->lock);
       if ((res = Seek(f, offset, whence)) != -1) {
         f->pointer = res;
       }
-      pthread_mutex_unlock(&f->lock);
       return res;
     } else {
       return espipe();

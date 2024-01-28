@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -53,7 +53,7 @@ int prctl(int operation, ...) {
     rc = enosys();
   }
 
-#ifdef SYSDEBUG
+#if SYSDEBUG
   if (operation == PR_CAPBSET_READ || operation == PR_CAPBSET_DROP) {
     STRACE("prctl(%s, %s) → %d% m", DescribePrctlOperation(operation),
            DescribeCapability(a), rc);

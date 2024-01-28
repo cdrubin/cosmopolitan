@@ -1,4 +1,3 @@
-// clang-format off
 /*
 *   $Id: eiffel.c 748 2009-11-06 02:44:42Z dhiebert $
 *
@@ -21,7 +20,6 @@
 #include "libc/calls/calls.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "third_party/musl/tempnam.h"

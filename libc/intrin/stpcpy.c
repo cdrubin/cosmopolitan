@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -35,9 +35,6 @@ typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
  */
 char *stpcpy(char *d, const char *s) {
   size_t i = 0;
-  if (IsAsan()) {
-    __asan_verify(d, strlen(s) + 1);
-  }
 #if defined(__x86_64__) && !defined(__chibicc__)
   for (; (uintptr_t)(s + i) & 15; ++i) {
     if (!(d[i] = s[i])) {

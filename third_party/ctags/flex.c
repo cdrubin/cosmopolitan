@@ -1,4 +1,3 @@
-// clang-format off
 /*
  *	 $Id: flex.c 666 2008-05-15 17:47:31Z dfishburn $
  *
@@ -27,7 +26,6 @@
 #include "libc/calls/calls.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "third_party/musl/tempnam.h"

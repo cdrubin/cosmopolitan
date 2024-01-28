@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -28,12 +28,12 @@ float _acosf(float) asm("acosf");
 long double _acosl(long double) asm("acosl");
 
 TEST(acos, test) {
-  EXPECT_STREQ("1.5707963267949", _gc(xasprintf("%.15g", _acos(0.))));
-  EXPECT_STREQ("1.5707963267949", _gc(xasprintf("%.15g", _acos(-0.))));
-  EXPECT_STREQ("1.0471975511966", _gc(xasprintf("%.15g", _acos(.5))));
-  EXPECT_STREQ("2.0943951023932", _gc(xasprintf("%.15g", _acos(-.5))));
-  EXPECT_STREQ("0", _gc(xasprintf("%.15g", _acos(1.))));
-  EXPECT_STREQ("3.14159265358979", _gc(xasprintf("%.15g", _acos(-1.))));
+  EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", _acos(0.))));
+  EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", _acos(-0.))));
+  EXPECT_STREQ("1.0471975511966", gc(xasprintf("%.15g", _acos(.5))));
+  EXPECT_STREQ("2.0943951023932", gc(xasprintf("%.15g", _acos(-.5))));
+  EXPECT_STREQ("0", gc(xasprintf("%.15g", _acos(1.))));
+  EXPECT_STREQ("3.14159265358979", gc(xasprintf("%.15g", _acos(-1.))));
   EXPECT_TRUE(isnan(_acos(1.5)));
   EXPECT_TRUE(isnan(_acos(-1.5)));
   EXPECT_TRUE(isnan(_acos(2.)));
@@ -41,7 +41,7 @@ TEST(acos, test) {
   EXPECT_TRUE(isnan(_acos(-NAN)));
   EXPECT_TRUE(isnan(_acos(INFINITY)));
   EXPECT_TRUE(isnan(_acos(-INFINITY)));
-  EXPECT_STREQ("1.5707963267949", _gc(xasprintf("%.15g", _acos(__DBL_MIN__))));
+  EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", _acos(__DBL_MIN__))));
   EXPECT_TRUE(isnan(_acos(__DBL_MAX__)));
 }
 

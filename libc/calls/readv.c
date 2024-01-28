@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -43,12 +43,12 @@
  * performance boost in the case of a single small iovec.
  *
  * @return number of bytes actually read, or -1 w/ errno
- * @cancellationpoint
+ * @cancelationpoint
  * @restartable
  */
 ssize_t readv(int fd, const struct iovec *iov, int iovlen) {
   ssize_t rc;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (fd < 0) {
     rc = ebadf();
@@ -75,7 +75,7 @@ ssize_t readv(int fd, const struct iovec *iov, int iovlen) {
     rc = enosys();
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("readv(%d, [%s], %d) → %'ld% m", fd, DescribeIovec(rc, iov, iovlen),
          iovlen, rc);
   return rc;

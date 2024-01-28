@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -20,20 +20,7 @@
 #include "libc/errno.h"
 #include "libc/runtime/utmpx.h"
 
-void setutent(void) {
-}
-
-void endutent(void) {
-}
-
 void endutxent(void) {
-}
-
-struct utmp *getutent(void) {
-  return 0;
-}
-
-void updwtmp(const char *x, const struct utmp *y) {
 }
 
 void updwtmpx(const char *x, const struct utmpx *y) {
@@ -44,10 +31,6 @@ struct utmpx *pututxline(const struct utmpx *p) {
 }
 
 void setutxent(void) {
-}
-
-struct utmp *getutid(const struct utmp *x) {
-  return 0;
 }
 
 struct utmpx *getutxent(void) {
@@ -67,10 +50,12 @@ int __utmpxname() {
   return -1;
 }
 
-int utmpname(const char *x) {
-  return __utmpxname();
-}
-
-int utmpxname(const char *x) {
-  return __utmpxname();
-}
+__weak_reference(endutxent, endutent);
+__weak_reference(setutxent, setutent);
+__weak_reference(getutxent, getutent);
+__weak_reference(getutxid, getutid);
+__weak_reference(getutxline, getutline);
+__weak_reference(pututxline, pututline);
+__weak_reference(updwtmpx, updwtmp);
+__weak_reference(__utmpxname, utmpname);
+__weak_reference(__utmpxname, utmpxname);

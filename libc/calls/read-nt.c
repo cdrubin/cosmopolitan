@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,58 +16,76 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/createfileflags.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/sig.internal.h"
+#include "libc/calls/state.internal.h"
 #include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/iovec.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/calls/ttydefaults.h"
+#include "libc/cosmo.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/atomic.h"
+#include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/dll.h"
 #include "libc/intrin/nomultics.internal.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/mem.h"
 #include "libc/nt/console.h"
-#include "libc/nt/enum/filetype.h"
+#include "libc/nt/createfile.h"
+#include "libc/nt/enum/accessmask.h"
+#include "libc/nt/enum/consolemodeflags.h"
+#include "libc/nt/enum/creationdisposition.h"
+#include "libc/nt/enum/filesharemode.h"
 #include "libc/nt/enum/vk.h"
 #include "libc/nt/enum/wait.h"
 #include "libc/nt/errors.h"
-#include "libc/nt/events.h"
-#include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/inputrecord.h"
 #include "libc/nt/synchronization.h"
-#include "libc/nt/thread.h"
-#include "libc/nt/thunk/msabi.h"
 #include "libc/str/str.h"
 #include "libc/str/utf16.h"
+#include "libc/sysv/consts/limits.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/consts/sig.h"
-#include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 #ifdef __x86_64__
 
-__msabi extern typeof(CloseHandle) *const __imp_CloseHandle;
+/**
+ * @fileoverview Cosmopolitan Standard Input
+ *
+ * This file implements pollable terminal i/o for Windows consoles. On
+ * Windows 10 the "virtual terminal processing" feature works great on
+ * output but their solution for input processing isn't good enough to
+ * support running Linux programs like Emacs. This polyfill fixes that
+ * and it most importantly ensures we can poll() standard input, which
+ * would otherwise have been impossible. We aren't using threads. What
+ * we do instead is have termios behaviors e.g. canonical mode editing
+ * happen on demand as a side effect of read/poll/ioctl activity.
+ */
 
-static const struct {
+struct VirtualKey {
   int vk;
   int normal_str;
   int shift_str;
   int ctrl_str;
   int shift_ctrl_str;
-} kVirtualKey[] = {
+};
+
 #define S(s) W(s "\0\0")
 #define W(s) (s[3] << 24 | s[2] << 16 | s[1] << 8 | s[0])
+
+static const struct VirtualKey kVirtualKey[] = {
     {kNtVkUp, S("A"), S("1;2A"), S("1;5A"), S("1;6A")},
     {kNtVkDown, S("B"), S("1;2B"), S("1;5B"), S("1;6B")},
-    {kNtVkLeft, S("D"), S("1;2D"), S("1;5D"), S("1;6D")},
     {kNtVkRight, S("C"), S("1;2C"), S("1;5C"), S("1;6C")},
+    {kNtVkLeft, S("D"), S("1;2D"), S("1;5D"), S("1;6D")},
     {kNtVkInsert, S("2~"), S("2;2~"), S("2;5~"), S("2;6~")},
     {kNtVkDelete, S("3~"), S("3;2~"), S("3;5~"), S("3;6~")},
     {kNtVkHome, S("H"), S("1;2H"), S("1;5H"), S("1;6H")},
@@ -86,29 +104,96 @@ static const struct {
     {kNtVkF10, S("21~"), S("34~"), S("21^"), S("34^")},
     {kNtVkF11, S("23~"), S("23$"), S("23^"), S("23@")},
     {kNtVkF12, S("24~"), S("24$"), S("24^"), S("24@")},
-#undef W
-#undef S
+    {0},
+};
+
+// TODO: How can we configure `less` to not need this bloat?
+static const struct VirtualKey kDecckm[] = {
+    {kNtVkUp, -S("OA"), -S("OA"), S("A"), S("A")},
+    {kNtVkDown, -S("OB"), -S("OB"), S("B"), S("B")},
+    {kNtVkRight, -S("OC"), -S("OC"), S("C"), S("C")},
+    {kNtVkLeft, -S("OD"), -S("OD"), S("D"), S("D")},
+    {kNtVkPrior, S("5~"), S("5;2~"), S("5;5~"), S("5;6~")},
+    {kNtVkNext, S("6~"), S("6;2~"), S("6;5~"), S("6;6~")},
+    {0},
 };
 
 #define KEYSTROKE_CONTAINER(e) DLL_CONTAINER(struct Keystroke, elem, e)
 
 struct Keystroke {
-  char buf[32];
-  unsigned buflen;
+  char buf[23];
+  unsigned char buflen;
   struct Dll elem;
 };
 
 struct Keystrokes {
-  struct Dll *list;
-  struct Dll *free;
+  atomic_uint once;
   bool end_of_file;
+  bool ohno_decckm;
   uint16_t utf16hs;
-  unsigned allocated;
+  int16_t freekeys;
+  int64_t cin, cot;
+  struct Dll *list;
+  struct Dll *line;
+  struct Dll *free;
   pthread_mutex_t lock;
-  struct Keystroke pool[32];
+  const struct VirtualKey *vkt;
+  struct Keystroke pool[512];
 };
 
 static struct Keystrokes __keystroke;
+
+textwindows void WipeKeystrokes(void) {
+  bzero(&__keystroke, sizeof(__keystroke));
+}
+
+static textwindows void FreeKeystrokeImpl(struct Dll *key) {
+  dll_make_first(&__keystroke.free, key);
+  ++__keystroke.freekeys;
+}
+
+static textwindows struct Keystroke *NewKeystroke(void) {
+  struct Dll *e = dll_first(__keystroke.free);
+  struct Keystroke *k = KEYSTROKE_CONTAINER(e);
+  dll_remove(&__keystroke.free, &k->elem);
+  --__keystroke.freekeys;
+  k->buflen = 0;
+  return k;
+}
+
+static textwindows void FreeKeystroke(struct Dll **list, struct Dll *key) {
+  dll_remove(list, key);
+  FreeKeystrokeImpl(key);
+}
+
+static textwindows void FreeKeystrokes(struct Dll **list) {
+  struct Dll *key;
+  while ((key = dll_first(*list))) {
+    FreeKeystroke(list, key);
+  }
+}
+
+static textwindows void OpenConsole(void) {
+  __keystroke.vkt = kVirtualKey;
+  __keystroke.cin = CreateFile(u"CONIN$", kNtGenericRead | kNtGenericWrite,
+                               kNtFileShareRead, 0, kNtOpenExisting, 0, 0);
+  __keystroke.cot = CreateFile(u"CONOUT$", kNtGenericRead | kNtGenericWrite,
+                               kNtFileShareWrite, 0, kNtOpenExisting, 0, 0);
+  for (int i = 0; i < ARRAYLEN(__keystroke.pool); ++i) {
+    dll_init(&__keystroke.pool[i].elem);
+    FreeKeystrokeImpl(&__keystroke.pool[i].elem);
+  }
+}
+
+static textwindows int AddSignal(int sig) {
+  atomic_fetch_or_explicit(&__get_tls()->tib_sigpending, 1ull << (sig - 1),
+                           memory_order_relaxed);
+  return 0;
+}
+
+static textwindows void InitConsole(void) {
+  cosmo_once(&__keystroke.once, OpenConsole);
+}
 
 static textwindows void LockKeystrokes(void) {
   pthread_mutex_lock(&__keystroke.lock);
@@ -118,25 +203,34 @@ static textwindows void UnlockKeystrokes(void) {
   pthread_mutex_unlock(&__keystroke.lock);
 }
 
-static textwindows uint64_t BlockSignals(void) {
-  return atomic_exchange(&__get_tls()->tib_sigmask, -1);
+textwindows int64_t GetConsoleInputHandle(void) {
+  InitConsole();
+  return __keystroke.cin;
 }
 
-static textwindows void UnblockSignals(uint64_t mask) {
-  atomic_store_explicit(&__get_tls()->tib_sigmask, mask, memory_order_release);
+textwindows int64_t GetConsoleOutputHandle(void) {
+  InitConsole();
+  return __keystroke.cot;
+}
+
+static textwindows bool IsMouseModeCommand(int x) {
+  return x == 1000 ||  // SET_VT200_MOUSE
+         x == 1002 ||  // SET_BTN_EVENT_MOUSE
+         x == 1006 ||  // SET_SGR_EXT_MODE_MOUSE
+         x == 1015;    // SET_URXVT_EXT_MODE_MOUSE
 }
 
 static textwindows int GetVirtualKey(uint16_t vk, bool shift, bool ctrl) {
-  for (int i = 0; i < ARRAYLEN(kVirtualKey); ++i) {
-    if (kVirtualKey[i].vk == vk) {
+  for (int i = 0; __keystroke.vkt[i].vk; ++i) {
+    if (__keystroke.vkt[i].vk == vk) {
       if (shift && ctrl) {
-        return kVirtualKey[i].shift_ctrl_str;
+        return __keystroke.vkt[i].shift_ctrl_str;
       } else if (shift) {
-        return kVirtualKey[i].shift_str;
+        return __keystroke.vkt[i].shift_str;
       } else if (ctrl) {
-        return kVirtualKey[i].ctrl_str;
+        return __keystroke.vkt[i].ctrl_str;
       } else {
-        return kVirtualKey[i].normal_str;
+        return __keystroke.vkt[i].normal_str;
       }
     }
   }
@@ -145,7 +239,7 @@ static textwindows int GetVirtualKey(uint16_t vk, bool shift, bool ctrl) {
 
 static textwindows int ProcessKeyEvent(const struct NtInputRecord *r, char *p) {
 
-  uint16_t c = r->Event.KeyEvent.uChar.UnicodeChar;
+  uint32_t c = r->Event.KeyEvent.uChar.UnicodeChar;
   uint16_t vk = r->Event.KeyEvent.wVirtualKeyCode;
   uint16_t cks = r->Event.KeyEvent.dwControlKeyState;
 
@@ -154,28 +248,59 @@ static textwindows int ProcessKeyEvent(const struct NtInputRecord *r, char *p) {
     return 0;
   }
 
-  // process virtual keys
+#if 0
+  // this code is useful for troubleshooting why keys don't work
+  kprintf("bKeyDown=%hhhd wVirtualKeyCode=%s wVirtualScanCode=%s "
+          "UnicodeChar=%#x[%#lc] dwControlKeyState=%s\n",
+          r->Event.KeyEvent.bKeyDown,
+          DescribeVirtualKeyCode(r->Event.KeyEvent.wVirtualKeyCode),
+          DescribeVirtualKeyCode(r->Event.KeyEvent.wVirtualScanCode),
+          r->Event.KeyEvent.uChar.UnicodeChar,
+          r->Event.KeyEvent.uChar.UnicodeChar,
+          DescribeControlKeyState(r->Event.KeyEvent.dwControlKeyState));
+#endif
+
+  // turn arrow/function keys into vt100/ansi/xterm byte sequences
   int n = 0;
-  if (!c) {
-    int w;
-    w = GetVirtualKey(vk, !!(cks & kNtShiftPressed),
-                      !!(cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed)));
-    if (!w) return 0;
+  int v = GetVirtualKey(vk, !!(cks & kNtShiftPressed),
+                        !!(cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed)));
+  if (v) {
     p[n++] = 033;
     if (cks & (kNtLeftAltPressed | kNtRightAltPressed)) {
       p[n++] = 033;
     }
-    if (w > 0) {
+    if (v > 0) {
       p[n++] = '[';
     } else {
-      w = -w;
+      v = -v;
     }
-    do p[n++] = w;
-    while ((w >>= 8));
+    do p[n++] = v;
+    while ((v >>= 8));
     return n;
   }
 
-  // translate utf-16 into utf-32
+  // ^/ (crtl+slash) maps to ^_ (ctrl-hyphen) on linux
+  if (vk == kNtVkOem_2 && (cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed))) {
+    p[n++] = 037;
+    return n;
+  }
+
+  // handle cases where win32 doesn't provide character
+  if (!c) {
+    if (vk == '2' && (cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed))) {
+      c = 0;  // ctrl-2 → "\000"
+    } else if (isascii(vk) && isdigit(vk) &&
+               (cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed))) {
+      c = 030 + (vk - '0');  // e.g. ctrl-3 → "\033"
+    } else if (isascii(vk) && isgraph(vk) &&
+               (cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed))) {
+      c = vk ^ 0100;  // e.g. ctrl-alt-b → "\033\002"
+    } else {
+      return 0;
+    }
+  }
+
+  // convert utf-16 to utf-32
   if (IsHighSurrogate(c)) {
     __keystroke.utf16hs = c;
     return 0;
@@ -184,53 +309,54 @@ static textwindows int ProcessKeyEvent(const struct NtInputRecord *r, char *p) {
     c = MergeUtf16(__keystroke.utf16hs, c);
   }
 
-  // enter sends \r in a raw terminals
+  // enter sends \r with raw terminals
   // make it a multics newline instead
-  if (c == '\r' && !(__ttymagic & kFdTtyNoCr2Nl)) {
+  if (c == '\r' && !(__ttyconf.magic & kTtyNoCr2Nl)) {
     c = '\n';
   }
 
-  // microsoft doesn't encode ctrl-space (^@) as nul
-  // detecting it is also impossible w/ kNtEnableVirtualTerminalInput
+  // ctrl-space (^@) is literally zero
   if (c == ' ' && (cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed))) {
     c = '\0';
   }
 
-  // make it possible to distinguish ctrl-h (^H) from backspace (^?)
-  if (c == kNtVkBack) {
+  // make backspace (^?) distinguishable from ctrl-h (^H)
+  if (c == kNtVkBack && !(cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed))) {
     c = 0177;
   }
 
-  // handle ctrl-c and ctrl-\, which tcsetattr() is able to remap
-  if (!(__ttymagic & kFdTtyNoIsigs)) {
-    if (c == __vintr && __vintr != _POSIX_VDISABLE) {
-      STRACE("encountered CTRL(%#c) c_cc[VINTR] will raise SIGINT", CTRL(c));
-      __get_tls()->tib_sigpending |= 1ull << (SIGINT - 1);
-      return 0;
-    } else if (c == __vquit && __vquit != _POSIX_VDISABLE) {
-      STRACE("encountered CTRL(%#c) c_cc[VQUITR] will raise SIGQUIT", CTRL(c));
-      __get_tls()->tib_sigpending |= 1ull << (SIGQUIT - 1);
-      return 0;
+  // handle ctrl-\ and ctrl-c
+  // note we define _POSIX_VDISABLE as zero
+  // tcsetattr() lets anyone reconfigure these keybindings
+  if (c && !(__ttyconf.magic & kTtyNoIsigs)) {
+    if (c == __ttyconf.vintr) {
+      return AddSignal(SIGINT);
+    } else if (c == __ttyconf.vquit) {
+      return AddSignal(SIGQUIT);
     }
   }
 
-  // handle ctrl-d the end of file keystroke
-  if (!(__ttymagic & kFdTtyUncanon)) {
-    if (c == __veof && __veof != _POSIX_VDISABLE) {
-      STRACE("encountered CTRL(%#c) c_cc[VEOF] closing console input", CTRL(c));
+  // handle ctrl-d which generates end-of-file, unless pending line data
+  // is present, in which case we flush that without the newline instead
+  if (c && c == __ttyconf.veof && !(__ttyconf.magic & kTtyUncanon)) {
+    if (dll_is_empty(__keystroke.line)) {
       __keystroke.end_of_file = true;
-      return 0;
+    } else {
+      dll_make_last(&__keystroke.list, __keystroke.line);
+      __keystroke.line = 0;
     }
+    return 0;
   }
 
   // insert esc prefix when alt is held
+  // for example "h" becomes "\033h" (alt-h)
+  // if up arrow is "\033[A" then alt-up is "\033\033[A"
   if ((cks & (kNtLeftAltPressed | kNtRightAltPressed)) &&
-      !(cks & (kNtLeftCtrlPressed | kNtRightCtrlPressed)) &&
       r->Event.KeyEvent.bKeyDown) {
     p[n++] = 033;
   }
 
-  // convert utf-32 to utf-8
+  // finally apply thompson-pike varint encoding
   uint64_t w = tpenc(c);
   do p[n++] = w;
   while ((w >>= 8));
@@ -243,35 +369,38 @@ static textwindows int ProcessKeyEvent(const struct NtInputRecord *r, char *p) {
 // See o//examples/ttyinfo.com and o//tool/viz/life.com
 static textwindows int ProcessMouseEvent(const struct NtInputRecord *r,
                                          char *b) {
-  int e = 0;
   char *p = b;
-  uint32_t currentbs = __mousebuttons;
+  unsigned char e = 0;
+  uint32_t currentbs = __ttyconf.mousebs;
   uint32_t ev = r->Event.MouseEvent.dwEventFlags;
   uint32_t bs = r->Event.MouseEvent.dwButtonState;
   ev &= kNtMouseMoved | kNtMouseWheeled;
   bs &= kNtFromLeft1stButtonPressed | kNtRightmostButtonPressed;
   if (ev & kNtMouseWheeled) {
     // scroll wheel (unnatural mode)
-    if (!(r->Event.MouseEvent.dwControlKeyState &
-          (kNtShiftPressed | kNtLeftCtrlPressed | kNtRightCtrlPressed |
-           kNtLeftAltPressed | kNtRightAltPressed))) {
-      bool isup = ((int)r->Event.MouseEvent.dwButtonState >> 16) > 0;
-      if (__ttymagic & kFdTtyXtMouse) {
+    bool isup = ((int)r->Event.MouseEvent.dwButtonState >> 16) > 0;
+    if (__ttyconf.magic & kTtyXtMouse) {
+      if (r->Event.MouseEvent.dwControlKeyState &
+          (kNtLeftCtrlPressed | kNtRightCtrlPressed)) {
         e = isup ? 80 : 81;
-        goto OutputXtermMouseEvent;
       } else {
-        // we disable mouse highlighting when the tty is put in raw mode
-        // to mouse wheel events with widely understood vt100 arrow keys
-        *p++ = 033;
-        *p++ = '[';
-        if (isup) {
-          *p++ = 'A';  // \e[A up
-        } else {
-          *p++ = 'B';  // \e[B down
-        }
+        e = isup ? 64 : 65;
+      }
+      goto OutputXtermMouseEvent;
+    } else if (!(r->Event.MouseEvent.dwControlKeyState &
+                 (kNtShiftPressed | kNtLeftCtrlPressed | kNtRightCtrlPressed |
+                  kNtLeftAltPressed | kNtRightAltPressed))) {
+      // we disable mouse highlighting when the tty is put in raw mode
+      // to mouse wheel events with widely understood vt100 arrow keys
+      *p++ = 033;
+      *p++ = !__keystroke.ohno_decckm ? '[' : 'O';
+      if (isup) {
+        *p++ = 'A';
+      } else {
+        *p++ = 'B';
       }
     }
-  } else if ((bs || currentbs) && (__ttymagic & kFdTtyXtMouse)) {
+  } else if ((bs || currentbs) && (__ttyconf.magic & kTtyXtMouse)) {
     if (bs && (ev & kNtMouseMoved) && currentbs) {
       e |= 32;  // dragging
     }
@@ -284,128 +413,183 @@ static textwindows int ProcessMouseEvent(const struct NtInputRecord *r,
     *p++ = '<';
     p = FormatInt32(p, e);
     *p++ = ';';
-    p = FormatInt32(p, r->Event.MouseEvent.dwMousePosition.X + 1);
+    p = FormatInt32(p, (r->Event.MouseEvent.dwMousePosition.X + 1) & 0x7fff);
     *p++ = ';';
-    p = FormatInt32(p, r->Event.MouseEvent.dwMousePosition.Y + 1);
+    p = FormatInt32(p, (r->Event.MouseEvent.dwMousePosition.Y + 1) & 0x7fff);
     if (!bs && currentbs) {
       *p++ = 'm';  // up
     } else {
       *p++ = 'M';  // down
     }
-    __mousebuttons = bs;
+    __ttyconf.mousebs = bs;
   }
   return p - b;
 }
 
 static textwindows int ConvertConsoleInputToAnsi(const struct NtInputRecord *r,
-                                                 char p[hasatleast 32]) {
+                                                 char p[hasatleast 23]) {
   switch (r->EventType) {
     case kNtKeyEvent:
       return ProcessKeyEvent(r, p);
     case kNtMouseEvent:
       return ProcessMouseEvent(r, p);
     case kNtWindowBufferSizeEvent:
-      STRACE("detected console resize will raise SIGWINCH");
-      __get_tls()->tib_sigpending |= 1ull << (SIGWINCH - 1);
-      return 0;
+      return AddSignal(SIGWINCH);
     default:
       return 0;
   }
 }
 
-static textwindows struct Keystroke *NewKeystroke(void) {
-  struct Dll *e;
-  struct Keystroke *k = 0;
-  int i, n = ARRAYLEN(__keystroke.pool);
-  if (atomic_load_explicit(&__keystroke.allocated, memory_order_acquire) < n &&
-      (i = atomic_fetch_add(&__keystroke.allocated, 1)) < n) {
-    k = __keystroke.pool + i;
-  } else {
-    if ((e = dll_first(__keystroke.free))) {
-      k = KEYSTROKE_CONTAINER(e);
-      dll_remove(&__keystroke.free, &k->elem);
+static textwindows void WriteTty(const char *p, size_t n) {
+  WriteFile(__keystroke.cot, p, n, 0, 0);
+}
+
+static textwindows bool IsCtl(int c) {
+  return isascii(c) && iscntrl(c) && c != '\n' && c != '\t';
+}
+
+static textwindows void WriteCtl(const char *p, size_t n) {
+  size_t i;
+  for (i = 0; i < n; ++i) {
+    if (IsCtl(p[i])) {
+      char ctl[2];
+      ctl[0] = '^';
+      ctl[1] = p[i] ^ 0100;
+      WriteTty(ctl, 2);
+    } else {
+      WriteTty(p + i, 1);
     }
-    if (!k) {
-      if (_weaken(malloc)) {
-        k = _weaken(malloc)(sizeof(struct Keystroke));
-      } else {
-        enomem();
-        return 0;
+  }
+}
+
+static textwindows void EchoTty(const char *p, size_t n) {
+  if (__ttyconf.magic & kTtyEchoRaw) {
+    WriteTty(p, n);
+  } else {
+    WriteCtl(p, n);
+  }
+}
+
+static textwindows void EraseCharacter(void) {
+  WriteTty("\b \b", 3);
+}
+
+static textwindows bool EraseKeystroke(void) {
+  struct Dll *e;
+  if ((e = dll_last(__keystroke.line))) {
+    struct Keystroke *k = KEYSTROKE_CONTAINER(e);
+    FreeKeystroke(&__keystroke.line, e);
+    for (int i = k->buflen; i--;) {
+      if ((k->buf[i] & 0300) == 0200) continue;  // utf-8 cont
+      EraseCharacter();
+      if (!(__ttyconf.magic & kTtyEchoRaw) && IsCtl(k->buf[i])) {
+        EraseCharacter();
       }
     }
+    return true;
+  } else {
+    return false;
   }
-  if (k) {
-    bzero(k, sizeof(*k));
-    dll_init(&k->elem);
-  }
-  return k;
 }
 
 static textwindows void IngestConsoleInputRecord(struct NtInputRecord *r) {
+
+  // convert win32 console event into ansi
   int len;
-  struct Keystroke *k;
-  char buf[sizeof(k->buf)];
-  if ((len = ConvertConsoleInputToAnsi(r, buf))) {
-    if ((k = NewKeystroke())) {
-      memcpy(k->buf, buf, sizeof(k->buf));
-      k->buflen = len;
-      dll_make_last(&__keystroke.list, &k->elem);
-    } else {
-      STRACE("ran out of memory to hold keystroke %#.*s", len, buf);
+  char buf[23];
+  if (!(len = ConvertConsoleInputToAnsi(r, buf))) {
+    return;
+  }
+
+  // handle backspace in canonical mode
+  if (len == 1 && buf[0] &&                  //
+      (buf[0] & 255) == __ttyconf.verase &&  //
+      !(__ttyconf.magic & kTtyUncanon)) {
+    EraseKeystroke();
+    return;
+  }
+
+  // handle kill in canonical mode
+  if (len == 1 && buf[0] &&                 //
+      (buf[0] & 255) == __ttyconf.vkill &&  //
+      !(__ttyconf.magic & kTtyUncanon)) {
+    while (EraseKeystroke()) {
+    }
+    return;
+  }
+
+  // allocate object to hold keystroke
+  struct Keystroke *k = NewKeystroke();
+  memcpy(k->buf, buf, sizeof(k->buf));
+  k->buflen = len;
+
+  // echo input if it was successfully recorded
+  // assuming the win32 console isn't doing it already
+  if (!(__ttyconf.magic & kTtySilence)) {
+    EchoTty(buf, len);
+  }
+
+  // save keystroke to appropriate list
+  if (__ttyconf.magic & kTtyUncanon) {
+    dll_make_last(&__keystroke.list, &k->elem);
+  } else {
+    dll_make_last(&__keystroke.line, &k->elem);
+
+    // flush canonical mode line if oom or enter
+    if (!__keystroke.freekeys || (len == 1 && buf[0] &&
+                                  ((buf[0] & 255) == '\n' ||            //
+                                   (buf[0] & 255) == __ttyconf.veol ||  //
+                                   (buf[0] & 255) == __ttyconf.veol2))) {
+      dll_make_last(&__keystroke.list, __keystroke.line);
+      __keystroke.line = 0;
     }
   }
 }
 
-static textwindows void IngestConsoleInput(int64_t handle) {
+static textwindows void IngestConsoleInput(void) {
   uint32_t i, n;
   struct NtInputRecord records[16];
-  if (!__keystroke.end_of_file) {
-    do {
-      if (GetNumberOfConsoleInputEvents(handle, &n)) {
-        if (n) {
-          n = MIN(ARRAYLEN(records), n);
-          if (ReadConsoleInput(handle, records, n, &n)) {
-            for (i = 0; i < n && !__keystroke.end_of_file; ++i) {
-              IngestConsoleInputRecord(records + i);
-            }
-          } else {
-            STRACE("ReadConsoleInput failed w/ %d", GetLastError());
-            __keystroke.end_of_file = true;
-            break;
-          }
-        }
-      } else {
-        STRACE("GetNumberOfConsoleInputRecords failed w/ %d", GetLastError());
-        __keystroke.end_of_file = true;
-        break;
-      }
-    } while (n == ARRAYLEN(records));
+  for (;;) {
+    if (!__keystroke.freekeys) return;
+    if (__keystroke.end_of_file) return;
+    if (!GetNumberOfConsoleInputEvents(__keystroke.cin, &n)) {
+      goto UnexpectedEof;
+    }
+    if (!n) return;
+    n = MIN(__keystroke.freekeys, MIN(ARRAYLEN(records), n));
+    if (!ReadConsoleInput(__keystroke.cin, records, n, &n)) {
+      goto UnexpectedEof;
+    }
+    for (i = 0; i < n && !__keystroke.end_of_file; ++i) {
+      IngestConsoleInputRecord(records + i);
+    }
   }
+UnexpectedEof:
+  STRACE("console read error %d", GetLastError());
+  __keystroke.end_of_file = true;
 }
 
-textwindows int FlushConsoleInputBytes(int64_t handle) {
-  int rc;
-  uint64_t m;
-  m = BlockSignals();
+// Discards all unread stdin bytes.
+textwindows int FlushConsoleInputBytes(void) {
+  BLOCK_SIGNALS;
+  InitConsole();
   LockKeystrokes();
-  if (FlushConsoleInputBuffer(handle)) {
-    dll_make_first(&__keystroke.free, __keystroke.list);
-    __keystroke.list = 0;
-    rc = 0;
-  } else {
-    rc = __winerr();
-  }
+  FlushConsoleInputBuffer(__keystroke.cin);
+  FreeKeystrokes(&__keystroke.list);
+  FreeKeystrokes(&__keystroke.line);
   UnlockKeystrokes();
-  UnblockSignals(m);
-  return rc;
+  ALLOW_SIGNALS;
+  return 0;
 }
 
-textwindows int CountConsoleInputBytes(int64_t handle) {
-  int count = 0;
+// Returns number of stdin bytes that may be read without blocking.
+textwindows int CountConsoleInputBytes(void) {
   struct Dll *e;
-  uint64_t m = BlockSignals();
+  int count = 0;
+  BLOCK_SIGNALS;
+  InitConsole();
   LockKeystrokes();
-  IngestConsoleInput(handle);
+  IngestConsoleInput();
   for (e = dll_first(__keystroke.list); e; e = dll_next(__keystroke.list, e)) {
     count += KEYSTROKE_CONTAINER(e)->buflen;
   }
@@ -413,188 +597,188 @@ textwindows int CountConsoleInputBytes(int64_t handle) {
     count = -1;
   }
   UnlockKeystrokes();
-  UnblockSignals(m);
+  ALLOW_SIGNALS;
   return count;
 }
 
-static textwindows bool DigestConsoleInput(void *data, size_t size, int *rc) {
-  struct Dll *e;
-  if ((e = dll_first(__keystroke.list))) {
-    struct Keystroke *k = KEYSTROKE_CONTAINER(e);
-    uint32_t got = MIN(size, k->buflen);
-    uint32_t remain = k->buflen - got;
-    if (got) memcpy(data, k->buf, got);
-    if (remain) memmove(k->buf, k->buf + got, remain);
-    if (!remain) {
-      dll_remove(&__keystroke.list, e);
-      dll_make_first(&__keystroke.free, e);
+// Intercept ANSI TTY commands that enable features.
+textwindows void InterceptTerminalCommands(const char *data, size_t size) {
+  int i;
+  unsigned x;
+  bool ismouse;
+  uint32_t cm, cm2;
+  enum { ASC, ESC, CSI, CMD } t;
+  GetConsoleMode(GetConsoleInputHandle(), &cm), cm2 = cm;
+  for (ismouse = false, x = i = t = 0; i < size; ++i) {
+    switch (t) {
+      case ASC:
+        if (data[i] == 033) {
+          t = ESC;
+        }
+        break;
+      case ESC:
+        if (data[i] == '[') {
+          t = CSI;
+        } else {
+          t = ASC;
+        }
+        break;
+      case CSI:
+        if (data[i] == '?') {
+          t = CMD;
+          x = 0;
+        } else {
+          t = ASC;
+        }
+        break;
+      case CMD:
+        if ('0' <= data[i] && data[i] <= '9') {
+          x *= 10;
+          x += data[i] - '0';
+        } else if (data[i] == ';') {
+          ismouse |= IsMouseModeCommand(x);
+          x = 0;
+        } else if (data[i] == 'h') {
+          if (x == 1) {
+            __keystroke.vkt = kDecckm;  // \e[?1h decckm on
+            __keystroke.ohno_decckm = true;
+          } else if ((ismouse |= IsMouseModeCommand(x))) {
+            __ttyconf.magic |= kTtyXtMouse;
+            cm2 |= kNtEnableMouseInput;
+            cm2 &= ~kNtEnableQuickEditMode;  // take mouse
+          }
+          t = ASC;
+        } else if (data[i] == 'l') {
+          if (x == 1) {
+            __keystroke.vkt = kVirtualKey;  // \e[?1l decckm off
+            __keystroke.ohno_decckm = false;
+          } else if ((ismouse |= IsMouseModeCommand(x))) {
+            __ttyconf.magic &= ~kTtyXtMouse;
+            cm2 |= kNtEnableQuickEditMode;  // release mouse
+          }
+          t = ASC;
+        }
+        break;
+      default:
+        __builtin_unreachable();
     }
-    k->buflen = remain;
-    if (got) {
-      *rc = got;
-      return true;
-    }
-  } else if (__keystroke.end_of_file) {
+  }
+  if (cm2 != cm) {
+    SetConsoleMode(GetConsoleInputHandle(), cm2);
+  }
+}
+
+static textwindows bool DigestConsoleInput(char *data, size_t size, int *rc) {
+
+  // handle eof once available input is consumed
+  if (dll_is_empty(__keystroke.list) && __keystroke.end_of_file) {
     *rc = 0;
     return true;
   }
-  return false;
-}
 
-// Manual CMD.EXE echoing for when !ICANON && ECHO is the case.
-static textwindows void EchoTerminalInput(struct Fd *f, char *p, size_t n) {
-  int64_t hOutput;
-  if (f->kind == kFdConsole) {
-    hOutput = f->extra;
-  } else {
-    hOutput = g_fds.p[1].handle;
-  }
-  if (__ttymagic & kFdTtyEchoRaw) {
-    WriteFile(hOutput, p, n, 0, 0);
-  } else {
-    size_t i;
-    for (i = 0; i < n; ++i) {
-      if (isascii(p[i]) && iscntrl(p[i]) && p[i] != '\n' && p[i] != '\t') {
-        char ctl[2];
-        ctl[0] = '^';
-        ctl[1] = p[i] ^ 0100;
-        WriteFile(hOutput, ctl, 2, 0, 0);
-      } else {
-        WriteFile(hOutput, p + i, 1, 0, 0);
-      }
+  // copy keystroke(s) into user buffer
+  int toto = 0;
+  struct Dll *e;
+  while (size && (e = dll_first(__keystroke.list))) {
+    struct Keystroke *k = KEYSTROKE_CONTAINER(e);
+    uint32_t got = MIN(size, k->buflen);
+    uint32_t remain = k->buflen - got;
+    if (got) {
+      memcpy(data, k->buf, got);
+      data += got;
+      size -= got;
+      toto += got;
+    }
+    if (remain) {
+      memmove(k->buf, k->buf + got, remain);
+      k->buflen = remain;
+    } else {
+      FreeKeystroke(&__keystroke.list, e);
+    }
+    if ((__ttyconf.magic & kTtyUncanon) && toto >= __ttyconf.vmin) {
+      break;
     }
   }
+
+  // return result
+  if (toto) {
+    *rc = toto;
+    return true;
+  } else {
+    return false;
+  }
 }
 
-static textwindows ssize_t ReadFromWindowsConsole(struct Fd *f, void *data,
-                                                  size_t size) {
-  int rc = -1;
-  for (;;) {
-    bool done = false;
-    uint64_t m;
-    m = BlockSignals();
+static textwindows int WaitForConsole(struct Fd *f, sigset_t waitmask) {
+  int sig;
+  int64_t sem;
+  uint32_t wi, ms = -1;
+  if (!__ttyconf.vmin) {
+    if (!__ttyconf.vtime) {
+      return 0;  // non-blocking w/o raising eagain
+    } else {
+      ms = __ttyconf.vtime * 100;
+    }
+  }
+  if (_check_cancel() == -1) return -1;
+  if (f->flags & _O_NONBLOCK) return eagain();
+  if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask))) {
+    goto DeliverSignal;
+  }
+  struct PosixThread *pt = _pthread_self();
+  pt->pt_blkmask = waitmask;
+  pt->pt_semaphore = sem = CreateSemaphore(0, 0, 1, 0);
+  atomic_store_explicit(&pt->pt_blocker, PT_BLOCKER_SEM, memory_order_release);
+  wi = WaitForMultipleObjects(2, (int64_t[2]){__keystroke.cin, sem}, 0, ms);
+  atomic_store_explicit(&pt->pt_blocker, 0, memory_order_release);
+  CloseHandle(sem);
+  if (wi == kNtWaitTimeout) return 0;  // vtime elapsed
+  if (wi == 0) return -2;              // console data
+  if (wi != 1) return __winerr();      // wait failed
+  if (_weaken(__sig_get)) {
+    if (!(sig = _weaken(__sig_get)(waitmask))) return eintr();
+  DeliverSignal:
+    int handler_was_called = _weaken(__sig_relay)(sig, SI_KERNEL, waitmask);
+    if (_check_cancel() == -1) return -1;
+    if (!(handler_was_called & SIG_HANDLED_NO_RESTART)) return -2;
+  }
+  return eintr();
+}
+
+static textwindows ssize_t ReadFromConsole(struct Fd *f, void *data,
+                                           size_t size, sigset_t waitmask) {
+  int rc;
+  InitConsole();
+  do {
     LockKeystrokes();
-    IngestConsoleInput(f->handle);
-    done = DigestConsoleInput(data, size, &rc);
+    IngestConsoleInput();
+    bool done = DigestConsoleInput(data, size, &rc);
     UnlockKeystrokes();
-    UnblockSignals(m);
-    if (done) break;
-    if (f->flags & O_NONBLOCK) return eagain();
-    uint32_t ms = __SIG_POLL_INTERVAL_MS;
-    if (__ttymagic & kFdTtyNoBlock) {
-      if (!__vtime) {
-        return 0;
-      } else {
-        ms = __vtime * 100;
-      }
-    }
-    if (_check_interrupts(kSigOpRestartable)) return -1;
-    if (__pause_thread(ms)) return -1;
-  }
-  if (rc > 0 && (__ttymagic & kFdTtyEchoing)) {
-    EchoTerminalInput(f, data, size);
-  }
+    if (done) return rc;
+  } while ((rc = WaitForConsole(f, waitmask)) == -2);
   return rc;
 }
 
-textwindows ssize_t sys_read_nt_impl(int fd, void *data, size_t size,
-                                     int64_t offset) {
+textwindows ssize_t ReadBuffer(int fd, void *data, size_t size, int64_t offset,
+                               sigset_t waitmask) {
 
-  bool32 ok;
-  struct Fd *f;
-  uint32_t got;
-  int64_t handle;
-  struct PosixThread *pt;
+  // switch to terminal polyfill if reading from win32 console
+  struct Fd *f = g_fds.p + fd;
 
-  f = g_fds.p + fd;
-  handle = f->handle;
-  pt = _pthread_self();
-  pt->abort_errno = EAGAIN;
-  size = MIN(size, 0x7ffff000);
-
-  bool pwriting = offset != -1;
-  bool seekable = f->kind == kFdFile && GetFileType(handle) == kNtFileTypeDisk;
-  bool nonblock = !!(f->flags & O_NONBLOCK);
-
-  if (pwriting && !seekable) {
-    return espipe();
-  }
-  if (!pwriting) {
-    offset = 0;
+  if (f->kind == kFdDevNull) {
+    return 0;
   }
 
-  uint32_t cm;
-  if (!seekable && (f->kind == kFdConsole || GetConsoleMode(handle, &cm))) {
-    return ReadFromWindowsConsole(f, data, size);
+  if (f->kind == kFdConsole) {
+    return ReadFromConsole(f, data, size, waitmask);
   }
 
-  if (!pwriting && seekable) {
-    pthread_mutex_lock(&f->lock);
-    offset = f->pointer;
-  }
+  // perform heavy lifting
+  ssize_t rc;
+  rc = sys_readwrite_nt(fd, data, size, offset, f->handle, waitmask, ReadFile);
+  if (rc != -2) return rc;
 
-  struct NtOverlapped overlap = {.hEvent = CreateEvent(0, 0, 0, 0),
-                                 .Pointer = offset};
-  // the win32 manual says it's important to *not* put &got here
-  // since for overlapped i/o, we always use GetOverlappedResult
-  ok = ReadFile(handle, data, size, 0, &overlap);
-  if (!ok && GetLastError() == kNtErrorIoPending) {
-  BlockingOperation:
-    if (!nonblock) {
-      pt->ioverlap = &overlap;
-      pt->iohandle = handle;
-    }
-    if (nonblock) {
-      CancelIoEx(handle, &overlap);
-    } else if (_check_interrupts(kSigOpRestartable)) {
-    Interrupted:
-      pt->abort_errno = errno;
-      CancelIoEx(handle, &overlap);
-    } else {
-      for (;;) {
-        uint32_t i;
-        if (g_fds.stdin.inisem) {
-          ReleaseSemaphore(g_fds.stdin.inisem, 1, 0);
-        }
-        i = WaitForSingleObject(overlap.hEvent, __SIG_IO_INTERVAL_MS);
-        if (i == kNtWaitTimeout) {
-          if (_check_interrupts(kSigOpRestartable)) {
-            goto Interrupted;
-          }
-        } else {
-          break;
-        }
-      }
-    }
-    pt->ioverlap = 0;
-    pt->iohandle = 0;
-    ok = true;
-  }
-  if (ok) {
-    // overlapped is allocated on stack, so it's important we wait
-    // for windows to acknowledge that it's done using that memory
-    ok = GetOverlappedResult(handle, &overlap, &got, nonblock);
-    if (!ok && GetLastError() == kNtErrorIoIncomplete) {
-      goto BlockingOperation;
-    }
-  }
-  __imp_CloseHandle(overlap.hEvent);  // __imp_ to avoid log noise
-
-  if (!pwriting && seekable) {
-    if (ok) f->pointer = offset + got;
-    pthread_mutex_unlock(&f->lock);
-  }
-
-  if (ok) {
-    return got;
-  }
-
-  errno_t err;
-  if (_weaken(pthread_testcancel_np) &&
-      (err = _weaken(pthread_testcancel_np)())) {
-    return ecanceled();
-  }
-
+  // mops up win32 errors
   switch (GetLastError()) {
     case kNtErrorBrokenPipe:    // broken pipe
     case kNtErrorNoData:        // closing named pipe
@@ -602,25 +786,23 @@ textwindows ssize_t sys_read_nt_impl(int fd, void *data, size_t size,
       return 0;                 //
     case kNtErrorAccessDenied:  // read doesn't return EACCESS
       return ebadf();           //
-    case kNtErrorOperationAborted:
-      errno = pt->abort_errno;
-      return -1;
     default:
       return __winerr();
   }
 }
 
-textwindows ssize_t sys_read_nt(int fd, const struct iovec *iov, size_t iovlen,
-                                int64_t opt_offset) {
+static textwindows ssize_t ReadIovecs(int fd, const struct iovec *iov,
+                                      size_t iovlen, int64_t opt_offset,
+                                      sigset_t waitmask) {
   ssize_t rc;
   size_t i, total;
   if (opt_offset < -1) return einval();
   while (iovlen && !iov[0].iov_len) iov++, iovlen--;
   if (iovlen) {
     for (total = i = 0; i < iovlen; ++i) {
-      // TODO(jart): disable cancelations after first iteration
       if (!iov[i].iov_len) continue;
-      rc = sys_read_nt_impl(fd, iov[i].iov_base, iov[i].iov_len, opt_offset);
+      rc =
+          ReadBuffer(fd, iov[i].iov_base, iov[i].iov_len, opt_offset, waitmask);
       if (rc == -1) {
         if (total && errno != ECANCELED) {
           return total;
@@ -634,8 +816,17 @@ textwindows ssize_t sys_read_nt(int fd, const struct iovec *iov, size_t iovlen,
     }
     return total;
   } else {
-    return sys_read_nt_impl(fd, NULL, 0, opt_offset);
+    return ReadBuffer(fd, NULL, 0, opt_offset, waitmask);
   }
+}
+
+textwindows ssize_t sys_read_nt(int fd, const struct iovec *iov, size_t iovlen,
+                                int64_t opt_offset) {
+  ssize_t rc;
+  sigset_t m = __sig_block();
+  rc = ReadIovecs(fd, iov, iovlen, opt_offset, m);
+  __sig_unblock(m);
+  return rc;
 }
 
 #endif /* __x86_64__ */

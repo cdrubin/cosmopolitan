@@ -1,5 +1,5 @@
-/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:3;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=3 sts=3 sw=3 fenc=utf-8                                :vi│
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │                                                                              │
 │  stb_truetype                                                                │
@@ -27,7 +27,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "third_party/stb/stb_truetype.h"
 #include "libc/assert.h"
-#include "libc/intrin/bits.h"
+#include "libc/serialize.h"
 #include "libc/intrin/likely.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
@@ -40,7 +40,6 @@ asm(".ident\t\"\\n\\n\
 stb_truetype (MIT License)\\n\
 Copyright 2017 Sean Barrett\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
 
 // stb_truetype.h - v1.26 - public domain
 // authored from 2009-2021 by Sean Barrett / RAD Game Tools

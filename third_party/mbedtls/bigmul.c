@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:4;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright The Mbed TLS Contributors                                          │
 │                                                                              │
@@ -15,7 +15,6 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/bits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/check.h"
 #include "libc/macros.internal.h"
@@ -24,7 +23,6 @@
 #include "third_party/mbedtls/bignum.h"
 #include "third_party/mbedtls/bignum_internal.h"
 #include "third_party/mbedtls/profile.h"
-/* clang-format off */
 
 void Mul(uint64_t *c, const uint64_t *A, unsigned n, const uint64_t *B, unsigned m)
 {

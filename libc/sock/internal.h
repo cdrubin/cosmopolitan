@@ -8,7 +8,6 @@
 #include "libc/sock/select.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/sockaddr.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 #define kNtFdRead                   1
@@ -25,14 +24,6 @@ COSMOPOLITAN_C_START_
 /* ------------------------------------------------------------------------------------*/
 
 #define SOCKFD_OVERLAP_BUFSIZ 128
-
-struct SockFd {
-  int family;
-  int type;
-  int protocol;
-  uint32_t rcvtimeo;
-  uint32_t sndtimeo;
-};
 
 errno_t __dos2errno(uint32_t);
 
@@ -79,14 +70,16 @@ int sys_select_nt(int, fd_set *, fd_set *, fd_set *, struct timeval *,
 
 size_t __iovec2nt(struct NtIovec[hasatleast 16], const struct iovec *, size_t);
 
+ssize_t __winsock_block(int64_t, uint32_t, bool, uint32_t, uint64_t,
+                        int (*)(int64_t, struct NtOverlapped *, uint32_t *,
+                                void *),
+                        void *);
+
 void WinSockInit(void);
 int64_t __winsockerr(void);
 int __fixupnewsockfd(int, int);
-int64_t __winsockblock(int64_t, unsigned, int64_t, uint32_t);
-struct SockFd *_dupsockfd(struct SockFd *);
 int64_t GetNtBaseSocket(int64_t);
 int sys_close_epoll(int);
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_SOCK_INTERNAL_H_ */

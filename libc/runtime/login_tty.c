@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -53,9 +53,9 @@ int login_tty(int fd) {
     errno = e;
     // take control of teletypewriter (requires being leader)
     if ((rc = sys_ioctl(fd, TIOCSCTTY, 0)) != -1) {
-      unassert(!sys_dup2(fd, 0, 0));
-      unassert(!sys_dup2(fd, 1, 0));
-      unassert(!sys_dup2(fd, 2, 0));
+      unassert(sys_dup2(fd, 0, 0) == 0);
+      unassert(sys_dup2(fd, 1, 0) == 1);
+      unassert(sys_dup2(fd, 2, 0) == 2);
       if (fd > 2) {
         unassert(!sys_close(fd));
       }

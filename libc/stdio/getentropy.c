@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/blockcancel.internal.h"
-#include "libc/calls/blocksigs.internal.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
@@ -46,9 +46,9 @@ int getentropy(void *p, size_t n) {
     rc = 0;
   } else {
     BLOCK_SIGNALS;
-    BLOCK_CANCELLATIONS;
+    BLOCK_CANCELATION;
     if (__getrandom(p, n, 0) != n) notpossible;
-    ALLOW_CANCELLATIONS;
+    ALLOW_CANCELATION;
     ALLOW_SIGNALS;
     rc = 0;
   }

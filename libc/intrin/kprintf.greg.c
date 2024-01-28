@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,32 +18,18 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/kprintf.h"
 #include "ape/sections.internal.h"
-#include "libc/calls/calls.h"
-#include "libc/calls/state.internal.h"
-#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/divmod10.internal.h"
-#include "libc/fmt/fmt.h"
-#include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/asancodes.h"
 #include "libc/intrin/asmflag.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/bits.h"
-#include "libc/intrin/cmpxchg.h"
+#include "libc/serialize.h"
 #include "libc/intrin/getenv.internal.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/likely.h"
 #include "libc/intrin/nomultics.internal.h"
-#include "libc/intrin/safemacros.internal.h"
-#include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
-#include "libc/limits.h"
 #include "libc/log/internal.h"
-#include "libc/macros.internal.h"
-#include "libc/mem/alloca.h"
 #include "libc/nexgen32e/rdtsc.h"
 #include "libc/nexgen32e/uart.internal.h"
 #include "libc/nt/createfile.h"
@@ -56,25 +42,21 @@
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/thunk/msabi.h"
-#include "libc/nt/winsock.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/runtime/stack.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/stdckdint.h"
 #include "libc/str/str.h"
 #include "libc/str/tab.internal.h"
 #include "libc/str/utf16.h"
 #include "libc/sysv/consts/at.h"
-#include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/fd.h"
 #include "libc/sysv/consts/fileno.h"
 #include "libc/sysv/consts/nr.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/thread/posixthread.internal.h"
 #include "libc/thread/tls.h"
 #include "libc/thread/tls2.internal.h"
 #include "libc/vga/vga.internal.h"
@@ -204,7 +186,7 @@ privileged static bool kismapped(int x) {
   }
 }
 
-privileged bool kisdangerous(const void *p) {
+privileged bool32 kisdangerous(const void *p) {
   int frame;
   if (kisimagepointer(p)) return false;
   if (kiskernelpointer(p)) return false;
@@ -345,7 +327,7 @@ privileged long kloghandle(void) {
         // it's too early in the initialization process for kprintf
         return -1;
       }
-      path = __getenv(__envp, "KPRINTF_LOG").s;
+      path = environ ? __getenv(environ, "KPRINTF_LOG").s : 0;
       closefd = false;
       if (!path) {
         fd = STDERR_FILENO;
@@ -385,46 +367,57 @@ privileged long kloghandle(void) {
   return __klog_handle;
 }
 
+#ifdef __x86_64__
+privileged void _klog_serial(const char *b, size_t n) {
+  size_t i;
+  uint16_t dx;
+  unsigned char al;
+  for (i = 0; i < n; ++i) {
+    for (;;) {
+      dx = 0x3F8 + UART_LSR;
+      asm("inb\t%1,%0" : "=a"(al) : "dN"(dx));
+      if (al & UART_TTYTXR) break;
+      asm("pause");
+    }
+    dx = 0x3F8;
+    asm volatile("outb\t%0,%1"
+                 : /* no inputs */
+                 : "a"(b[i]), "dN"(dx));
+  }
+}
+#endif /* __x86_64__ */
+
 privileged void klog(const char *b, size_t n) {
 #ifdef __x86_64__
   int e;
   long h;
-  size_t i;
-  uint16_t dx;
   uint32_t wrote;
-  unsigned char al;
   long rax, rdi, rsi, rdx;
   if ((h = kloghandle()) == -1) {
     return;
   }
   if (IsWindows()) {
     e = __imp_GetLastError();
-    __imp_WriteFile(h, b, n, &wrote, 0);
-    __imp_SetLastError(e);
+    if (!__imp_WriteFile(h, b, n, &wrote, 0)) {
+      __imp_SetLastError(e);
+      __klog_handle = 0;
+    }
   } else if (IsMetal()) {
     if (_weaken(_klog_vga)) {
       _weaken(_klog_vga)(b, n);
     }
-    for (i = 0; i < n; ++i) {
-      for (;;) {
-        dx = 0x3F8 + UART_LSR;
-        asm("inb\t%1,%0" : "=a"(al) : "dN"(dx));
-        if (al & UART_TTYTXR) break;
-        asm("pause");
-      }
-      dx = 0x3F8;
-      asm volatile("outb\t%0,%1"
-                   : /* no inputs */
-                   : "a"(b[i]), "dN"(dx));
-    }
+    _klog_serial(b, n);
   } else {
     asm volatile("syscall"
                  : "=a"(rax), "=D"(rdi), "=S"(rsi), "=d"(rdx)
                  : "0"(__NR_write), "1"(h), "2"(b), "3"(n)
                  : "rcx", "r8", "r9", "r10", "r11", "memory", "cc");
+    if (rax < 0) {
+      __klog_handle = 0;
+    }
   }
 #elif defined(__aarch64__)
-  // this isn't a cancellation point because we don't acknowledge eintr
+  // this isn't a cancelation point because we don't acknowledge eintr
   // on xnu we use the "nocancel" version of the system call for safety
   register long r0 asm("x0") = kloghandle();
   register long r1 asm("x1") = (long)b;
@@ -436,6 +429,9 @@ privileged void klog(const char *b, size_t n) {
                : "=r"(res_x0)
                : "r"(r0), "r"(r1), "r"(r2), "r"(r8), "r"(r16)
                : "memory");
+  if (res_x0 < 0) {
+    __klog_handle = 0;
+  }
 #else
 #error "unsupported architecture"
 #endif
@@ -457,7 +453,6 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
   p = b;
   f = fmt;
   e = p + n;  // assume if n was negative e < p will be the case
-  tib = __tls_enabled ? __get_tls_privileged() : 0;
   for (;;) {
     for (;;) {
       if (!(c = *f++) || c == '%') break;
@@ -568,24 +563,38 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           goto FormatUnsigned;
 
         case 'P':
+          tib = __tls_enabled ? __get_tls_privileged() : 0;
+          if (!(tib && (tib->tib_flags & TIB_FLAG_VFORKED))) {
+            x = __pid;
+#ifdef __x86_64__
+          } else if (IsLinux()) {
+            asm volatile("syscall"
+                         : "=a"(x)
+                         : "0"(__NR_getpid)
+                         : "rcx", "rdx", "r11", "memory");
+#endif
+          } else {
+            x = 666;
+          }
+          if (!__nocolor && p + 7 <= e) {
+            *p++ = '\e';
+            *p++ = '[';
+            *p++ = '1';
+            *p++ = ';';
+            *p++ = '3';
+            *p++ = '0' + x % 7;
+            *p++ = 'm';
+            ansi = 1;
+          }
+          goto FormatDecimal;
+
+        case 'H':
+          tib = __tls_enabled ? __get_tls_privileged() : 0;
           if (!(tib && (tib->tib_flags & TIB_FLAG_VFORKED))) {
             if (tib) {
               x = atomic_load_explicit(&tib->tib_tid, memory_order_relaxed);
-              if (IsNetbsd() && x == 1) {
-                x = __pid;
-              }
             } else {
               x = __pid;
-            }
-            if (!__nocolor && p + 7 <= e) {
-              *p++ = '\e';
-              *p++ = '[';
-              *p++ = '1';
-              *p++ = ';';
-              *p++ = '3';
-              *p++ = '0' + x % 8;
-              *p++ = 'm';
-              ansi = 1;
             }
 #ifdef __x86_64__
           } else if (IsLinux()) {
@@ -596,6 +605,17 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
 #endif
           } else {
             x = 666;
+          }
+          if (!__nocolor && p + 7 <= e) {
+            // xnu thread ids are always divisible by 8
+            *p++ = '\e';
+            *p++ = '[';
+            *p++ = '1';
+            *p++ = ';';
+            *p++ = '3';
+            *p++ = '0' + x % 7;
+            *p++ = 'm';
+            ansi = 1;
           }
           goto FormatDecimal;
 
@@ -723,20 +743,14 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
 
         case 'm': {
           int e;
+          tib = __tls_enabled ? __get_tls_privileged() : 0;
           if (!(e = tib ? tib->tib_errno : __errno) && sign == ' ') {
             break;
           } else {
             type = 0;
-#if defined(SYSDEBUG) && _NTTRACE
-            strerror_r(e, z, sizeof(z));
-            s = z;
-#else
-            s = _strerrno(e);
-            if (!s) {
-              FormatInt32(z, e);
-              s = z;
+            if (!(s = _strerrno(e))) {
+              s = "EUNKNOWN";
             }
-#endif
             goto FormatString;
           }
         }
@@ -777,7 +791,7 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           // undocumented %r specifier
           // used for good carriage return
           // helps integrate loggers with repls
-          if (!__replstderr || __nocolor) {
+          if (!__ttyconf.replstderr || __nocolor) {
             break;
           } else {
             s = "\r\e[K";
@@ -1080,7 +1094,8 @@ privileged void kvprintf(const char *fmt, va_list v) {
  * - `X` uppercase
  * - `T` timestamp
  * - `x` hexadecimal
- * - `P` PID (or TID if TLS is enabled)
+ * - `P` process id
+ * - `H` thread id
  *
  * Types:
  *
@@ -1105,8 +1120,7 @@ privileged void kvprintf(const char *fmt, va_list v) {
  *
  * Error numbers:
  *
- * - `%m` formats error (if strerror_wr if is linked)
- * - `%m` formats errno number (if strerror_wr isn't linked)
+ * - `%m` formats errno as string
  * - `% m` formats error with leading space if errno isn't zero
  * - `%lm` means favor WSAGetLastError() over GetLastError() if linked
  *
@@ -1126,3 +1140,6 @@ privileged void kprintf(const char *fmt, ...) {
   kvprintf(fmt, v);
   va_end(v);
 }
+
+__weak_reference(kprintf, uprintf);
+__weak_reference(kvprintf, uvprintf);

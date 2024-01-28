@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -59,8 +59,8 @@
  */
 errno_t pthread_getattr_np(pthread_t thread, pthread_attr_t *attr) {
   struct PosixThread *pt = (struct PosixThread *)thread;
-  memcpy(attr, &pt->attr, sizeof(pt->attr));
-  switch (atomic_load_explicit(&pt->status, memory_order_relaxed)) {
+  memcpy(attr, &pt->pt_attr, sizeof(pt->pt_attr));
+  switch (atomic_load_explicit(&pt->pt_status, memory_order_relaxed)) {
     case kPosixThreadJoinable:
     case kPosixThreadTerminated:
       attr->__detachstate = PTHREAD_CREATE_JOINABLE;

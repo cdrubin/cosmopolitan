@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -20,24 +20,23 @@
 #include "libc/log/libfatal.internal.h"
 #include "libc/nexgen32e/stackframe.h"
 
-#define N 100
+#define N 160
 
 dontinstrument const char *(DescribeBacktrace)(char buf[N],
                                                struct StackFrame *fr) {
-  bool gotsome = false;
   char *p = buf;
   char *pe = p + N;
+  bool gotsome = false;
   while (fr) {
-    if (gotsome) {
-      if (p + 1 < pe) {
+    if (p + 16 + 1 + 1 <= pe) {
+      if (gotsome) {
         *p++ = ' ';
-        *p = 0;
+      } else {
+        gotsome = true;
       }
-    } else {
-      gotsome = true;
-    }
-    if (p + 17 <= pe) {
       p = __hexcpy(p, fr->addr);
+    } else {
+      break;
     }
     fr = fr->next;
   }

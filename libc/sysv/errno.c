@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -27,9 +27,9 @@
  * defined as variables. By convention, system calls and other
  * functions do not update this variable when nothing's broken.
  *
- * @see	libc/sysv/consts.sh
- * @see	libc/sysv/errfuns.h
- * @see	__errno_location() stable abi
+ * @see libc/sysv/consts.sh
+ * @see libc/sysv/errfuns.h
+ * @see __errno_location() stable abi
  */
 errno_t __errno;
 

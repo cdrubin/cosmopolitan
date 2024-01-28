@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -60,11 +60,11 @@ const char *(DescribeStat)(char buf[N], int rc, const struct stat *st) {
   }
 
   if (st->st_dev) {
-    append(", .st_%s=%lu", "dev", st->st_dev);
+    append(", .st_%s=%#lx", "dev", st->st_dev);
   }
 
   if (st->st_ino) {
-    append(", .st_%s=%lu", "ino", st->st_ino);
+    append(", .st_%s=%#lx", "ino", st->st_ino);
   }
 
   if (st->st_gen) {

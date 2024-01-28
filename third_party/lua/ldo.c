@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Lua                                                                         │
@@ -51,7 +51,6 @@
 #include "third_party/lua/lundump.h"
 #include "third_party/lua/lvm.h"
 #include "third_party/lua/lzio.h"
-// clang-format off
 
 asm(".ident\t\"\\n\\n\
 Lua 5.4.3 (MIT License)\\n\
@@ -87,14 +86,14 @@ asm(".include \"libc/disclaimer.inc\"");
 #elif defined(LUA_USE_POSIX)				/* }{ */
 
 /* in POSIX, try _longjmp/_setjmp (more efficient) */
-#define LUAI_THROW(L,c)		_gclongjmp((c)->b, 1)
+#define LUAI_THROW(L,c)		gclongjmp((c)->b, 1)
 #define LUAI_TRY(L,c,a)		if (_setjmp((c)->b) == 0) { a }
 #define luai_jmpbuf		jmp_buf
 
 #else							/* }{ */
 
 /* ISO C handling with long jumps */
-#define LUAI_THROW(L,c)		_gclongjmp((c)->b, 1)
+#define LUAI_THROW(L,c)		gclongjmp((c)->b, 1)
 #define LUAI_TRY(L,c,a)		if (setjmp((c)->b) == 0) { a }
 #define luai_jmpbuf		jmp_buf
 

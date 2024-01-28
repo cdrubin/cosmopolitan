@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,36 +16,89 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
+#include "libc/calls/internal.h"
+#include "libc/calls/sig.internal.h"
+#include "libc/calls/struct/sigset.h"
 #include "libc/errno.h"
+#include "libc/intrin/weaken.h"
+#include "libc/nt/enum/wait.h"
+#include "libc/nt/errors.h"
+#include "libc/nt/struct/overlapped.h"
+#include "libc/nt/thread.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
-#include "libc/sock/sock.h"
-#include "libc/str/str.h"
+#include "libc/sysv/consts/sicode.h"
+#include "libc/sysv/errfuns.h"
+#include "libc/thread/posixthread.internal.h"
+#ifdef __x86_64__
 
-textwindows int64_t __winsockblock(int64_t fh, unsigned eventbit, int64_t rc,
-                                   uint32_t timeout) {
-  int64_t eh;
-  struct NtWsaNetworkEvents ev;
-  if (rc != -1) return rc;
-  if (WSAGetLastError() != EWOULDBLOCK) return __winsockerr();
-  eh = WSACreateEvent();
-  bzero(&ev, sizeof(ev));
-  /* The proper way to reset the state of an event object used with the
-     WSAEventSelect function is to pass the handle of the event object
-     to the WSAEnumNetworkEvents function in the hEventObject parameter.
-     This will reset the event object and adjust the status of active FD
-     events on the socket in an atomic fashion. -- MSDN */
-  if (WSAEventSelect(fh, eh, 1u << eventbit) != -1 &&
-      WSAEnumNetworkEvents(fh, eh, &ev) != -1) {
-    if (!ev.iErrorCode[eventbit]) {
-      rc = 0;
-    } else {
-      errno = ev.iErrorCode[eventbit];
-    }
-  } else {
-    __winsockerr();
+textwindows ssize_t
+__winsock_block(int64_t handle, uint32_t flags, bool nonblock,
+                uint32_t srwtimeout, sigset_t waitmask,
+                int StartSocketOp(int64_t handle, struct NtOverlapped *overlap,
+                                  uint32_t *flags, void *arg),
+                void *arg) {
+
+RestartOperation:
+  int rc, sig, reason = 0;
+  uint32_t status, exchanged;
+  if (_check_cancel() == -1) return -1;  // ECANCELED
+  if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask))) {
+    goto HandleInterrupt;
   }
-  WSACloseEvent(eh);
-  return rc;
+
+  struct NtOverlapped overlap = {.hEvent = WSACreateEvent()};
+  rc = StartSocketOp(handle, &overlap, &flags, arg);
+  if (rc && WSAGetLastError() == kNtErrorIoPending) {
+    if (nonblock) {
+      CancelIoEx(handle, &overlap);
+      reason = EAGAIN;
+    } else {
+      struct PosixThread *pt;
+      pt = _pthread_self();
+      pt->pt_blkmask = waitmask;
+      pt->pt_iohandle = handle;
+      pt->pt_ioverlap = &overlap;
+      atomic_store_explicit(&pt->pt_blocker, PT_BLOCKER_IO,
+                            memory_order_release);
+      status = WSAWaitForMultipleEvents(1, &overlap.hEvent, 0,
+                                        srwtimeout ? srwtimeout : -1u, 0);
+      atomic_store_explicit(&pt->pt_blocker, 0, memory_order_release);
+      if (status) {
+        if (status == kNtWaitTimeout) {
+          reason = EAGAIN;  // SO_RCVTIMEO or SO_SNDTIMEO elapsed
+        } else {
+          reason = WSAGetLastError();  // ENETDOWN or ENOBUFS
+        }
+        CancelIoEx(handle, &overlap);
+      }
+    }
+    rc = 0;
+  }
+  if (!rc) {
+    rc = WSAGetOverlappedResult(handle, &overlap, &exchanged, true, &flags)
+             ? 0
+             : -1;
+  }
+  WSACloseEvent(overlap.hEvent);
+
+  if (!rc) {
+    return exchanged;
+  }
+  if (WSAGetLastError() == kNtErrorOperationAborted) {
+    if (reason) {
+      errno = reason;
+      return -1;
+    }
+    if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask))) {
+    HandleInterrupt:
+      int handler_was_called = _weaken(__sig_relay)(sig, SI_KERNEL, waitmask);
+      if (_check_cancel() == -1) return -1;
+      if (handler_was_called != 1) goto RestartOperation;
+    }
+    return eintr();
+  }
+  return __winsockerr();
 }
+
+#endif /* __x86_64__ */

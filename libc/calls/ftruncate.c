@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -58,13 +58,12 @@
  * @raise EINVAL if `fd` wasn't opened in a writeable mode
  * @raise EROFS if `fd` is on a read-only filesystem (e.g. zipos)
  * @raise ENOSYS on bare metal
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
- * @threadsafe
  */
 int ftruncate(int fd, int64_t length) {
   int rc;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (fd < 0) {
     rc = ebadf();
@@ -83,9 +82,9 @@ int ftruncate(int fd, int64_t length) {
     rc = ebadf();
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("ftruncate(%d, %'ld) → %d% m", fd, length, rc);
   return rc;
 }
 
-__strong_reference(ftruncate, ftruncate64);
+__weak_reference(ftruncate, ftruncate64);

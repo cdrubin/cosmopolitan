@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -20,23 +20,15 @@
 #include "libc/limits.h"
 #include "libc/runtime/zipos.internal.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "libc/zip.internal.h"
-
-static uint64_t __zipos_fnv(const char *s, int len) {
-  uint64_t hash = 0xcbf29ce484222325;
-  for (int i = 0; i < len; i++) {
-    hash *= 0x100000001b3;
-    hash ^= (unsigned char)s[i];
-  }
-  return hash;
-}
 
 uint64_t __zipos_inode(struct Zipos *zipos, int64_t cfile,  //
                        const void *name, size_t namelen) {
   unassert(cfile >= 0);
   if (cfile == ZIPOS_SYNTHETIC_DIRECTORY) {
     if (namelen && ((char *)name)[namelen - 1] == '/') --namelen;
-    cfile = INT64_MIN | __zipos_fnv(name, namelen);
+    cfile = INT64_MIN | __fnv(name, namelen);
   }
   return cfile;
 }

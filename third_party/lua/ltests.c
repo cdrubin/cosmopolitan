@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Lua                                                                         │
@@ -43,7 +43,6 @@
 #include "third_party/lua/ltable.h"
 #include "third_party/lua/lua.h"
 #include "third_party/lua/lualib.h"
-// clang-format off
 
 asm(".ident\t\"\\n\\n\
 Lua 5.4.3 (MIT License)\\n\
@@ -1263,7 +1262,7 @@ static int panicback (lua_State *L) {
   b = (struct Aux *)lua_touserdata(L, -1);
   lua_pop(L, 1);  /* remove 'Aux' struct */
   runC(b->L, L, b->paniccode);  /* run optional panic code */
-  _gclongjmp(b->jb, 1);
+  gclongjmp(b->jb, 1);
   return 1;  /* to avoid warnings */
 }
 

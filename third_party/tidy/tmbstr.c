@@ -1,4 +1,3 @@
-/* clang-format off */
 /* tmbstr.c -- Tidy string utility functions
 
   (c) 1998-2006 (W3C) MIT, ERCIM, Keio University
@@ -8,7 +7,6 @@
 
 #include "third_party/tidy/forward.h"
 #include "third_party/tidy/tmbstr.h"
-#include "libc/fmt/fmt.h"
 #include "third_party/tidy/lexer.h"
 
 /* like strdup but using an allocator */

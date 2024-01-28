@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,6 +19,7 @@
 #include "libc/log/libfatal.internal.h"
 #include "libc/nt/thread.h"
 #include "libc/nt/thunk/msabi.h"
+#include "libc/runtime/runtime.h"
 #include "libc/thread/tls.h"
 #include "libc/thread/tls2.internal.h"
 
@@ -33,6 +34,8 @@ textwindows dontinstrument void __bootstrap_tls(struct CosmoTib *tib,
   tib->tib_self = tib;
   tib->tib_self2 = tib;
   tib->tib_sigmask = -1;
+  tib->tib_strace = __strace;
+  tib->tib_ftrace = __ftrace;
   tib->tib_sigstack_size = 57344;
   tib->tib_sigstack_addr = bp - 57344;
   tib->tib_tid = __imp_GetCurrentThreadId();

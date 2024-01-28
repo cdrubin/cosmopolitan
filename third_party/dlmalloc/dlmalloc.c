@@ -1,8 +1,10 @@
 #include "third_party/dlmalloc/dlmalloc.h"
 #include "libc/assert.h"
+#include "libc/atomic.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/atomic.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/likely.h"
 #include "libc/intrin/weaken.h"
@@ -19,8 +21,9 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
 #include "third_party/dlmalloc/vespene.internal.h"
-// clang-format off
+#include "third_party/nsync/mu.h"
 
 #define FOOTERS 0
 #define MSPACES 0
@@ -29,6 +32,7 @@
 #define HAVE_MREMAP 0
 #define HAVE_MORECORE 0
 #define USE_LOCKS 2
+#define USE_SPIN_LOCKS 0
 #define MORECORE_CONTIGUOUS 0
 #define MALLOC_INSPECT_ALL 1
 #define ABORT_ON_ASSERT_FAILURE 0
@@ -45,7 +49,11 @@
 #endif
 
 #undef assert
-#define assert(x) npassert(x)
+#if IsTiny()
+#define assert(x) if(!(x)) __builtin_unreachable()
+#else
+#define assert(x) if(!(x)) ABORT
+#endif
 
 #include "third_party/dlmalloc/platform.inc"
 #include "third_party/dlmalloc/locks.inc"

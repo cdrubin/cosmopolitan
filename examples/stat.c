@@ -11,7 +11,6 @@
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/fmt/fmt.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/mem/gc.h"
@@ -81,10 +80,10 @@ void PrintFileMetadata(const char *pathname, struct stat *st) {
          DescribeFileType(st->st_mode), "owner id", st->st_uid, "group id",
          st->st_gid, "flags", st->st_flags, "gen", st->st_gen,
          "device id (if special)", st->st_rdev, "block size", st->st_blksize,
-         "access time", _gc(xiso8601(&st->st_atim)), "modified time",
-         _gc(xiso8601(&st->st_mtim)), "c[omplicated]time",
-         _gc(xiso8601(&st->st_ctim)), "birthtime",
-         _gc(xiso8601(&st->st_birthtim)));
+         "access time", gc(xiso8601(&st->st_atim)), "modified time",
+         gc(xiso8601(&st->st_mtim)), "c[omplicated]time",
+         gc(xiso8601(&st->st_ctim)), "birthtime",
+         gc(xiso8601(&st->st_birthtim)));
 }
 
 int main(int argc, char *argv[]) {

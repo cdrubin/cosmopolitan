@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -18,9 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/sysv/consts/sig.h"
 #include "ape/sections.internal.h"
-#include "libc/atomic.h"
-#include "libc/calls/blockcancel.internal.h"
-#include "libc/calls/blocksigs.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/sig.internal.h"
 #include "libc/calls/state.internal.h"
@@ -31,11 +28,10 @@
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/itoa.h"
 #include "libc/intrin/atomic.h"
+#include "libc/intrin/bsf.h"
 #include "libc/intrin/describebacktrace.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/popcnt.h"
+#include "libc/intrin/dll.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/nt/console.h"
@@ -43,38 +39,29 @@
 #include "libc/nt/enum/exceptionhandleractions.h"
 #include "libc/nt/enum/signal.h"
 #include "libc/nt/enum/status.h"
-#include "libc/nt/errors.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/signals.h"
-#include "libc/nt/struct/context.h"
 #include "libc/nt/struct/ntexceptionpointers.h"
 #include "libc/nt/synchronization.h"
 #include "libc/nt/thread.h"
-#include "libc/runtime/runtime.h"
+#include "libc/runtime/symbols.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/consts/ss.h"
 #include "libc/thread/posixthread.internal.h"
-#include "libc/thread/tls.h"
-
 #ifdef __x86_64__
 
+/**
+ * @fileoverview Cosmopolitan Signals for Windows.
+ */
+
 struct SignalFrame {
-  struct PosixThread *pt;
-  struct NtContext *nc;
   unsigned rva;
   unsigned flags;
   siginfo_t si;
+  ucontext_t ctx;
 };
-
-struct ContextFrame {
-  struct SignalFrame sf;
-  struct NtContext nc;
-};
-
-void __stack_call(int, siginfo_t *, void *, long,
-                  void (*)(int, siginfo_t *, void *), void *);
 
 static textwindows bool __sig_ignored_by_default(int sig) {
   return sig == SIGURG ||   //
@@ -89,11 +76,62 @@ textwindows bool __sig_ignored(int sig) {
           __sig_ignored_by_default(sig));
 }
 
+textwindows void __sig_delete(int sig) {
+  struct Dll *e;
+  atomic_fetch_and_explicit(&__sig.pending, ~(1ull << (sig - 1)),
+                            memory_order_relaxed);
+  BLOCK_SIGNALS;
+  _pthread_lock();
+  for (e = dll_last(_pthread_list); e; e = dll_prev(_pthread_list, e)) {
+    atomic_fetch_and_explicit(&POSIXTHREAD_CONTAINER(e)->tib->tib_sigpending,
+                              ~(1ull << (sig - 1)), memory_order_relaxed);
+  }
+  _pthread_unlock();
+  ALLOW_SIGNALS;
+}
+
+static textwindows int __sig_getter(atomic_ulong *sigs, sigset_t masked) {
+  int sig;
+  sigset_t bit, pending, deliverable;
+  for (;;) {
+    pending = atomic_load_explicit(sigs, memory_order_acquire);
+    if ((deliverable = pending & ~masked)) {
+      sig = _bsfl(deliverable) + 1;
+      bit = 1ull << (sig - 1);
+      if (atomic_fetch_and_explicit(sigs, ~bit, memory_order_acq_rel) & bit) {
+        return sig;
+      }
+    } else {
+      return 0;
+    }
+  }
+}
+
+textwindows int __sig_get(sigset_t masked) {
+  int sig;
+  if (!(sig = __sig_getter(&__get_tls()->tib_sigpending, masked))) {
+    sig = __sig_getter(&__sig.pending, masked);
+  }
+  return sig;
+}
+
 static textwindows bool __sig_should_use_altstack(unsigned flags,
                                                   struct CosmoTib *tib) {
-  return (flags & SA_ONSTACK) &&    //
-         tib->tib_sigstack_size &&  //
-         !(tib->tib_sigstack_flags & (SS_DISABLE | SS_ONSTACK));
+  if (!(flags & SA_ONSTACK)) {
+    return false;  // signal handler didn't enable it
+  }
+  if (!tib->tib_sigstack_size) {
+    return false;  // sigaltstack() wasn't installed on this thread
+  }
+  if (tib->tib_sigstack_flags & SS_DISABLE) {
+    return false;  // sigaltstack() on this thread was disabled by user
+  }
+  char *bp = __builtin_frame_address(0);
+  if (tib->tib_sigstack_addr <= bp &&
+      bp <= tib->tib_sigstack_addr + tib->tib_sigstack_size) {
+    return false;  // we're already on the alternate stack
+  }
+  return true;
 }
 
 static textwindows wontreturn void __sig_terminate(int sig) {
@@ -109,195 +147,263 @@ static textwindows bool __sig_start(struct PosixThread *pt, int sig,
     STRACE("ignoring %G", sig);
     return false;
   }
-  if (pt->tib->tib_sigmask & (1ull << (sig - 1))) {
-    STRACE("tid %d masked %G delivering to tib_sigpending", _pthread_tid(pt),
-           sig);
-    pt->tib->tib_sigpending |= 1ull << (sig - 1);
+  if (atomic_load_explicit(&pt->tib->tib_sigmask, memory_order_acquire) &
+      (1ull << (sig - 1))) {
+    STRACE("enqueing %G on %d", sig, _pthread_tid(pt));
+    atomic_fetch_or_explicit(&pt->tib->tib_sigpending, 1ull << (sig - 1),
+                             memory_order_relaxed);
     return false;
   }
   if (*rva == (intptr_t)SIG_DFL) {
     STRACE("terminating on %G due to no handler", sig);
     __sig_terminate(sig);
   }
-  if (*flags & SA_RESETHAND) {
-    STRACE("resetting %G handler", sig);
-    __sighandrvas[sig] = (int32_t)(intptr_t)SIG_DFL;
-  }
   return true;
 }
 
 static textwindows sigaction_f __sig_handler(unsigned rva) {
+  atomic_fetch_add_explicit(&__sig.count, 1, memory_order_relaxed);
   return (sigaction_f)(__executable_start + rva);
 }
 
-static textwindows void __sig_call(int sig, siginfo_t *si, ucontext_t *ctx,
-                                   unsigned rva, unsigned flags,
-                                   struct CosmoTib *tib) {
-  ++__sig.count;
-  if (__sig_should_use_altstack(flags, tib)) {
-    tib->tib_sigstack_flags |= SS_ONSTACK;
-    __stack_call(sig, si, ctx, 0, __sig_handler(rva),
-                 tib->tib_sigstack_addr + tib->tib_sigstack_size);
-    tib->tib_sigstack_flags &= ~SS_ONSTACK;
-  } else {
-    __sig_handler(rva)(sig, si, ctx);
+textwindows int __sig_raise(volatile int sig, int sic) {
+
+  // bitset of kinds of handlers called
+  volatile int handler_was_called = 0;
+
+  // loop over pending signals
+  ucontext_t ctx;
+  getcontext(&ctx);
+  if (!sig) {
+    if ((sig = __sig_get(ctx.uc_sigmask))) {
+      sic = SI_KERNEL;
+    } else {
+      return handler_was_called;
+    }
   }
+
+  // process signal(s)
+  unsigned rva, flags;
+  struct PosixThread *pt = _pthread_self();
+  if (__sig_start(pt, sig, &rva, &flags)) {
+    if (flags & SA_RESETHAND) {
+      STRACE("resetting %G handler", sig);
+      __sighandrvas[sig] = (int32_t)(intptr_t)SIG_DFL;
+    }
+
+    // update the signal mask in preparation for signal handller
+    sigset_t blocksigs = __sighandmask[sig];
+    if (!(flags & SA_NODEFER)) blocksigs |= 1ull << (sig - 1);
+    ctx.uc_sigmask = atomic_fetch_or_explicit(&pt->tib->tib_sigmask, blocksigs,
+                                              memory_order_acquire);
+
+    // call the user's signal handler
+    char ssbuf[128];
+    siginfo_t si = {.si_signo = sig, .si_code = sic};
+    STRACE("__sig_raise(%G, %t) mask %s", sig, __sig_handler(rva),
+           (DescribeSigset)(ssbuf, 0, (sigset_t *)&pt->tib->tib_sigmask));
+    __sig_handler(rva)(sig, &si, &ctx);
+
+    // record this handler
+    if (flags & SA_RESTART) {
+      handler_was_called |= SIG_HANDLED_SA_RESTART;
+    } else {
+      handler_was_called |= SIG_HANDLED_NO_RESTART;
+    }
+  }
+
+  // restore sigmask
+  // loop back to top
+  // jump where handler says
+  sig = 0;
+  return setcontext(&ctx);
 }
 
-textwindows int __sig_raise(int sig, int sic) {
-  unsigned rva, flags;
+textwindows int __sig_relay(int sig, int sic, sigset_t waitmask) {
+  sigset_t m;
+  int handler_was_called;
+  m = atomic_exchange_explicit(&__get_tls()->tib_sigmask, waitmask,
+                               memory_order_acquire);
+  handler_was_called = __sig_raise(sig, SI_KERNEL);
+  atomic_store_explicit(&__get_tls()->tib_sigmask, m, memory_order_release);
+  return handler_was_called;
+}
+
+// cancels blocking operations being performed by signaled thread
+textwindows void __sig_cancel(struct PosixThread *pt, int sig, unsigned flags) {
+  atomic_int *blocker;
+  blocker = atomic_load_explicit(&pt->pt_blocker, memory_order_acquire);
+  if (!blocker) {
+    STRACE("%G sent to %d asynchronously", sig, _pthread_tid(pt));
+    return;
+  }
+  // we can cancel another thread's overlapped i/o op after the freeze
+  if (blocker == PT_BLOCKER_IO) {
+    STRACE("%G canceling %d's i/o", sig, _pthread_tid(pt));
+    CancelIoEx(pt->pt_iohandle, pt->pt_ioverlap);
+    return;
+  }
+  // threads can create semaphores on an as-needed basis
+  if (blocker == PT_BLOCKER_SEM) {
+    STRACE("%G releasing %d's semaphore", sig, _pthread_tid(pt));
+    ReleaseSemaphore(pt->pt_semaphore, 1, 0);
+    return;
+  }
+  // all other blocking ops that aren't overlap should use futexes
+  // we force restartable futexes to churn by waking w/o releasing
+  STRACE("%G waking %d's futex", sig, _pthread_tid(pt));
+  WakeByAddressSingle(blocker);
+}
+
+// the user's signal handler callback is wrapped with this trampoline
+static textwindows wontreturn void __sig_tramp(struct SignalFrame *sf) {
+  int sig = sf->si.si_signo;
   struct CosmoTib *tib = __get_tls();
   struct PosixThread *pt = (struct PosixThread *)tib->tib_pthread;
-  ucontext_t ctx = {.uc_sigmask.__bits[0] = tib->tib_sigmask};
-  if (!__sig_start(pt, sig, &rva, &flags)) return 0;
-  siginfo_t si = {.si_signo = sig, .si_code = sic};
-  struct NtContext nc;
-  nc.ContextFlags = kNtContextAll;
-  GetThreadContext(GetCurrentThread(), &nc);
-  _ntcontext2linux(&ctx, &nc);
-  if (!(flags & SA_NODEFER)) {
-    tib->tib_sigmask |= 1ull << (sig - 1);
-  }
-  STRACE("entering raise(%G) signal handler %t with mask %s → %s", sig,
-         __sig_handler(rva), DescribeSigset(0, &ctx.uc_sigmask),
-         DescribeSigset(0, &(sigset_t){{pt->tib->tib_sigmask}}));
-  __sig_call(sig, &si, &ctx, rva, flags, tib);
-  STRACE("leaving raise(%G) signal handler %t with mask %s → %s", sig,
-         __sig_handler(rva),
-         DescribeSigset(0, &(sigset_t){{pt->tib->tib_sigmask}}),
-         DescribeSigset(0, &ctx.uc_sigmask));
-  tib->tib_sigmask = ctx.uc_sigmask.__bits[0];
-  return (flags & SA_RESTART) ? 2 : 1;
-}
+  for (;;) {
 
-textwindows void __sig_cancel(struct PosixThread *pt, unsigned flags) {
-  atomic_int *futex;
-  if (_weaken(WakeByAddressSingle) &&
-      (futex = atomic_load_explicit(&pt->pt_futex, memory_order_acquire))) {
-    STRACE("canceling futex");
-    _weaken(WakeByAddressSingle)(futex);
-  } else if (!(flags & SA_RESTART) && pt->iohandle > 0) {
-    STRACE("canceling i/o operation");
-    if (!CancelIoEx(pt->iohandle, pt->ioverlap)) {
-      int err = GetLastError();
-      if (err != kNtErrorNotFound) {
-        STRACE("CancelIoEx() failed w/ %d", err);
+    // update the signal mask in preparation for signal handller
+    sigset_t blocksigs = __sighandmask[sig];
+    if (!(sf->flags & SA_NODEFER)) blocksigs |= 1ull << (sig - 1);
+    sf->ctx.uc_sigmask = atomic_fetch_or_explicit(&tib->tib_sigmask, blocksigs,
+                                                  memory_order_acquire);
+
+    // call the user's signal handler
+    char ssbuf[2][128];
+    STRACE("__sig_tramp(%G, %t) mask %s → %s", sig, __sig_handler(sf->rva),
+           (DescribeSigset)(ssbuf[0], 0, &sf->ctx.uc_sigmask),
+           (DescribeSigset)(ssbuf[1], 0, (sigset_t *)&tib->tib_sigmask));
+    __sig_handler(sf->rva)(sig, &sf->si, &sf->ctx);
+
+    // restore the signal mask that was used by the interrupted code
+    // this may have been modified by the signal handler in the callback
+    atomic_store_explicit(&tib->tib_sigmask, sf->ctx.uc_sigmask,
+                          memory_order_release);
+
+    // jump back into original code if there aren't any pending signals
+    do {
+      if (!(sig = __sig_get(sf->ctx.uc_sigmask))) {
+        __sig_restore(&sf->ctx);
       }
+    } while (!__sig_start(pt, sig, &sf->rva, &sf->flags));
+
+    // tail recurse into another signal handler
+    sf->si.si_signo = sig;
+    sf->si.si_code = SI_KERNEL;
+    if (sf->flags & SA_RESETHAND) {
+      STRACE("resetting %G handler", sig);
+      __sighandrvas[sig] = (int32_t)(intptr_t)SIG_DFL;
     }
-  } else if (pt->pt_flags & PT_INSEMAPHORE) {
-    STRACE("canceling semaphore");
-    pt->pt_flags &= ~PT_INSEMAPHORE;
-    if (!ReleaseSemaphore(pt->semaphore, 1, 0)) {
-      STRACE("ReleaseSemaphore() failed w/ %d", GetLastError());
-    }
-  } else {
-    STRACE("canceling asynchronously");
   }
 }
 
-static textwindows wontreturn void __sig_panic(const char *msg) {
-#ifndef TINY
-  char s[128], *p = s;
-  p = stpcpy(p, "sig panic: ");
-  p = stpcpy(p, msg);
-  p = stpcpy(p, " failed w/ ");
-  p = FormatInt32(p, GetLastError());
-  *p++ = '\n';
-  WriteFile(GetStdHandle(kNtStdErrorHandle), s, p - s, 0, 0);
-#endif
-  TerminateThisProcess(SIGVTALRM);
-}
+// sends signal to another specific thread which is ref'd
+static int __sig_killer(struct PosixThread *pt, int sig, int sic) {
+  unsigned rva = __sighandrvas[sig];
+  unsigned flags = __sighandflags[sig];
 
-static textwindows wontreturn void __sig_tramp(struct SignalFrame *sf) {
-  ucontext_t ctx = {0};
-  int sig = sf->si.si_signo;
-  _ntcontext2linux(&ctx, sf->nc);
-  ctx.uc_sigmask.__bits[0] =
-      atomic_load_explicit(&sf->pt->tib->tib_sigmask, memory_order_acquire);
-  if (!(sf->flags & SA_NODEFER)) {
-    sf->pt->tib->tib_sigmask |= 1ull << (sig - 1);
-  }
-  ++__sig.count;
-  STRACE("entering __sig_tramp(%G, %t) with mask %s → %s", sig,
-         __sig_handler(sf->rva), DescribeSigset(0, &ctx.uc_sigmask),
-         DescribeSigset(0, &(sigset_t){{sf->pt->tib->tib_sigmask}}));
-  __sig_handler(sf->rva)(sig, &sf->si, &ctx);
-  STRACE("leaving __sig_tramp(%G, %t) with mask %s → %s", sig,
-         __sig_handler(sf->rva),
-         DescribeSigset(0, &(sigset_t){{sf->pt->tib->tib_sigmask}}),
-         DescribeSigset(0, &ctx.uc_sigmask));
-  atomic_store_explicit(&sf->pt->tib->tib_sigmask, ctx.uc_sigmask.__bits[0],
-                        memory_order_release);
-  // TDOO(jart): Do we need to do a __sig_check() here?
-  _ntlinux2context(sf->nc, &ctx);
-  SetThreadContext(GetCurrentThread(), sf->nc);
-  __sig_panic("SetThreadContext(GetCurrentThread)");
-}
-
-static textwindows int __sig_killer(struct PosixThread *pt, int sig, int sic) {
-  uintptr_t th;
-  unsigned rva, flags;
-  if (!__sig_start(pt, sig, &rva, &flags)) return 0;
-  th = _pthread_syshand(pt);
-  uint32_t old_suspend_count;
-  old_suspend_count = SuspendThread(th);
-  if (old_suspend_count == -1u) {
-    STRACE("SuspendThread failed w/ %d", GetLastError());
-    return ESRCH;
-  }
-  if (old_suspend_count) {
-    STRACE("kill contention of %u on tid %d", old_suspend_count,
-           _pthread_tid(pt));
-    pt->tib->tib_sigpending |= 1ull << (sig - 1);
+  // do nothing if signal is ignored
+  if (rva == (intptr_t)SIG_IGN ||
+      (rva == (intptr_t)SIG_DFL && __sig_ignored_by_default(sig))) {
+    STRACE("ignoring %G", sig);
     return 0;
   }
-  struct NtContext nc;
-  nc.ContextFlags = kNtContextAll;
-  if (!GetThreadContext(th, &nc)) {
-    STRACE("GetThreadContext failed w/ %d", GetLastError());
+
+  // if there's no handler then killing a thread kills the process
+  if (rva == (intptr_t)SIG_DFL) {
+    STRACE("terminating on %G due to no handler", sig);
+    __sig_terminate(sig);
+  }
+
+  // ignore signals already pending
+  uintptr_t th = _pthread_syshand(pt);
+  if (atomic_load_explicit(&pt->tib->tib_sigpending, memory_order_acquire) &
+      (1ull << (sig - 1))) {
+    return 0;
+  }
+
+  // take control of thread
+  // suspending the thread happens asynchronously
+  // however getting the context blocks until it's frozen
+  static pthread_spinlock_t killer_lock;
+  pthread_spin_lock(&killer_lock);
+  if (SuspendThread(th) == -1u) {
+    STRACE("SuspendThread failed w/ %d", GetLastError());
+    pthread_spin_unlock(&killer_lock);
     return ESRCH;
   }
+  struct NtContext nc;
+  nc.ContextFlags = kNtContextFull;
+  if (!GetThreadContext(th, &nc)) {
+    STRACE("GetThreadContext failed w/ %d", GetLastError());
+    ResumeThread(th);
+    pthread_spin_unlock(&killer_lock);
+    return ESRCH;
+  }
+  pthread_spin_unlock(&killer_lock);
+
+  // we can't preempt threads that masked sig or are blocked
+  // we can't preempt threads that are running in win32 code
+  // so we shall unblock the thread and let it signal itself
+  if ((atomic_load_explicit(&pt->tib->tib_sigmask, memory_order_acquire) &
+       (1ull << (sig - 1))) ||
+      !((uintptr_t)__executable_start <= nc.Rip &&
+        nc.Rip < (uintptr_t)__privileged_start)) {
+    atomic_fetch_or_explicit(&pt->tib->tib_sigpending, 1ull << (sig - 1),
+                             memory_order_relaxed);
+    ResumeThread(th);
+    __sig_cancel(pt, sig, flags);
+    return 0;
+  }
+
+  // preferring to live dangerously
+  // the thread will be signaled asynchronously
+  if (flags & SA_RESETHAND) {
+    STRACE("resetting %G handler", sig);
+    __sighandrvas[sig] = (int32_t)(intptr_t)SIG_DFL;
+  }
+
+  // inject call to trampoline function into thread
   uintptr_t sp;
   if (__sig_should_use_altstack(flags, pt->tib)) {
-    pt->tib->tib_sigstack_flags |= SS_ONSTACK;
     sp = (uintptr_t)pt->tib->tib_sigstack_addr + pt->tib->tib_sigstack_size;
-    pt->tib->tib_sigstack_flags &= ~SS_ONSTACK;
   } else {
-    sp = (nc.Rsp - 128 - sizeof(struct ContextFrame)) & -16;
+    sp = nc.Rsp;
   }
-  struct ContextFrame *cf = (struct ContextFrame *)sp;
-  bzero(&cf->sf.si, sizeof(cf->sf.si));
-  memcpy(&cf->nc, &nc, sizeof(nc));
-  cf->sf.pt = pt;
-  cf->sf.rva = rva;
-  cf->sf.nc = &cf->nc;
-  cf->sf.flags = flags;
-  cf->sf.si.si_code = sic;
-  cf->sf.si.si_signo = sig;
+  sp -= sizeof(struct SignalFrame);
+  sp &= -16;
+  struct SignalFrame *sf = (struct SignalFrame *)sp;
+  _ntcontext2linux(&sf->ctx, &nc);
+  bzero(&sf->si, sizeof(sf->si));
+  sf->rva = rva;
+  sf->flags = flags;
+  sf->si.si_code = sic;
+  sf->si.si_signo = sig;
   *(uintptr_t *)(sp -= sizeof(uintptr_t)) = nc.Rip;
   nc.Rip = (intptr_t)__sig_tramp;
-  nc.Rdi = (intptr_t)&cf->sf;
+  nc.Rdi = (intptr_t)sf;
   nc.Rsp = sp;
   if (!SetThreadContext(th, &nc)) {
     STRACE("SetThreadContext failed w/ %d", GetLastError());
     return ESRCH;
   }
-  ResumeThread(th);  // doesn't actually resume if doing blocking i/o
-  pt->abort_errno = EINTR;
-  __sig_cancel(pt, flags);  // we can wake it up immediately by canceling it
+  ResumeThread(th);
+  __sig_cancel(pt, sig, flags);
   return 0;
 }
 
+// sends signal to another specific thread
 textwindows int __sig_kill(struct PosixThread *pt, int sig, int sic) {
   int rc;
   BLOCK_SIGNALS;
-  BLOCK_CANCELLATIONS;
+  _pthread_ref(pt);
   rc = __sig_killer(pt, sig, sic);
-  ALLOW_CANCELLATIONS;
+  _pthread_unref(pt);
   ALLOW_SIGNALS;
   return rc;
 }
 
+// sends signal to any other thread
 textwindows void __sig_generate(int sig, int sic) {
   struct Dll *e;
   struct PosixThread *pt, *mark = 0;
@@ -309,23 +415,48 @@ textwindows void __sig_generate(int sig, int sic) {
     STRACE("terminating on %G due to no handler", sig);
     __sig_terminate(sig);
   }
-  pthread_spin_lock(&_pthread_lock);
+  if (atomic_load_explicit(&__sig.pending, memory_order_acquire) &
+      (1ull << (sig - 1))) {
+    return;
+  }
+  BLOCK_SIGNALS;
+  _pthread_lock();
   for (e = dll_first(_pthread_list); e; e = dll_next(_pthread_list, e)) {
     pt = POSIXTHREAD_CONTAINER(e);
-    if (atomic_load_explicit(&pt->status, memory_order_acquire) <
-            kPosixThreadTerminated &&
-        !(pt->tib->tib_sigmask & (1ull << (sig - 1)))) {
+    // we don't want to signal ourself
+    if (pt == _pthread_self()) continue;
+    // we don't want to signal a thread that isn't running
+    if (atomic_load_explicit(&pt->pt_status, memory_order_acquire) >=
+        kPosixThreadTerminated) {
+      continue;
+    }
+    // choose this thread if it isn't masking sig
+    if (!(atomic_load_explicit(&pt->tib->tib_sigmask, memory_order_acquire) &
+          (1ull << (sig - 1)))) {
+      _pthread_ref(pt);
+      mark = pt;
+      break;
+    }
+    // if a thread is blocking then we check to see if it's planning
+    // to unblock our sig once the wait operation is completed; when
+    // that's the case we can cancel the thread's i/o to deliver sig
+    if (atomic_load_explicit(&pt->pt_blocker, memory_order_acquire) &&
+        !(atomic_load_explicit(&pt->pt_blkmask, memory_order_relaxed) &
+          (1ull << (sig - 1)))) {
+      _pthread_ref(pt);
       mark = pt;
       break;
     }
   }
-  pthread_spin_unlock(&_pthread_lock);
+  _pthread_unlock();
   if (mark) {
-    __sig_kill(mark, sig, sic);
+    __sig_killer(mark, sig, sic);
+    _pthread_unref(mark);
   } else {
-    STRACE("all threads block %G so adding to pending signals of process", sig);
-    __sig.pending |= sig;
+    atomic_fetch_or_explicit(&__sig.pending, 1ull << (sig - 1),
+                             memory_order_relaxed);
   }
+  ALLOW_SIGNALS;
 }
 
 static int __sig_crash_sig(struct NtExceptionPointers *ep, int *code) {
@@ -339,11 +470,11 @@ static int __sig_crash_sig(struct NtExceptionPointers *ep, int *code) {
     case kNtSignalPrivInstruction:
       *code = ILL_PRVOPC;
       return SIGILL;
-    case kNtSignalGuardPage:
     case kNtSignalInPageError:
     case kNtStatusStackOverflow:
       *code = SEGV_MAPERR;
       return SIGSEGV;
+    case kNtSignalGuardPage:
     case kNtSignalAccessViolation:
       *code = SEGV_ACCERR;
       return SIGSEGV;
@@ -387,26 +518,24 @@ static int __sig_crash_sig(struct NtExceptionPointers *ep, int *code) {
   }
 }
 
-// abashed the devil stood, and felt how awful goodness is
-__msabi unsigned __sig_crash(struct NtExceptionPointers *ep) {
-  int code, sig = __sig_crash_sig(ep, &code);
+static void __sig_unmaskable(struct NtExceptionPointers *ep, int code, int sig,
+                             struct CosmoTib *tib) {
+
+  // log vital crash information reliably for --strace before doing much
+  // we don't print this without the flag since raw numbers scare people
+  // this needs at least one page of stack memory in order to get logged
+  // otherwise it'll print a warning message about the lack of stack mem
   STRACE("win32 vectored exception 0x%08Xu raising %G "
          "cosmoaddr2line %s %lx %s",
-         ep->ExceptionRecord->ExceptionCode, sig, program_invocation_name,
+         ep->ExceptionRecord->ExceptionCode, sig,
+         _weaken(FindDebugBinary) ? _weaken(FindDebugBinary)()
+                                  : program_invocation_name,
          ep->ContextRecord->Rip,
          DescribeBacktrace((struct StackFrame *)ep->ContextRecord->Rbp));
-  if (sig == SIGTRAP) {
-    ep->ContextRecord->Rip++;
-    if (__sig_ignored(sig)) {
-      return kNtExceptionContinueExecution;
-    }
-  }
-  struct PosixThread *pt = _pthread_self();
-  siginfo_t si = {.si_signo = sig,
-                  .si_code = code,
-                  .si_addr = ep->ExceptionRecord->ExceptionAddress};
+
+  // if the user didn't install a signal handler for this unmaskable
+  // exception, then print a friendly helpful hint message to stderr
   unsigned rva = __sighandrvas[sig];
-  unsigned flags = __sighandflags[sig];
   if (rva == (intptr_t)SIG_DFL || rva == (intptr_t)SIG_IGN) {
 #ifndef TINY
     intptr_t hStderr;
@@ -419,16 +548,76 @@ __msabi unsigned __sig_crash(struct NtExceptionPointers *ep) {
 #endif
     __sig_terminate(sig);
   }
+
+  // if this signal handler is configured to auto-reset to the default
+  // then that reset needs to happen before the user handler is called
+  unsigned flags = __sighandflags[sig];
   if (flags & SA_RESETHAND) {
     STRACE("resetting %G handler", sig);
     __sighandrvas[sig] = (int32_t)(intptr_t)SIG_DFL;
   }
+
+  // determine the true memory address at which fault occurred
+  // if this is a stack overflow then reapply guard protection
+  void *si_addr;
+  if (ep->ExceptionRecord->ExceptionCode == kNtSignalGuardPage) {
+    si_addr = (void *)ep->ExceptionRecord->ExceptionInformation[1];
+  } else {
+    si_addr = ep->ExceptionRecord->ExceptionAddress;
+  }
+
+  // call the user signal handler
+  // with a temporarily replaced signal mask
+  // and a modifiable view of the faulting code's cpu state
+  // note ucontext_t is a hefty data structures on top of NtContext
   ucontext_t ctx = {0};
+  siginfo_t si = {.si_signo = sig, .si_code = code, .si_addr = si_addr};
   _ntcontext2linux(&ctx, ep->ContextRecord);
-  ctx.uc_sigmask.__bits[0] = pt->tib->tib_sigmask;
-  __sig_call(sig, &si, &ctx, rva, flags, pt->tib);
-  pt->tib->tib_sigmask = ctx.uc_sigmask.__bits[0];
+  sigset_t blocksigs = __sighandmask[sig];
+  if (!(flags & SA_NODEFER)) blocksigs |= 1ull << (sig - 1);
+  ctx.uc_sigmask = atomic_fetch_or_explicit(&tib->tib_sigmask, blocksigs,
+                                            memory_order_acquire);
+  __sig_handler(rva)(sig, &si, &ctx);
+  atomic_store_explicit(&tib->tib_sigmask, ctx.uc_sigmask,
+                        memory_order_release);
   _ntlinux2context(ep->ContextRecord, &ctx);
+}
+
+void __stack_call(struct NtExceptionPointers *, int, int, struct CosmoTib *,
+                  void (*)(struct NtExceptionPointers *, int, int,
+                           struct CosmoTib *),
+                  void *);
+
+//                         abashed the devil stood
+//                      and felt how awful goodness is
+__msabi dontinstrument unsigned __sig_crash(struct NtExceptionPointers *ep) {
+
+  // translate win32 to unix si_signo and si_code
+  int code, sig = __sig_crash_sig(ep, &code);
+
+  // advance the instruction pointer to skip over debugger breakpoints
+  // this behavior is consistent with how unix kernels are implemented
+  if (sig == SIGTRAP) {
+    ep->ContextRecord->Rip++;
+    if (__sig_ignored(sig)) {
+      return kNtExceptionContinueExecution;
+    }
+  }
+
+  // win32 stack overflow detection executes INSIDE the guard page
+  // thus switch to the alternate signal stack as soon as possible
+  struct CosmoTib *tib = __get_tls();
+  unsigned flags = __sighandflags[sig];
+  if (__sig_should_use_altstack(flags, tib)) {
+    __stack_call(ep, code, sig, tib, __sig_unmaskable,
+                 tib->tib_sigstack_addr + tib->tib_sigstack_size);
+  } else {
+    __sig_unmaskable(ep, code, sig, tib);
+  }
+
+  // resume running user program
+  // hopefully the user fixed the cpu state
+  // otherwise the crash will keep happening
   return kNtExceptionContinueExecution;
 }
 
@@ -454,38 +643,18 @@ __msabi textwindows dontinstrument bool32 __sig_console(uint32_t dwCtrlType) {
   return true;
 }
 
-static textwindows int __sig_checkem(atomic_ulong *sigs, struct CosmoTib *tib,
-                                     const char *thing, int id) {
-  int handler_was_called = 0;
-  uint64_t pending, masked, deliverable;
-  pending = atomic_load_explicit(sigs, memory_order_acquire);
-  masked = atomic_load_explicit(&tib->tib_sigmask, memory_order_acquire);
-  deliverable = pending & ~masked;
-  POLLTRACE("%s %d blocks %d sigs w/ %d pending and %d deliverable", thing, id,
-            popcnt(masked), popcnt(pending), popcnt(deliverable));
-  if (deliverable) {
-    for (int sig = 1; sig <= 64; ++sig) {
-      if ((deliverable & (1ull << (sig - 1))) &&
-          atomic_fetch_and(sigs, ~(1ull << (sig - 1))) & (1ull << (sig - 1))) {
-        handler_was_called |= __sig_raise(sig, SI_KERNEL);
-      }
-    }
-  }
-  return handler_was_called;
-}
-
 // returns 0 if no signal handlers were called, otherwise a bitmask
 // consisting of `1` which means a signal handler was invoked which
 // didn't have the SA_RESTART flag, and `2`, which means SA_RESTART
 // handlers were called (or `3` if both were the case).
 textwindows int __sig_check(void) {
-  int handler_was_called = false;
-  struct CosmoTib *tib = __get_tls();
-  handler_was_called |=
-      __sig_checkem(&tib->tib_sigpending, tib, "tid", tib->tib_tid);
-  handler_was_called |= __sig_checkem(&__sig.pending, tib, "pid", getpid());
-  POLLTRACE("__sig_check() → %d", handler_was_called);
-  return handler_was_called;
+  int sig;
+  if ((sig = __sig_get(atomic_load_explicit(&__get_tls()->tib_sigmask,
+                                            memory_order_acquire)))) {
+    return __sig_raise(sig, SI_KERNEL);
+  } else {
+    return 0;
+  }
 }
 
 textstartup void __sig_init(void) {

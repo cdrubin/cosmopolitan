@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Musl Libc                                                                   │
@@ -43,7 +43,6 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
 
 #ifdef FTRACE
 // if the default mode debugging tools are enabled, and we're linking
@@ -101,7 +100,7 @@ __fopen_passwd(void)
 		return f;
 	if (!(s = __create_synthetic_passwd_file()))
 		return 0;
-	if (!(f = fmemopen(s, strlen(s), "rb")))
+	if (!(f = fmemopen(s, strlen(s), "rbe")))
 		free(s);
 	return f;
 }
@@ -116,7 +115,7 @@ atou(char **s)
 	return x;
 }
 
-static int
+int
 __getpwent_a(FILE *f, struct passwd *pw, char **line, size_t *size,
 	     struct passwd **res)
 {
@@ -162,7 +161,7 @@ __getpwent_a(FILE *f, struct passwd *pw, char **line, size_t *size,
 	return rv;
 }
 
-static int
+int
 __getpw_a(const char *name, uid_t uid, struct passwd *pw, char **buf,
 	  size_t *size, struct passwd **res)
 {
@@ -240,6 +239,7 @@ static struct GetpwentState {
  * Closes global handle to password database.
  *
  * @see getpwent()
+ * @threadunsafe
  */
 void
 endpwent(void)
@@ -251,6 +251,7 @@ endpwent(void)
  * Rewinds global handle to password database.
  *
  * @see getpwent()
+ * @threadunsafe
  */
 void
 setpwent(void)
@@ -264,7 +265,8 @@ setpwent(void)
  * Returns next entry in password database.
  *
  * @return pointer to entry static memory, or NULL on EOF
- * @see getpwent()
+ * @see setpwent()
+ * @threadunsafe
  */
 struct passwd *
 getpwent()
@@ -287,6 +289,7 @@ getpwent()
  * if `/etc/passwd` doesn't exist, or is fake (e.g. MacOS).
  *
  * @return pointer to passwd entry static memory, or NULL if not found
+ * @threadunsafe
  */
 struct passwd *
 getpwuid(uid_t uid)
@@ -305,6 +308,7 @@ getpwuid(uid_t uid)
  * if `/etc/passwd` doesn't exist, or is fake (e.g. MacOS).
  *
  * @return pointer to passwd entry static memory, or NULL if not found
+ * @threadunsafe
  */
 struct passwd *
 getpwnam(const char *name)

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -46,6 +46,12 @@
 
 #define CTL_HW     6
 #define HW_MACHINE 1
+
+#define COSMOPOLITAN_VERSION_STR__(x, y, z) #x "." #y "." #z
+#define COSMOPOLITAN_VERSION_STR_(x, y, z)  COSMOPOLITAN_VERSION_STR__(x, y, z)
+#define COSMOPOLITAN_VERSION_STR                                            \
+  COSMOPOLITAN_VERSION_STR_(__COSMOPOLITAN_MAJOR__, __COSMOPOLITAN_MINOR__, \
+                            __COSMOPOLITAN_PATCH__)
 
 // Gets BSD sysctl() string, guaranteeing NUL-terminator.
 // We ignore errors since this syscall mutates on ENOMEM.
@@ -175,7 +181,7 @@ int uname(struct utsname *uts) {
   }
   if (!rc) {
     char buf[SYS_NMLN];
-    stpcpy(buf, "Cosmopolitan 3.0-alpha");
+    stpcpy(buf, "Cosmopolitan " COSMOPOLITAN_VERSION_STR);
     if (*MODE) {
       strlcat(buf, " MODE=" MODE, SYS_NMLN);
     }

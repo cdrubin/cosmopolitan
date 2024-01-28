@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
@@ -7,7 +7,6 @@
 #include "third_party/python/Include/ast.h"
 #include "libc/assert.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "third_party/python/Include/Python-ast.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/boolobject.h"
@@ -31,7 +30,6 @@
 #include "third_party/python/Include/tupleobject.h"
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Modules/unicodedata.h"
-/* clang-format off */
 
 static int validate_stmts(asdl_seq *);
 static int validate_exprs(asdl_seq *, expr_context_ty, int);

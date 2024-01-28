@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -42,7 +42,7 @@
  * @raise EAGAIN if deadline expired
  * @raise ENOSYS on Windows, XNU, OpenBSD, Metal
  * @raise EFAULT if invalid memory was supplied
- * @cancellationpoint
+ * @cancelationpoint
  */
 int sigtimedwait(const sigset_t *set, siginfo_t *info,
                  const struct timespec *timeout) {
@@ -50,8 +50,7 @@ int sigtimedwait(const sigset_t *set, siginfo_t *info,
   char strsig[21];
   struct timespec ts;
   union siginfo_meta si = {0};
-  BEGIN_CANCELLATION_POINT;
-  (void)strsig;
+  BEGIN_CANCELATION_POINT;
 
   if (IsAsan() && (!__asan_is_valid(set, sizeof(*set)) ||
                    (info && !__asan_is_valid(info, sizeof(*info))) ||
@@ -73,7 +72,7 @@ int sigtimedwait(const sigset_t *set, siginfo_t *info,
     rc = enosys();
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("sigtimedwait(%s, [%s], %s) → %s% m", DescribeSigset(0, set),
          DescribeSiginfo(rc, info), DescribeTimespec(0, timeout),
          strsignal_r(rc, strsig));

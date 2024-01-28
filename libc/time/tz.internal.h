@@ -8,7 +8,6 @@
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/ok.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 /* clang-format off */
@@ -274,28 +273,26 @@ typedef time_tz tz_int64_t;
 #  define altzone tz_altzone
 # endif
 
-char *asctime(struct tm const *);
-char *asctime_r(struct tm const *restrict, char *restrict);
-char *ctime(int64_t const *);
-char *ctime_r(int64_t const *, char *);
-double difftime(int64_t, int64_t) pureconst;
+char *asctime(struct tm const *) libcesque;
+char *asctime_r(struct tm const *restrict, char *restrict) libcesque;
+char *ctime(int64_t const *) libcesque;
+char *ctime_r(int64_t const *, char *) libcesque;
+double difftime(int64_t, int64_t) libcesque pureconst;
 size_t strftime(char *restrict, size_t, char const *restrict,
-		struct tm const *restrict);
-# if HAVE_STRFTIME_L
+		struct tm const *restrict) libcesque;
 size_t strftime_l(char *restrict, size_t, char const *restrict,
-		  struct tm const *restrict, locale_t);
-# endif
-struct tm *gmtime(int64_t const *);
-struct tm *gmtime_r(int64_t const *restrict, struct tm *restrict);
-struct tm *localtime(int64_t const *);
-struct tm *localtime_r(int64_t const *restrict, struct tm *restrict);
-int64_t mktime(struct tm *);
-int64_t time(int64_t *);
-void tzset(void);
+		  struct tm const *restrict, locale_t) libcesque;
+struct tm *gmtime(int64_t const *) libcesque;
+struct tm *gmtime_r(int64_t const *restrict, struct tm *restrict) libcesque;
+struct tm *localtime(int64_t const *) libcesque;
+struct tm *localtime_r(int64_t const *restrict, struct tm *restrict) libcesque;
+int64_t mktime(struct tm *) libcesque;
+int64_t time(int64_t *) libcesque;
+void tzset(void) libcesque;
 #endif
 
 #if !HAVE_DECL_ASCTIME_R && !defined asctime_r
-extern char *asctime_r(struct tm const *restrict, char *restrict);
+extern char *asctime_r(struct tm const *restrict, char *restrict) libcesque;
 #endif
 
 #ifndef HAVE_DECL_ENVIRON
@@ -487,12 +484,12 @@ char *ctime_r(int64_t const *, char *);
 #define DAYSPERNYEAR	365
 #define DAYSPERLYEAR	366
 #define SECSPERHOUR	(SECSPERMIN * MINSPERHOUR)
-#define SECSPERDAY	((int_fast32_t) SECSPERHOUR * HOURSPERDAY)
+#define SECSPERDAY	((int32_t) SECSPERHOUR * HOURSPERDAY)
 #define MONSPERYEAR	12
 
 #define YEARSPERREPEAT		400	/* years before a Gregorian repeat */
-#define DAYSPERREPEAT		((int_fast32_t) 400 * 365 + 100 - 4 + 1)
-#define SECSPERREPEAT		((int_fast64_t) DAYSPERREPEAT * SECSPERDAY)
+#define DAYSPERREPEAT		((int32_t) 400 * 365 + 100 - 4 + 1)
+#define SECSPERREPEAT		((int64_t) DAYSPERREPEAT * SECSPERDAY)
 #define AVGSECSPERYEAR		(SECSPERREPEAT / YEARSPERREPEAT)
 
 #define TM_SUNDAY	0
@@ -539,5 +536,4 @@ char *ctime_r(int64_t const *, char *);
 #define isleap_sum(a, b)	isleap((a) % 400 + (b) % 400)
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_THIRD_PARTY_TZ_PRIVATE_H_ */

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -33,9 +33,13 @@ static int FindPromise(const char *name) {
 /**
  * Parses the arguments to pledge() into a bitmask.
  *
+ * @param out receives the integral promises mask, which zero is defined
+ *     as the set of all promises, and -1 is defined as the empty set of
+ *     promises, which is equivalent to `promises` being an empty string
  * @return 0 on success, or -1 if invalid
  */
-int ParsePromises(const char *promises, unsigned long *out) {
+int ParsePromises(const char *promises, unsigned long *out,
+                  unsigned long current) {
   int rc = 0;
   int promise;
   unsigned long ipromises;
@@ -57,7 +61,7 @@ int ParsePromises(const char *promises, unsigned long *out) {
       rc = -1;
     }
   } else {
-    ipromises = 0;
+    ipromises = current;
   }
   if (!rc) {
     *out = ipromises;

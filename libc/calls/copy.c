@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -44,7 +44,7 @@ ssize_t copyfd(int in, int out, size_t n) {
     if (dw != dr) {
       // POSIX requires atomic IO up to PIPE_BUF
       // The minimum permissible PIPE_BUF is 512
-      abort();
+      notpossible;
     }
   }
   return i;

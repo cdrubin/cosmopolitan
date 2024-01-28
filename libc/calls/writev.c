@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -46,12 +46,12 @@
  * call using write().
  *
  * @return number of bytes actually handed off, or -1 w/ errno
- * @cancellationpoint
+ * @cancelationpoint
  * @restartable
  */
 ssize_t writev(int fd, const struct iovec *iov, int iovlen) {
   ssize_t rc;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (fd < 0) {
     rc = ebadf();
@@ -77,7 +77,7 @@ ssize_t writev(int fd, const struct iovec *iov, int iovlen) {
     rc = enosys();
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   STRACE("writev(%d, %s, %d) → %'ld% m", fd,
          DescribeIovec(rc != -1 ? rc : -2, iov, iovlen), iovlen, rc);
   return rc;

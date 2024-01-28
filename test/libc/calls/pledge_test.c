@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -125,6 +125,12 @@ void *Enclave(void *arg) {
   int *job = arg;            // get job
   job[0] = job[0] + job[1];  // do work
   return 0;                  // exit
+}
+
+TEST(pledge, tester) {
+  SPAWN(fork);
+  ASSERT_EQ(0, pledge("stdio rpath wpath cpath proc exec", NULL));
+  EXITS(0);
 }
 
 TEST(pledge, withThreadMemory) {
@@ -487,10 +493,12 @@ TEST(pledge, open_cpath) {
   ASSERT_SYS(0, 0, touch("foo", 0644));
   ASSERT_NE(-1, (pid = fork()));
   if (!pid) {
+    unsigned omask = umask(022);
     ASSERT_SYS(0, 0, pledge("stdio cpath", 0));
     ASSERT_SYS(0, 3, open("foo", O_WRONLY | O_TRUNC | O_CREAT, 0644));
     ASSERT_SYS(0, 0, fstat(3, &st));
     ASSERT_EQ(0100644, st.st_mode);
+    umask(omask);
     // make sure open() can't apply the setuid bit
     ASSERT_SYS(EPERM, -1, open("bar", O_WRONLY | O_TRUNC | O_CREAT, 04644));
     _Exit(0);
@@ -552,6 +560,8 @@ TEST(pledge_openbsd, execpromisesIsNull_letsItDoAnything) {
   }
   EXPECT_NE(-1, wait(&ws));
   EXPECT_TRUE(WIFEXITED(ws));
+  EXPECT_FALSE(WIFSIGNALED(ws));
+  EXPECT_EQ(0, WTERMSIG(ws));
   EXPECT_EQ(3, WEXITSTATUS(ws));
 }
 

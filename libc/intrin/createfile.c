@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -48,15 +48,26 @@ CreateFile(const char16_t *lpFileName,                         //
            int64_t opt_hTemplateFile) {
   int64_t hHandle;
   uint32_t micros = 1;
+  char buf_accessflags[512];
+  char buf_shareflags[64];
+  char buf_secattr[32];
+  char buf_flagattr[256];
 TryAgain:
   hHandle = __imp_CreateFileW(lpFileName, dwDesiredAccess, dwShareMode,
                               opt_lpSecurity, dwCreationDisposition,
                               dwFlagsAndAttributes, opt_hTemplateFile);
+  NTTRACE("CreateFile(%#hs, %s, %s, %s, %s, %s, %ld) → {%ld, %d}", lpFileName,
+          (DescribeNtFileAccessFlags)(buf_accessflags, dwDesiredAccess),
+          (DescribeNtFileShareFlags)(buf_shareflags, dwShareMode),
+          (DescribeNtSecurityAttributes)(buf_secattr, opt_lpSecurity),
+          DescribeNtCreationDisposition(dwCreationDisposition),
+          (DescribeNtFileFlagAttr)(buf_flagattr, dwFlagsAndAttributes),
+          opt_hTemplateFile, hHandle, __imp_GetLastError());
   if (hHandle == -1) {
     switch (__imp_GetLastError()) {
       case kNtErrorPipeBusy:
         if (micros >= 1024) __imp_Sleep(micros / 1024);
-        if (micros / 1024 < __SIG_IO_INTERVAL_MS) micros <<= 1;
+        if (micros < 1024 * 1024) micros <<= 1;
         goto TryAgain;
       case kNtErrorAccessDenied:
         // GetNtOpenFlags() always greedily requests execute permissions
@@ -77,12 +88,5 @@ TryAgain:
     }
     __winerr();
   }
-  NTTRACE("CreateFile(%#hs, %s, %s, %s, %s, %s, %ld) → %ld% m", lpFileName,
-          DescribeNtFileAccessFlags(dwDesiredAccess),
-          DescribeNtFileShareFlags(dwShareMode),
-          DescribeNtSecurityAttributes(opt_lpSecurity),
-          DescribeNtCreationDisposition(dwCreationDisposition),
-          DescribeNtFileFlagAttr(dwFlagsAndAttributes), opt_hTemplateFile,
-          hHandle);
   return hHandle;
 }

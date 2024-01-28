@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -24,7 +24,7 @@
 #include "libc/thread/tls.h"
 #ifdef MODE_DBG
 
-int begin_cancellation_point(void) {
+int begin_cancelation_point(void) {
   int state = 0;
   struct CosmoTib *tib;
   struct PosixThread *pt;
@@ -38,7 +38,7 @@ int begin_cancellation_point(void) {
   return state;
 }
 
-void end_cancellation_point(int state) {
+void end_cancelation_point(int state) {
   struct CosmoTib *tib;
   struct PosixThread *pt;
   if (__tls_enabled) {
@@ -50,10 +50,8 @@ void end_cancellation_point(int state) {
   }
 }
 
-void report_cancellation_point(void) {
-  BLOCK_CANCELLATIONS;
-  _bt("error: need BEGIN/END_CANCELLATION_POINT\n");
-  ALLOW_CANCELLATIONS;
+void report_cancelation_point(void) {
+  __builtin_trap();
 }
 
 #endif /* MODE_DBG */

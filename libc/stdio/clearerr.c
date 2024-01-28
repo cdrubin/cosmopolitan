@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -22,8 +22,7 @@
  * Clears eof and error state indicators on stream.
  *
  * @param f is file object stream pointer
- * @see	clearerr_unlocked()
- * @threadsafe
+ * @see clearerr_unlocked()
  */
 void clearerr(FILE *f) {
   flockfile(f);

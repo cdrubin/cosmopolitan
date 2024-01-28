@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -17,15 +17,13 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/calls/sig.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
+#ifdef __x86_64__
 
 textwindows int sys_pause_nt(void) {
   int rc;
-  while (!(rc = _check_interrupts(0))) {
-    if ((rc = __pause_thread(__SIG_SIG_INTERVAL_MS))) {
-      break;
-    }
-  }
+  while (!(rc = _park_norestart(-1u, 0))) donothing;
   return rc;
 }
+
+#endif /* __x86_64__ */

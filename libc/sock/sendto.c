@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -43,14 +43,14 @@
  * @param fd is the file descriptor returned by socket()
  * @param buf is the data to send, which we'll copy if necessary
  * @param size is the byte-length of buf
- * @param flags MSG_OOB, MSG_DONTROUTE, MSG_PARTIAL, MSG_NOSIGNAL, etc.
+ * @param flags can have `MSG_OOB`, `MSG_DONTROUTE`, and `MSG_DONTWAIT`
  * @param opt_addr is a binary ip:port destination override, which is
  *     mandatory for UDP if connect() wasn't called
  * @param addrsize is the byte-length of addr's true polymorphic form
  * @return number of bytes transmitted, or -1 w/ errno
  * @error EINTR, EHOSTUNREACH, ECONNRESET (UDP ICMP Port Unreachable),
  *     EPIPE (if MSG_NOSIGNAL), EMSGSIZE, ENOTSOCK, EFAULT, etc.
- * @cancellationpoint
+ * @cancelationpoint
  * @asyncsignalsafe
  * @restartable (unless SO_RCVTIMEO)
  */
@@ -59,7 +59,7 @@ ssize_t sendto(int fd, const void *buf, size_t size, int flags,
   ssize_t rc;
   uint32_t bsdaddrsize;
   union sockaddr_storage_bsd bsd;
-  BEGIN_CANCELLATION_POINT;
+  BEGIN_CANCELATION_POINT;
 
   if (IsAsan() && (!__asan_is_valid(buf, size) ||
                    (opt_addr && !__asan_is_valid(opt_addr, addrsize)))) {
@@ -91,7 +91,7 @@ ssize_t sendto(int fd, const void *buf, size_t size, int flags,
     rc = ebadf();
   }
 
-  END_CANCELLATION_POINT;
+  END_CANCELATION_POINT;
   DATATRACE("sendto(%d, %#.*hhs%s, %'zu, %#x, %p, %u) → %'ld% lm", fd,
             MAX(0, MIN(40, rc)), buf, rc > 40 ? "..." : "", size, flags,
             opt_addr, addrsize, rc);

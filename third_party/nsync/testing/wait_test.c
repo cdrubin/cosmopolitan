@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
-│vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2016 Google Inc.                                                   │
 │                                                                              │
@@ -25,7 +25,6 @@
 #include "third_party/nsync/testing/time_extra.h"
 #include "third_party/nsync/time.h"
 #include "third_party/nsync/waiter.h"
-// clang-format off
 
 static void decrement_at (nsync_counter c, nsync_time abs_deadline, nsync_counter done) {
 	nsync_time_sleep_until (abs_deadline);

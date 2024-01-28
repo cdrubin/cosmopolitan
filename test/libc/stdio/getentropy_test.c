@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -64,7 +64,7 @@ TEST(getentropy, test) {
   double e, w = 7.7;
   struct sigaction sa;
   int i, k, m, n = 999;
-  char *buf = _gc(calloc(1, n));
+  char *buf = gc(calloc(1, n));
   sa.sa_flags = 0;
   sa.sa_handler = OnSig;
   sigemptyset(&sa.sa_mask);

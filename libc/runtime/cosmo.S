@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                     :vi│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -40,7 +40,7 @@ cosmo:	push	%rbp
 	mov	%rdx,%r14
 	mov	%rcx,%r15
 
-#ifdef SYSDEBUG
+#if SYSDEBUG
 	call	__strace_init
 	mov	%eax,%r12d
 #endif /* SYSDEBUG */
@@ -142,21 +142,6 @@ cosmo:	push	%rbp
 	pop	%rsi
 	pop	%rdi
 	.init.end 306,_init_ftrace
-#endif
-
-#if IsModeDbg()
-#ifdef SYSDEBUG
-	.init.start 307,_init_printargs
-	cmpl	$0,__strace(%rip)
-	jz	1f
-	push	%rdi
-	push	%rsi
-	loadstr	STRACE_PROLOGUE,di
-	call	__printargs
-	pop	%rsi
-	pop	%rdi
-1:	.init.end 307,_init_printargs
-#endif
 #endif
 
 #endif /* __x86_64__ */

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -21,10 +21,9 @@
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/log/log.h"
-#include "libc/mem/gc.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -54,7 +53,7 @@ static const char kRet31337[] = {
 };
 #elif defined(__aarch64__)
 static const uint32_t kRet31337[] = {
-    0x528f4d20,  // mov	w0,#31337
+    0x528f4d20,  // mov w0,#31337
     0xd65f03c0,  // ret
 };
 #else
@@ -197,6 +196,7 @@ TEST(mprotect, testRwxMap_vonNeumannRules) {
 }
 
 TEST(mprotect, testExecuteFlatFileMapOpenedAsReadonly) {
+  if (IsXnuSilicon()) return;  // TODO(jart): Use APE Loader SIP workaround?
   int (*p)(void);
   size_t n = sizeof(kRet31337);
   ASSERT_SYS(0, 3, creat("return31337", 0755));

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -55,14 +55,14 @@ void testlib_benchwarmup(void) {
 void EnableCruiseControlForCool(void) {
   int fd, micros = 10;
   if (!IsLinux()) return;
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   if ((fd = __sys_openat(AT_FDCWD, "/dev/cpu_dma_latency", O_WRONLY, 0)) !=
       -1) {
     sys_write(fd, &micros, sizeof(micros));
     sys_fcntl(fd, F_DUPFD_CLOEXEC, 123, __sys_fcntl);
     sys_close(fd);
   }
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
 }
 
 /**

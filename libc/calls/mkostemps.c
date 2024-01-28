@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -35,10 +35,10 @@
  * @see mkostemp() if you don't need suffix
  * @see mktemp() if you don't need an fd
  * @see tmpfd() if you don't need a path
- * @cancellationpoint
+ * @cancelationpoint
  */
 int mkostemps(char *template, int suffixlen, unsigned flags) {
   return openatemp(AT_FDCWD, template, suffixlen, flags, 0);
 }
 
-__strong_reference(mkostemps, mkostemps64);
+__weak_reference(mkostemps, mkostemps64);

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -23,7 +23,7 @@
 #include "libc/intrin/strace.internal.h"
 #include "libc/runtime/syslib.internal.h"
 #include "libc/sysv/consts/sicode.h"
-#include "libc/thread/tls.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Sends signal to self.
@@ -34,17 +34,26 @@
  *
  * Note `SIG_DFL` still results in process death for most signals.
  *
+ * POSIX defines raise() errors as returning non-zero and makes setting
+ * `errno` optional. Every platform we've tested in our support vector
+ * returns -1 with `errno` on error (like a normal system call).
+ *
  * @param sig can be SIGALRM, SIGINT, SIGTERM, SIGKILL, etc.
- * @return 0 on success, or nonzero on failure
+ * @return 0 on success, or -1 w/ errno
+ * @raise EINVAL if `sig` is invalid
  * @asyncsignalsafe
  */
 int raise(int sig) {
   int rc;
   if (IsXnuSilicon()) {
-    rc = __syslib->__raise(sig);
+    rc = _sysret(__syslib->__raise(sig));
   } else if (IsWindows()) {
-    __sig_raise(sig, SI_TKILL);
-    rc = 0;
+    if (0 <= sig && sig <= 64) {
+      __sig_raise(sig, SI_TKILL);
+      rc = 0;
+    } else {
+      rc = einval();
+    }
   } else {
     rc = sys_tkill(gettid(), sig, 0);
   }

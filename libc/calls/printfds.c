@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -19,6 +19,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
 #include "libc/calls/struct/fd.internal.h"
+#include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/kprintf.h"
 
 static const char *__fdkind2str(int x) {
@@ -29,10 +30,10 @@ static const char *__fdkind2str(int x) {
       return "kFdFile";
     case kFdSocket:
       return "kFdSocket";
-    case kFdProcess:
-      return "kFdProcess";
     case kFdConsole:
       return "kFdConsole";
+    case kFdDevNull:
+      return "kFdDevNull";
     case kFdSerial:
       return "kFdSerial";
     case kFdZip:
@@ -44,17 +45,17 @@ static const char *__fdkind2str(int x) {
   }
 }
 
-void __printfds(void) {
+void __printfds(struct Fd *fds, size_t fdslen) {
   int i;
-  __fds_lock();
-  for (i = 0; i < g_fds.n; ++i) {
-    if (!g_fds.p[i].kind) continue;
-    kprintf("%3d %s", i, __fdkind2str(g_fds.p[i].kind));
-    if (g_fds.p[i].flags) kprintf(" flags=%#x", g_fds.p[i].flags);
-    if (g_fds.p[i].mode) kprintf(" mode=%#o", g_fds.p[i].mode);
-    if (g_fds.p[i].handle) kprintf(" handle=%ld", g_fds.p[i].handle);
-    if (g_fds.p[i].extra) kprintf(" extra=%ld", g_fds.p[i].extra);
+  char buf[128];
+  for (i = 0; i < fdslen; ++i) {
+    if (!fds[i].kind) continue;
+    kprintf("%3d %s", i, __fdkind2str(fds[i].kind));
+    if (fds[i].flags) {
+      kprintf(" flags=%s", (DescribeOpenFlags)(buf, fds[i].flags));
+    }
+    if (fds[i].mode) kprintf(" mode=%#o", fds[i].mode);
+    if (fds[i].handle) kprintf(" handle=%ld", fds[i].handle);
     kprintf("\n");
   }
-  __fds_unlock();
 }

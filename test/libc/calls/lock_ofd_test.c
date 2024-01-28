@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -53,9 +53,9 @@ bool SupportsOfdLocks(void) {
   // getrandom() was introduced in linux 3.17
   // testing for getrandom() should be a sure thing w/o creating an fd
   e = errno;
-  BLOCK_CANCELLATIONS;
+  BLOCK_CANCELATION;
   r = !sys_getrandom(0, 0, 0);
-  ALLOW_CANCELLATIONS;
+  ALLOW_CANCELATION;
   errno = e;
   return r;
 }

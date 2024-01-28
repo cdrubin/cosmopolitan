@@ -1,6 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_INTRIN_GETAUXVAL_H_
 #define COSMOPOLITAN_LIBC_INTRIN_GETAUXVAL_H_
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 struct AuxiliaryValue {
@@ -8,8 +7,7 @@ struct AuxiliaryValue {
   bool isfound;
 };
 
-struct AuxiliaryValue __getauxval(unsigned long);
+struct AuxiliaryValue __getauxval(unsigned long) libcesque;
 
 COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_INTRIN_GETAUXVAL_H_ */

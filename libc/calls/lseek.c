@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -72,7 +72,6 @@
  * @raise EINVAL if resulting offset would be negative
  * @raise EINVAL if `whence` isn't valid
  * @asyncsignalsafe
- * @threadsafe
  * @vforksafe
  */
 int64_t lseek(int fd, int64_t offset, int whence) {
@@ -94,4 +93,4 @@ int64_t lseek(int fd, int64_t offset, int whence) {
   return rc;
 }
 
-__strong_reference(lseek, lseek64);
+__weak_reference(lseek, lseek64);

@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -40,10 +40,9 @@ __msabi extern typeof(ExitThread) *const __imp_ExitThread;
  *
  * @param rc only works on Linux and Windows
  * @see cthread_exit()
- * @threadsafe
  * @noreturn
  */
-privileged wontreturn void _Exit1(int rc) {
+wontreturn void _Exit1(int rc) {
 #ifdef __x86_64__
   char cf;
   int ax, dx, di, si;
@@ -75,13 +74,27 @@ privileged wontreturn void _Exit1(int rc) {
   }
   notpossible;
 #elif defined(__aarch64__)
-  if (IsLinux()) {
-    register long r0 asm("x0") = rc;
-    asm volatile("mov\tx8,%0\n\t"
-                 "svc\t0"
-                 : /* no outputs */
-                 : "i"(93), "r"(r0)
-                 : "x8", "memory");
+  if (IsLinux() || IsFreebsd()) {
+    register int x0 asm("x0") = rc;
+    register int x8 asm("x8");
+    if (IsLinux()) {
+      x8 = 93;  // exit
+    } else if (IsFreebsd()) {
+      x8 = 431;  // thr_exit
+    } else {
+      __builtin_unreachable();
+    }
+    asm volatile("svc\t0" : "+r"(x0) : "r"(x8) : "memory");
+    if (SupportsFreebsd()) {
+      // On FreeBSD, thr_exit() fails if the current thread is orphaned.
+      // In that case we're really better off just calling plain _exit()
+      x0 = rc;
+      asm volatile("mov\tx8,#1\n\t"
+                   "svc\t0"
+                   : /* no outputs */
+                   : "r"(x0)
+                   : "memory");
+    }
   } else if (IsXnu()) {
     __syslib->__pthread_exit(0);
   }

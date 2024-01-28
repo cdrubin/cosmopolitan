@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -22,6 +22,7 @@
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/likely.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/runtime/runtime.h"
 
 #define IsPeek(request) (IsLinux() && (request)-1u < 3)
 
@@ -45,7 +46,7 @@ int sys_ptrace(int op, ...) {
   data = va_arg(va, long *);
   va_end(va);
   rc = __sys_ptrace(op, pid, addr, data);
-#ifdef SYSDEBUG
+#if SYSDEBUG
   if (UNLIKELY(__strace > 0) && strace_enabled(0) > 0) {
     if (rc != -1 && IsPeek(op) && data) {
       STRACE("sys_ptrace(%s, %d, %p, [%p]) → %p% m", DescribePtrace(op), pid,

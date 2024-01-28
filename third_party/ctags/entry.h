@@ -1,4 +1,3 @@
-// clang-format off
 /*
 *   $Id: entry.h 443 2006-05-30 04:37:13Z darren $
 *
@@ -20,7 +19,6 @@
 #include "libc/calls/calls.h"
 #include "libc/stdio/dprintf.h"
 #include "libc/calls/weirdtypes.h"
-#include "libc/fmt/fmt.h"
 #include "libc/stdio/stdio.h"
 #include "libc/temp.h"
 #include "third_party/musl/tempnam.h"
