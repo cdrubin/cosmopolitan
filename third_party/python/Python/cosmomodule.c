@@ -23,7 +23,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/popcnt.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
@@ -332,7 +332,7 @@ Enables logging of C function calls to stderr, e.g.\n\
         WeirdFunction()\n\
 \n\
 Please be warned this prints massive amount of text. In order for it\n\
-to work, the concomitant .com.dbg binary needs to be present.");
+to work, the concomitant .dbg binary needs to be present.");
 #endif
 
 static PyObject *

@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/enum/formatmessageflags.h"
 #include "libc/nt/enum/lang.h"
@@ -30,6 +30,7 @@
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
+#include "libc/wctype.h"
 #include "libc/x/x.h"
 #include "third_party/getopt/getopt.internal.h"
 
@@ -69,7 +70,8 @@ static wontreturn void OutOfMemory(void) {
 
 static void *Calloc(size_t n, size_t z) {
   void *p;
-  if (!(p = calloc(n, z))) OutOfMemory();
+  if (!(p = calloc(n, z)))
+    OutOfMemory();
   return p;
 }
 
@@ -186,7 +188,8 @@ int main(int argc, char *argv[]) {
     int64_t hProcess;
     char16_t name[PATH_MAX];
     for (subcount = i = 0; i < n; i++) {
-      if (!pids[i]) continue;
+      if (!pids[i])
+        continue;
       if ((hProcess = MyOpenProcess(pids[i]))) {
         if (GetProcessName(hProcess, name)) {
           ConvertStringToLowercase16(name);

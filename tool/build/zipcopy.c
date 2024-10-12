@@ -23,16 +23,16 @@
 #include "libc/elf/struct/shdr.h"
 #include "libc/errno.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/serialize.h"
 #include "libc/limits.h"
 #include "libc/runtime/runtime.h"
+#include "libc/serialize.h"
 #include "libc/stdio/stdio.h"
 #include "libc/stdio/sysparam.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 #include "third_party/getopt/getopt.internal.h"
 
 static int infd;
@@ -51,7 +51,8 @@ static wontreturn void Die(const char *path, const char *reason) {
 
 static wontreturn void SysDie(const char *path, const char *func) {
   const char *errstr;
-  if (!(errstr = _strerdoc(errno))) errstr = "EUNKNOWN";
+  if (!(errstr = _strerdoc(errno)))
+    errstr = "EUNKNOWN";
   tinyprint(2, path, ": ", func, " failed with ", errstr, "\n", NULL);
   exit(1);
 }
@@ -85,8 +86,8 @@ FLAGS\n\
 \n\
 EXAMPLE\n\
 \n\
-  objcopy -SO binary foo.com.dbg foo.com\n\
-  zipcopy foo.com.dbg foo.com\n\
+  objcopy -SO binary foo.dbg foo\n\
+  zipcopy foo.dbg foo\n\
 \n\
 \n\
 ",
@@ -122,7 +123,7 @@ static void CopyZip(void) {
   //
   // if input is an elf file with sections, then the zip artifacts need
   // to have been linked into a .zip section and then later copied into
-  // the file end by fixupobj.com.
+  // the file end by fixupobj.
   //
   if (IsElf64Binary((ehdr = (Elf64_Ehdr *)inmap), insize) && ehdr->e_shnum &&
       (secstrs = GetElfSectionNameStringTable(ehdr, insize)) &&
@@ -133,7 +134,8 @@ static void CopyZip(void) {
   eocd = ineof - kZipCdirHdrMinSize;
   stop = MAX(eocd - 65536, inmap);
   for (;; --eocd) {
-    if (eocd < stop) return;
+    if (eocd < stop)
+      return;
     if (READ32LE(eocd) == kZipCdirHdrMagic) {
       if (IsZipEocd32(inmap, insize, eocd - inmap) != kZipOk) {
         Die(inpath, "found bad eocd record");
@@ -217,7 +219,8 @@ int main(int argc, char *argv[]) {
   ShowCrashReports();
 #endif
   prog = argv[0];
-  if (!prog) prog = "apelink";
+  if (!prog)
+    prog = "apelink";
   GetOpts(argc, argv);
   if ((infd = open(inpath, O_RDONLY)) == -1) {
     SysDie(inpath, "open");

@@ -19,18 +19,22 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/mem/alloca.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 
 static const char *DescribeCancelType(char buf[12], int err, int *t) {
-  if (err) return "n/a";
-  if (!t) return "NULL";
-  if (*t == PTHREAD_CANCEL_DEFERRED) return "PTHREAD_CANCEL_DEFERRED";
-  if (*t == PTHREAD_CANCEL_ASYNCHRONOUS) return "PTHREAD_CANCEL_ASYNCHRONOUS";
+  if (err)
+    return "n/a";
+  if (!t)
+    return "NULL";
+  if (*t == PTHREAD_CANCEL_DEFERRED)
+    return "PTHREAD_CANCEL_DEFERRED";
+  if (*t == PTHREAD_CANCEL_ASYNCHRONOUS)
+    return "PTHREAD_CANCEL_ASYNCHRONOUS";
   FormatInt32(buf, *t);
   return buf;
 }

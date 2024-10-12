@@ -17,9 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/thread/tls.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 //	Forks process without copying page tables.
 //
@@ -61,7 +61,7 @@ vfork:
 #endif
 	pop	%rbp
 #endif
-	mov	%fs:0,%r9		// get thread information block
+	mov	%gs:0x30,%r9		// get thread information block
 	mov	0x3c(%r9),%r8d		// avoid question of @vforksafe errno
 	pop	%rsi			// saves return address in a register
 	mov	__NR_vfork(%rip),%eax
@@ -121,7 +121,7 @@ vfork:
 //	} else {
 //	  __get_tls()->tib_flags &= ~TIB_FLAG_VFORKED;
 //	}
-	sub	x1,x28,#192		// sizeof(CosmoTib)
+	sub	x1,x28,#512		// sizeof(CosmoTib)
 	ldr	x2,[x1,64]
 	cbnz	x0,2f
 	orr	x2,x2,#TIB_FLAG_VFORKED

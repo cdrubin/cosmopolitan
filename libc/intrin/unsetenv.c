@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/getenv.internal.h"
+#include "libc/intrin/getenv.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
@@ -33,7 +33,8 @@
 int unsetenv(const char *s) {
   char **p;
   struct Env e;
-  if (!s || !*s || strchr(s, '=')) return einval();
+  if (!s || !*s || strchr(s, '='))
+    return einval();
   if ((p = environ)) {
     e = __getenv(p, s);
     while (p[e.i]) {

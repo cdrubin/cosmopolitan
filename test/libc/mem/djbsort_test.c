@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/limits.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/alg.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
@@ -97,8 +97,10 @@ TEST(djbsort, test64) {
 }
 
 static int CompareInt(const void *a, const void *b) {
-  if (*(const int *)a < *(const int *)b) return -1;
-  if (*(const int *)a > *(const int *)b) return +1;
+  if (*(const int *)a < *(const int *)b)
+    return -1;
+  if (*(const int *)a > *(const int *)b)
+    return +1;
   return 0;
 }
 

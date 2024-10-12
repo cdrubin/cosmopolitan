@@ -7,8 +7,8 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
-#include "libc/math.h"
-#include "libc/runtime/runtime.h"
+#include <cosmo.h>
+#include <math.h>
 
 void crash(long x0, long x1, long x2,  //
            double v0, double v1, double v2) {
@@ -18,6 +18,17 @@ void crash(long x0, long x1, long x2,  //
 void (*pCrash)(long, long, long, double, double, double) = crash;
 
 int main(int argc, char *argv[]) {
+
+  // // by default we launch an addr2line subprocess to print backtraces
+  // // with line numbers. you can force it to use the embedded solution
+  // setenv("ADDR2LINE", "", true);
+
+  // // using a seccomp sandbox is another way to force embedded backtraces
+  // pledge("stdio", NULL);
+
+  // enable the crash reporting feature
   ShowCrashReports();
+
+  // time to die
   pCrash(1, 2, 3, NAN, NAN, NAN);
 }

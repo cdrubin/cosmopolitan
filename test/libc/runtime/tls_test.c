@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/thread/tls.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
 
@@ -31,16 +30,16 @@ _Thread_local long y[1] = {40};
 _Alignas(A) _Thread_local long a;
 
 dontubsan void *Worker(void *arg) {
+  ASSERT_EQ(A, _Alignof(a));
+  ASSERT_EQ(0, (uintptr_t)&a & (_Alignof(a) - 1));
   ASSERT_EQ(42, x + y[0] + z);
   ASSERT_EQ(0, (intptr_t)&a & (A - 1));
-  if (IsAsan()) {
-    ASSERT_EQ(kAsanProtected, __asan_check(y + 1, sizeof(long)).kind);
-  }
   return 0;
 }
 
 TEST(tls, test) {
   ASSERT_EQ(A, _Alignof(a));
+  ASSERT_EQ(0, (uintptr_t)&a & (_Alignof(a) - 1));
   ASSERT_EQ(0, sizeof(struct CosmoTib) % A);
   ASSERT_EQ(0, (intptr_t)__get_tls() & (A - 1));
   EXPECT_EQ(2, z);
@@ -50,8 +49,4 @@ TEST(tls, test) {
   ASSERT_EQ(0, (intptr_t)&a & (A - 1));
   ASSERT_EQ(0, pthread_create(&t, 0, Worker, 0));
   ASSERT_EQ(0, pthread_join(t, 0));
-  if (IsAsan()) {
-    // TODO(jart): Why isn't it poisoned?
-    // ASSERT_EQ(kAsanProtected, __asan_check(y + 1, sizeof(long)).kind);
-  }
 }

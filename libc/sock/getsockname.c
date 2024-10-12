@@ -17,10 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/fds.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
@@ -29,6 +28,7 @@
 #include "libc/sock/struct/sockaddr.h"
 #include "libc/sock/struct/sockaddr.internal.h"
 #include "libc/sock/syscall_fd.internal.h"
+#include "libc/sysv/consts/af.h"
 #include "libc/sysv/errfuns.h"
 
 __msabi extern typeof(__sys_getsockname_nt) *const __imp_getsockname;

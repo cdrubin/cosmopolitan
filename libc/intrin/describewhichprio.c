@@ -17,13 +17,16 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/sysv/consts/prio.h"
 
-const char *(DescribeWhichPrio)(char buf[12], int x) {
-  if (x == PRIO_PROCESS) return "PRIO_PROCESS";
-  if (x == PRIO_PGRP) return "PRIO_PGRP";
-  if (x == PRIO_USER) return "PRIO_USER";
+const char *_DescribeWhichPrio(char buf[12], int x) {
+  if (x == PRIO_PROCESS)
+    return "PRIO_PROCESS";
+  if (x == PRIO_PGRP)
+    return "PRIO_PGRP";
+  if (x == PRIO_USER)
+    return "PRIO_USER";
   FormatInt32(buf, x);
   return buf;
 }

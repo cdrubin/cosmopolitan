@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
 #include "third_party/nsync/cv.h"
@@ -34,21 +35,25 @@ int Put(long v, nsync_time abs_deadline) {
   int err, added = 0, wake = 0;
   nsync_mu_lock(&mu);
   while (count == limit) {
-    if ((err = nsync_cv_wait_with_deadline(&non_full, &mu, abs_deadline, 0))) {
+    if ((err = nsync_cv_wait_with_deadline(&non_full, &mu, CLOCK_REALTIME,
+                                           abs_deadline, 0))) {
       ASSERT_EQ(ETIMEDOUT, err);
       ASSERT_NE(0, nsync_time_cmp(nsync_time_no_deadline, abs_deadline));
     }
   }
   if (count != limit) {
     int i = pos + count;
-    if (limit <= i) i -= limit;
+    if (limit <= i)
+      i -= limit;
     data[i] = v;
-    if (count == 0) wake = 1;
+    if (count == 0)
+      wake = 1;
     count++;
     added = 1;
   }
   nsync_mu_unlock(&mu);
-  if (wake) nsync_cv_broadcast(&non_empty);
+  if (wake)
+    nsync_cv_broadcast(&non_empty);
   return added;
 }
 
@@ -56,7 +61,8 @@ long Get(nsync_time abs_deadline) {
   long err, v = 0;
   nsync_mu_lock(&mu);
   while (!count) {
-    if ((err = nsync_cv_wait_with_deadline(&non_empty, &mu, abs_deadline, 0))) {
+    if ((err = nsync_cv_wait_with_deadline(&non_empty, &mu, CLOCK_REALTIME,
+                                           abs_deadline, 0))) {
       ASSERT_EQ(ETIMEDOUT, err);
       ASSERT_NE(0, nsync_time_cmp(nsync_time_no_deadline, abs_deadline));
     }

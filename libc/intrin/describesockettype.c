@@ -17,11 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sock.h"
 
-const char *(DescribeSocketType)(char buf[64], int type) {
+const char *_DescribeSocketType(char buf[64], int type) {
   int x;
   char *p;
   p = buf;
@@ -39,7 +39,9 @@ const char *(DescribeSocketType)(char buf[64], int type) {
   } else {
     p = FormatInt32(p, x);
   }
-  if (type & SOCK_CLOEXEC) p = stpcpy(p, "|SOCK_CLOEXEC");
-  if (type & SOCK_NONBLOCK) p = stpcpy(p, "|SOCK_NONBLOCK");
+  if (type & SOCK_CLOEXEC)
+    p = stpcpy(p, "|SOCK_CLOEXEC");
+  if (type & SOCK_NONBLOCK)
+    p = stpcpy(p, "|SOCK_NONBLOCK");
   return buf;
 }

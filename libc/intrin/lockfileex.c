@@ -17,9 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/describentoverlapped.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/describentoverlapped.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/enum/filelockflags.h"
 #include "libc/nt/files.h"
 
@@ -44,7 +44,8 @@ bool32 LockFileEx(int64_t hFile, uint32_t dwFlags, uint32_t dwReserved,
   }
   ok = __imp_LockFileEx(hFile, dwFlags, dwReserved, nNumberOfBytesToLockLow,
                         nNumberOfBytesToLockHigh, lpOverlapped);
-  if (!ok) __winerr();
+  if (!ok)
+    __winerr();
   NTTRACE("LockFileEx(%ld, %s, %#x, %'zu, [%s]) → %hhhd% m", hFile,
           DescribeNtLockFileFlags(dwFlags), dwReserved,
           (uint64_t)nNumberOfBytesToLockHigh << 32 | nNumberOfBytesToLockLow,

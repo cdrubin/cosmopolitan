@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/fd.internal.h"
+#include "libc/intrin/fds.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/nt/enum/fileflagandattributes.h"
@@ -29,8 +29,10 @@
 textwindows int sys_fchmod_nt(int fd, uint32_t mode) {
 
   // validate file descriptor
-  if (fd + 0u >= g_fds.n) return ebadf();
-  if (g_fds.p[fd].kind == kFdEmpty) return ebadf();
+  if (fd + 0u >= g_fds.n)
+    return ebadf();
+  if (g_fds.p[fd].kind == kFdEmpty)
+    return ebadf();
 
   // get current information
   struct NtFileBasicInfo fbi;

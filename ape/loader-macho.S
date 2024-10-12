@@ -16,13 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macho.internal.h"
+#include "libc/macho.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/dce.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 //	Apple Mach-O Executable Headers
-//	Fixups are applied by objbincopy.com
+//	Fixups are applied by objbincopy
 //	There must exist a MAC_LC_SEGMENT_64 for every PT_LOAD
 
 	.section .macho,"a",@progbits

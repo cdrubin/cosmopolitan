@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/files.h"
 #include "libc/nt/memory.h"
 #include "libc/nt/thunk/msabi.h"
@@ -31,7 +31,8 @@ __msabi extern typeof(SetCurrentDirectory) *const __imp_SetCurrentDirectoryW;
 textwindows bool32 SetCurrentDirectory(const char16_t *lpPathName) {
   bool32 ok;
   ok = __imp_SetCurrentDirectoryW(lpPathName);
-  if (!ok) __winerr();
+  if (!ok)
+    __winerr();
   NTTRACE("SetCurrentDirectory(%#hs) → %hhhd% m", lpPathName, ok);
   return ok;
 }

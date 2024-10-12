@@ -24,8 +24,10 @@
 
 static inline const char *strchrnul_pure(const char *s, int c) {
   for (;; ++s) {
-    if ((*s & 255) == (c & 255)) return s;
-    if (!*s) return s;
+    if ((*s & 255) == (c & 255))
+      return s;
+    if (!*s)
+      return s;
   }
 }
 
@@ -92,7 +94,7 @@ static const char *strchrnul_x64(const char *p, uint64_t c) {
  * @return pointer to first instance of c, or pointer to
  *     NUL terminator if c is not found
  */
-char *strchrnul(const char *s, int c) {
+__vex char *strchrnul(const char *s, int c) {
 #if defined(__x86_64__) && !defined(__chibicc__)
   const char *r;
   if (X86_HAVE(SSE)) {
@@ -105,8 +107,10 @@ char *strchrnul(const char *s, int c) {
 #else
   char *r;
   for (c &= 255; (uintptr_t)s & 7; ++s) {
-    if ((*s & 0xff) == c) return s;
-    if (!*s) return s;
+    if ((*s & 0xff) == c)
+      return s;
+    if (!*s)
+      return s;
   }
   r = strchrnul_x64(s, c);
   assert((*r & 255) == c || !*r);

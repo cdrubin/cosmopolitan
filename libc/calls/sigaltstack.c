@@ -21,9 +21,9 @@
 #include "libc/calls/struct/sigaltstack.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/syslib.internal.h"
 #include "libc/sysv/consts/ss.h"
@@ -77,10 +77,12 @@ static textwindows int sigaltstack_cosmo(const struct sigaltstack *neu,
   sigaltstack_setnew(neu);
   if (tib->tib_sigstack_addr <= bp &&
       bp <= tib->tib_sigstack_addr + tib->tib_sigstack_size) {
-    if (old) old->ss_flags |= SS_ONSTACK;
+    if (old)
+      old->ss_flags |= SS_ONSTACK;
     tib->tib_sigstack_flags = SS_ONSTACK;  // can't disable if on it
   } else if (!tib->tib_sigstack_size) {
-    if (old) old->ss_flags = SS_DISABLE;
+    if (old)
+      old->ss_flags = SS_DISABLE;
     tib->tib_sigstack_flags = SS_DISABLE;
   }
   return 0;
@@ -90,7 +92,8 @@ static int sigaltstack_bsd(const struct sigaltstack *neu,
                            struct sigaltstack *old) {
   int rc;
   struct sigaltstack_bsd oldbsd, neubsd, *neup = 0;
-  if (neu) sigaltstack2bsd(&neubsd, neu), neup = &neubsd;
+  if (neu)
+    sigaltstack2bsd(&neubsd, neu), neup = &neubsd;
   if (IsXnuSilicon()) {
     rc = _sysret(__syslib->__sigaltstack(neup, &oldbsd));
   } else {
@@ -99,7 +102,8 @@ static int sigaltstack_bsd(const struct sigaltstack *neu,
   if (rc == -1) {
     return -1;
   }
-  if (old) sigaltstack2linux(old, &oldbsd);
+  if (old)
+    sigaltstack2linux(old, &oldbsd);
   return 0;
 }
 
@@ -125,24 +129,24 @@ static int sigaltstack_bsd(const struct sigaltstack *neu,
  */
 int sigaltstack(const struct sigaltstack *neu, struct sigaltstack *old) {
   int rc;
-  if (IsAsan() && ((old && !__asan_is_valid(old, sizeof(*old))) ||
-                   (neu && !__asan_is_valid(neu, sizeof(*neu))))) {
-    rc = efault();
-  } else if (neu && ((neu->ss_size >> 32) ||  //
-                     (neu->ss_flags & ~(SS_ONSTACK | SS_DISABLE)))) {
+  if (neu && ((neu->ss_size >> 32) ||  //
+              (neu->ss_flags & ~(SS_ONSTACK | SS_DISABLE)))) {
     rc = einval();
-  } else if (neu && neu->ss_size < __get_minsigstksz()) {
+  } else if (neu && !(neu->ss_flags & SS_DISABLE) &&
+             neu->ss_size < __get_minsigstksz()) {
     rc = enomem();
   } else if (IsLinux()) {
     rc = sys_sigaltstack(neu, old);
-    if (!rc) sigaltstack_setnew(neu);
+    if (!rc)
+      sigaltstack_setnew(neu);
   } else if (IsBsd()) {
     rc = sigaltstack_bsd(neu, old);
-    if (!rc) sigaltstack_setnew(neu);
+    if (!rc)
+      sigaltstack_setnew(neu);
   } else {
     rc = sigaltstack_cosmo(neu, old);
   }
-  STRACE("sigaltstack(%s, [%s]) → %d% m", DescribeSigaltstk(0, neu),
-         DescribeSigaltstk(0, old), rc);
+  STRACE("sigaltstack(%s, [%s]) → %d% m", DescribeSigaltstack(0, neu),
+         DescribeSigaltstack(0, old), rc);
   return rc;
 }

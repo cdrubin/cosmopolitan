@@ -17,11 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/core/ks8.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "libc/x/x.h"
 #include "tool/viz/lib/convolution.h"
 #include "tool/viz/lib/graphic.h"
@@ -61,8 +61,10 @@ long sharpen(long cn, long yw, long xw, unsigned char p[cn][yw][xw], long yn,
       rc = enomem();
     }
     free(ta);
-    if (ix) free(ix - 1);
-    if (iy) free(iy - 1);
+    if (ix)
+      free(ix - 1);
+    if (iy)
+      free(iy - 1);
   } else {
     rc = einval();
   }

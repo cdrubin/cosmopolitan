@@ -21,13 +21,14 @@
 #include "libc/runtime/zipos.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 
 uint64_t __zipos_inode(struct Zipos *zipos, int64_t cfile,  //
                        const void *name, size_t namelen) {
   unassert(cfile >= 0);
   if (cfile == ZIPOS_SYNTHETIC_DIRECTORY) {
-    if (namelen && ((char *)name)[namelen - 1] == '/') --namelen;
+    if (namelen && ((char *)name)[namelen - 1] == '/')
+      --namelen;
     cfile = INT64_MIN | __fnv(name, namelen);
   }
   return cfile;

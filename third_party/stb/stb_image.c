@@ -25,7 +25,7 @@
 #include "libc/limits.h"
 #include "libc/log/gdb.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/x86feature.h"
@@ -36,10 +36,10 @@
 #include "third_party/aarch64/arm_neon.internal.h"
 #include "third_party/intel/ammintrin.internal.h"
 
-asm(".ident\t\"\\n\\n\
-stb_image (Public Domain)\\n\
-Credit: Sean Barrett, et al.\\n\
-http://nothings.org/stb\"");
+__notice(stb_image_notice, "\
+stb_image (Public Domain)\n\
+Credit: Sean Barrett, et al.\n\
+http://nothings.org/stb");
 
 #ifdef __x86_64__
 #define STBI_SSE2
@@ -4211,9 +4211,12 @@ static int stbi__parse_png_file(stbi__png *z, int scan, int req_comp) {
               tc16[k] = (uint16_t)stbi__get16be(s);  // copy the values as-is
           } else {
             for (k = 0; k < s->img_n; ++k)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
               tc[k] = (unsigned char)(stbi__get16be(s) & 255) *
                       stbi__depth_scale_table[z->depth];  // non 8-bit images
                                                           // will be larger
+#pragma GCC diagnostic pop
           }
         }
         break;

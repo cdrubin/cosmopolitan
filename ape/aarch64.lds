@@ -1,6 +1,7 @@
 /*-*- mode: ld-script; indent-tabs-mode: nil; tab-width: 2; coding: utf-8   -*-│
 │ vi: set et sts=2 sw=2 fenc=utf-8                                         :vi │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sysv/consts/prot.h"
 #include "libc/thread/tls.h"
 
 ENTRY(_start)
@@ -11,7 +12,7 @@ OUTPUT_FORMAT("elf64-littleaarch64",
 
 SECTIONS {
 
-  . = SEGMENT_START("text-segment", 0x010000000000);
+  . = SEGMENT_START("text-segment", 0x000800000000);
   __executable_start = .;
   . += SIZEOF_HEADERS;
 
@@ -89,10 +90,12 @@ SECTIONS {
     *(.ubsan.data)
   }
 
-  .comment : {
-    __comment_start = .;
-    KEEP(*(.comment))
+  .notice : {
+    __notices = .;
+    KEEP(*(.notice))
     BYTE(0);
+    BYTE(10);
+    BYTE(10);
   }
 
   .eh_frame_hdr : {
@@ -100,10 +103,8 @@ SECTIONS {
     *(.eh_frame_entry .eh_frame_entry.*)
   }
 
-  .eh_frame : ONLY_IF_RO {
-    KEEP(*(.eh_frame))
-    *(.eh_frame.*)
-  }
+  __eh_frame_hdr_start = SIZEOF(.eh_frame_hdr) > 0 ? ADDR(.eh_frame_hdr) : 0;
+  __eh_frame_hdr_end = SIZEOF(.eh_frame_hdr) > 0 ? . : 0;
 
   .gcc_except_table : ONLY_IF_RO {
     *(.gcc_except_table .gcc_except_table.*)
@@ -124,9 +125,11 @@ SECTIONS {
   . += CONSTANT(MAXPAGESIZE);
   . = DATA_SEGMENT_ALIGN(CONSTANT(MAXPAGESIZE), CONSTANT(COMMONPAGESIZE));
 
-  .eh_frame : ONLY_IF_RW {
+  .eh_frame : {
+    __eh_frame_start = .;
     KEEP(*(.eh_frame))
     *(.eh_frame.*)
+    __eh_frame_end = .;
   }
 
   .gnu_extab : ONLY_IF_RW {
@@ -157,8 +160,11 @@ SECTIONS {
 
   .init_array : {
     __init_array_start = .;
-    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
-    KEEP(*(.init_array EXCLUDE_FILE(*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
+    KEEP(*(.preinit_array))
+    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)
+           SORT_BY_INIT_PRIORITY(.ctors.*)))
+    KEEP(*(.init_array))
+    KEEP(*(.ctors))
     __init_array_end = .;
   }
 
@@ -280,15 +286,13 @@ SECTIONS {
 
 ape_stack_vaddr = DEFINED(ape_stack_vaddr) ? ape_stack_vaddr : 0x700000000000;
 ape_stack_memsz = DEFINED(ape_stack_memsz) ? ape_stack_memsz : 8 * 1024 * 1024;
-ape_stack_align = DEFINED(ape_stack_align) ? ape_stack_align : 16;
-ape_stack_round = -ape_stack_align;
+ape_stack_prot = PROT_READ | PROT_WRITE;
 
 _tls_size = _tbss_end - _tdata_start;
 _tdata_size = _tdata_end - _tdata_start;
 _tbss_size = _tbss_end - _tbss_start;
 _tbss_offset = _tbss_start - _tdata_start;
 _tls_content = (_tdata_end - _tdata_start) + (_tbss_end - _tbss_start);
-_tls_align = MAX(ALIGNOF(.tdata), ALIGNOF(.tbss));
-
-ASSERT(ALIGNOF(.tdata) <= TLS_ALIGNMENT && ALIGNOF(.tbss) <= TLS_ALIGNMENT,
-       "_Thread_local _Alignof can't exceed TLS_ALIGNMENT");
+_tdata_align = ALIGNOF(.tdata);
+_tbss_align = ALIGNOF(.tbss);
+_tls_align = MAX(TLS_ALIGNMENT, MAX(ALIGNOF(.tdata), ALIGNOF(.tbss)));

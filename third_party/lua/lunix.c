@@ -46,16 +46,15 @@
 #include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/atomic.h"
 #include "libc/serialize.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/synchronization.h"
 #include "libc/runtime/clktck.h"
-#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sock/sock.h"
@@ -103,8 +102,7 @@
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/thread.h"
-#include "libc/time/struct/tm.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "libc/x/x.h"
 #include "third_party/lua/cosmo.h"
 #include "third_party/lua/lauxlib.h"
@@ -112,6 +110,7 @@
 #include "third_party/lua/lua.h"
 #include "third_party/lua/luaconf.h"
 #include "third_party/nsync/futex.internal.h"
+#include "libc/sysv/consts/clock.h"
 #include "tool/net/luacheck.h"
 
 #define DNS_NAME_MAX  253
@@ -128,12 +127,13 @@ static void *LuaRealloc(lua_State *L, void *p, size_t n) {
   if ((p2 = realloc(p, n))) {
     return p2;
   }
-  if (IsLegalSize(n)) {
+  if (n < 0x100000000000) {
     WARNF("reacting to malloc() failure by running lua garbage collector...");
     luaC_fullgc(L, 1);
-    p2 = realloc(p, n);
+    if ((p2 = realloc(p, n)))
+      return p2;
   }
-  return p2;
+  return p;
 }
 
 static void *LuaAlloc(lua_State *L, size_t n) {
@@ -1008,7 +1008,7 @@ static int LuaUnixOpen(lua_State *L) {
   return SysretInteger(
       L, "open", olderr,
       openat(luaL_optinteger(L, 4, AT_FDCWD), luaL_checkstring(L, 1),
-             luaL_optinteger(L, 2, O_RDONLY), luaL_optinteger(L, 3, 0)));
+             luaL_optinteger(L, 2, O_RDONLY), luaL_optinteger(L, 3, 0644)));
 }
 
 // unix.tmpfd()
@@ -1567,7 +1567,10 @@ static int LuaUnixPoll(lua_State *L) {
         fds = fds2;
         ++nfds;
       } else {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuse-after-free"
         free(fds);
+#pragma GCC diagnostic pop
         return LuaUnixSysretErrno(L, "poll", olderr);
       }
     } else {
@@ -2853,7 +2856,7 @@ static int LuaUnixMemoryWait(lua_State *L) {
   }
   BEGIN_CANCELATION_POINT;
   rc = nsync_futex_wait_((atomic_int *)GetWord(L), expect,
-                         PTHREAD_PROCESS_SHARED, deadline);
+                         PTHREAD_PROCESS_SHARED, CLOCK_REALTIME, deadline);
   END_CANCELATION_POINT;
   if (rc < 0) errno = -rc, rc = -1;
   return SysretInteger(L, "futex_wait", olderr, rc);
@@ -2935,7 +2938,7 @@ static int LuaUnixMapshared(lua_State *L) {
     luaL_error(L, "size must be multiple of word size");
     __builtin_unreachable();
   }
-  if (!IsLegalSize(n)) {
+  if (n >= 0x100000000000) {
     luaL_error(L, "map size too big");
     __builtin_unreachable();
   }
@@ -3436,12 +3439,14 @@ int LuaUnix(lua_State *L) {
   LuaSetIntField(L, "SHUT_RDWR", SHUT_RDWR);
 
   // recvfrom() / sendto() flags
-  LuaSetIntField(L, "MSG_WAITALL", MSG_WAITALL);
-  LuaSetIntField(L, "MSG_DONTROUTE", MSG_DONTROUTE);
-  LuaSetIntField(L, "MSG_PEEK", MSG_PEEK);
   LuaSetIntField(L, "MSG_OOB", MSG_OOB);
+  LuaSetIntField(L, "MSG_PEEK", MSG_PEEK);
+  LuaSetIntField(L, "MSG_DONTROUTE", MSG_DONTROUTE);
+  LuaSetIntField(L, "MSG_DONTWAIT", MSG_DONTWAIT);
   LuaSetIntField(L, "MSG_NOSIGNAL", MSG_NOSIGNAL);
-  LuaSetIntField(L, "MSG_MORE", MSG_MORE);
+  LuaSetIntField(L, "MSG_WAITALL", MSG_WAITALL);
+  LuaSetIntField(L, "MSG_TRUNC", MSG_TRUNC);
+  LuaSetIntField(L, "MSG_CTRUNC", MSG_CTRUNC);
 
   // readdir() type
   LuaSetIntField(L, "DT_UNKNOWN", DT_UNKNOWN);

@@ -16,7 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/ctype.h"
+#include "libc/macros.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
 #include "libc/sysv/consts/af.h"
@@ -159,8 +160,10 @@ static int inet_pton_inet6_impl(const char *src, uint8_t *dst) {
 int inet_pton(int af, const char *src, void *dst) {
   uint8_t *p;
   int b, c, j;
-  if (af == AF_INET6) return inet_pton_inet6_impl(src, dst);
-  if (af != AF_INET) return eafnosupport();
+  if (af == AF_INET6)
+    return inet_pton_inet6_impl(src, dst);
+  if (af != AF_INET)
+    return eafnosupport();
   j = 0;
   p = dst;
   p[0] = 0;
@@ -168,9 +171,11 @@ int inet_pton(int af, const char *src, void *dst) {
     if (isdigit(c)) {
       b = c - '0' + p[j] * 10;
       p[j] = MIN(255, b);
-      if (b > 255) return 0;
+      if (b > 255)
+        return 0;
     } else if (c == '.') {
-      if (++j == 4) return 0;
+      if (++j == 4)
+        return 0;
       p[j] = 0;
     } else {
       return 0;

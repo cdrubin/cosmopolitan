@@ -16,9 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/strace.internal.h"
 #include "libc/dce.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/thread/pt.internal.h"
 
 #define SIG_IGN 1
@@ -108,7 +107,7 @@ systemfive_cp:
 systemfive_cancellable:			// our pthread_cancel() miracle code
 	cmpb	$0,__tls_enabled(%rip)	// inspired by the musl libc design!
 	je	1f			// we handle linux and bsd together!
-	mov	%fs:0,%r10		// CosmoTib::tib_self
+	mov	%gs:0x30,%r10		// CosmoTib::tib_self
 	mov	0x28(%r10),%r10		// CosmoTib::tib_pthread
 	test	%r10,%r10		// is it a posix thread?
 	jz	1f			// it's spawn() probably
@@ -135,7 +134,7 @@ systemfive_cancellable_end:		// i/o calls park here for long time
 	jne	systemfive_errno	// werent interrupted by OnSigCancel
 	cmpb	$0,__tls_enabled(%rip)	// make sure it's safe to grab %fs:0
 	je	systemfive_errno	// tls is disabled we can't continue
-	mov	%fs:0,%rcx		// CosmoTib::tib_self
+	mov	%gs:0x30,%rcx		// CosmoTib::tib_self
 	mov	0x28(%rcx),%rcx		// CosmoTib::tib_pthread
 	test	%rcx,%rcx		// is it a posix thread?
 	jz	systemfive_errno	// it's spawn() probably
@@ -378,30 +377,8 @@ _init_systemfive_magnums:
 	jnz	3b
 	xchg	%rbx,%rax
 	stosq
-#if SYSDEBUG
-	inc	%r8d
-#endif
 	jmp	2b
 5:	nop
-#if SYSDEBUG
-	push	%rdi
-	push	%rsi
-	push	%r8
-	call	__describe_os
-	mov	%rax,%rdx
-	pop	%r8
-	.weak	__stracef
-	ezlea	__stracef,ax
-	test	%rax,%rax
-	jz	5f
-	ezlea	.Llog,di
-	mov	%r8d,%esi
-	push	%rax
-	call	*%rax
-	pop	%rax
-5:	pop	%rsi
-	pop	%rdi
-#endif /* DEBUGSYS */
 	pop	%rdi
 	pop	%rsi
 	pop	%rbx
@@ -447,11 +424,3 @@ _init_systemfive_sigsys:
 _init_systemfive_done:
 	nop
 	.init.end 300,_init_systemfive,globl,hidden
-
-#if SYSDEBUG
-	.rodata.str1.1
-.Llog:	.ascii	STRACE_PROLOGUE
-	.ascii	"bell system five system call support"
-	.asciz	" %'u magnums loaded on %s\n"
-	.previous
-#endif /* DEBUGSYS */

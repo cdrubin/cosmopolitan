@@ -17,20 +17,22 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/intrin/fds.h"
 #include "libc/intrin/weaken.h"
 #include "libc/nt/enum/filetype.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/zipos.internal.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
 
 textwindows int sys_close_nt(int fd, int fildes) {
-  if (fd + 0u >= g_fds.n) return ebadf();
+  if (fd + 0u >= g_fds.n)
+    return ebadf();
   struct Fd *f = g_fds.p + fd;
   switch (f->kind) {
     case kFdZip:
@@ -50,11 +52,6 @@ textwindows int sys_close_nt(int fd, int fildes) {
         FlushFileBuffers(f->handle);
       }
       break;
-    case kFdEpoll:
-      if (_weaken(sys_close_epoll_nt)) {
-        return _weaken(sys_close_epoll_nt)(fd);
-      }
-      break;
     case kFdSocket:
       if (_weaken(sys_closesocket_nt)) {
         return _weaken(sys_closesocket_nt)(g_fds.p + fd);
@@ -63,5 +60,7 @@ textwindows int sys_close_nt(int fd, int fildes) {
     default:
       break;
   }
+  if (f->cursor)
+    __cursor_unref(f->cursor);
   return CloseHandle(f->handle) ? 0 : __winerr();
 }

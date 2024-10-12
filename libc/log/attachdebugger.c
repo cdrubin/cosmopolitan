@@ -20,7 +20,7 @@
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/gdb.h"
 #include "libc/log/internal.h"
@@ -72,7 +72,8 @@ relegated int(AttachDebugger)(intptr_t continuetoaddr) {
   layout = "layout asm";
   if ((elf = FindDebugBinary())) {
     se = "-se";
-    if (fileexists(__FILE__)) layout = "layout src";
+    if (fileexists(__FILE__))
+      layout = "layout src";
   } else {
     se = "-q";
     elf = "-q";

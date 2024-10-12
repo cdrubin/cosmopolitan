@@ -7,8 +7,7 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
-#include "libc/runtime/runtime.h"
-#include "libc/stdio/stdio.h"
+#include <stdlib.h>
 
 /**
  * @fileoverview Cosmopolitan Command Interpreter Demo

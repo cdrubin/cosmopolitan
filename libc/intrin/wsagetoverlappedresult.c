@@ -17,9 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
-#include "libc/intrin/describentoverlapped.internal.h"
+#include "libc/intrin/describentoverlapped.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/mem/alloca.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
@@ -50,7 +50,8 @@ bool32 WSAGetOverlappedResult(uint64_t s,
   bool32 ok;
   ok = __imp_WSAGetOverlappedResult(s, lpOverlapped, out_lpcbTransfer, fWait,
                                     out_lpdwFlags);
-  if (!ok) __winsockerr();
+  if (!ok)
+    __winsockerr();
   NTTRACE("WSAGetOverlappedResult(%ld, %s, [%s], %hhhd, [%#x]) → %hhhd% lm", s,
           DescribeNtOverlapped(lpOverlapped),
           DescribeTransfer(alloca(16), ok, out_lpcbTransfer), fWait,

@@ -17,8 +17,7 @@
 #include "libc/sock/select.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/rusage.h"
-#include "libc/time/struct/tm.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/boolobject.h"
 #include "third_party/python/Include/ceval.h"
@@ -1053,14 +1052,9 @@ _PyTime_GetProcessTimeWithInfo(_PyTime_t *tp, _Py_clock_info_t *info)
         *tp = (ReadFileTime(kernel_time) + ReadFileTime(user_time)) * 100;
         return 0;
     }
-    if (CLOCK_PROF != -1 || CLOCK_PROCESS_CPUTIME_ID != -1) {
-        if (CLOCK_PROF != -1) {
-            clk_id = CLOCK_PROF;
-            function = "clock_gettime(CLOCK_PROF)";
-        } else {
-            clk_id = CLOCK_PROCESS_CPUTIME_ID;
-            function = "clock_gettime(CLOCK_PROCESS_CPUTIME_ID)";
-        }
+    if (CLOCK_PROCESS_CPUTIME_ID != -1) {
+        clk_id = CLOCK_PROCESS_CPUTIME_ID;
+        function = "clock_gettime(CLOCK_PROCESS_CPUTIME_ID)";
         if (!clock_gettime(clk_id, &ts)) {
             if (info) {
                 info->implementation = function;

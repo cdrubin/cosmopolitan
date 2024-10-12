@@ -104,8 +104,10 @@ void *Worker(void *id) {
     if (client == -1) {
       // accept() errors are generally ephemeral or recoverable
       // it'd potentially be a good idea to exponential backoff here
-      if (errno == ECANCELED) continue;  // pthread_cancel() was called
-      if (errno == EMFILE) ExplainPrlimit();
+      if (errno == ECANCELED)
+        continue;  // pthread_cancel() was called
+      if (errno == EMFILE)
+        ExplainPrlimit();
       LOG("accept() returned %m");
       SomethingHappened();
       continue;
@@ -149,7 +151,7 @@ void *Worker(void *id) {
 
       // check that client message wasn't fragmented into more reads
       InitHttpMessage(&msg, kHttpRequest);
-      if ((inmsglen = ParseHttpMessage(&msg, buf, got)) <= 0) {
+      if ((inmsglen = ParseHttpMessage(&msg, buf, got, sizeof(buf))) <= 0) {
         if (!inmsglen) {
           LOG("%6H client sent fragmented message");
         } else {
@@ -285,10 +287,11 @@ int main(int argc, char *argv[]) {
   // print all the ips that 0.0.0.0 would bind
   // Cosmo's GetHostIps() API is much easier than ioctl(SIOCGIFCONF)
   uint32_t *hostips;
-  for (hostips = gc(GetHostIps()), i = 0; hostips[i]; ++i) {
+  for (hostips = GetHostIps(), i = 0; hostips[i]; ++i) {
     kprintf("listening on http://%hhu.%hhu.%hhu.%hhu:%hu\n", hostips[i] >> 24,
             hostips[i] >> 16, hostips[i] >> 8, hostips[i], PORT);
   }
+  free(hostips);
 
   // secure the server
   //
@@ -333,21 +336,22 @@ int main(int argc, char *argv[]) {
   sigaddset(&block, SIGHUP);
   sigaddset(&block, SIGQUIT);
   pthread_attr_t attr;
-  int pagesz = getauxval(AT_PAGESZ);
   unassert(!pthread_attr_init(&attr));
   unassert(!pthread_attr_setstacksize(&attr, 65536));
-  unassert(!pthread_attr_setguardsize(&attr, pagesz));
+  unassert(!pthread_attr_setguardsize(&attr, getpagesize()));
   unassert(!pthread_attr_setsigmask_np(&attr, &block));
   unassert(!pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0));
-  pthread_t *th = gc(calloc(threads, sizeof(pthread_t)));
+  pthread_t *th = calloc(threads, sizeof(pthread_t));
   for (i = 0; i < threads; ++i) {
     int rc;
     ++a_workers;
     if ((rc = pthread_create(th + i, &attr, Worker, (void *)(intptr_t)i))) {
       --a_workers;
       kprintf("pthread_create failed: %s\n", strerror(rc));
-      if (rc == EAGAIN) ExplainPrlimit();
-      if (!i) exit(1);
+      if (rc == EAGAIN)
+        ExplainPrlimit();
+      if (!i)
+        exit(1);
       threads = i;
       break;
     }
@@ -364,7 +368,8 @@ int main(int argc, char *argv[]) {
     PrintEphemeralStatusLine();
     unassert(!pthread_cond_wait(&statuscond, &statuslock));
     // limit status line updates to sixty frames per second
-    do tick = timespec_add(tick, (struct timespec){0, 1e9 / 60});
+    do
+      tick = timespec_add(tick, (struct timespec){0, 1e9 / 60});
     while (timespec_cmp(tick, timespec_real()) < 0);
     clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &tick, 0);
   }
@@ -378,7 +383,8 @@ int main(int argc, char *argv[]) {
   }
 
   // on windows this is the only way accept() can be canceled
-  if (IsWindows()) close(server);
+  if (IsWindows())
+    close(server);
 
   // print status in terminal as the shutdown progresses
   unassert(!pthread_mutex_lock(&statuslock));
@@ -392,9 +398,11 @@ int main(int argc, char *argv[]) {
   for (i = 0; i < threads; ++i) {
     unassert(!pthread_join(th[i], 0));
   }
+  free(th);
 
   // close the server socket
-  if (!IsWindows()) close(server);
+  if (!IsWindows())
+    close(server);
 
   // clean up terminal line
   LOG("thank you for choosing \e[32mgreenbean\e[0m");
@@ -404,7 +412,5 @@ int main(int argc, char *argv[]) {
   unassert(!pthread_mutex_destroy(&statuslock));
 
   // quality assurance
-  if (IsModeDbg()) {
-    CheckForMemoryLeaks();
-  }
+  CheckForMemoryLeaks();
 }

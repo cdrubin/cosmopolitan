@@ -3,7 +3,7 @@
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Lua                                                                         │
-│  Copyright © 2004-2021 Lua.org, PUC-Rio.                                     │
+│  Copyright © 2004-2023 Lua.org, PUC-Rio.                                     │
 │                                                                              │
 │  Permission is hereby granted, free of charge, to any person obtaining       │
 │  a copy of this software and associated documentation files (the             │
@@ -30,9 +30,9 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/errno.h"
-#include "libc/intrin/nomultics.internal.h"
+#include "libc/intrin/nomultics.h"
 #include "libc/log/check.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/alg.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
@@ -48,11 +48,7 @@
 #include "third_party/lua/lprefix.h"
 #include "third_party/lua/lua.h"
 #include "third_party/lua/lualib.h"
-
-asm(".ident\t\"\\n\\n\
-Lua 5.4.3 (MIT License)\\n\
-Copyright 1994–2021 Lua.org, PUC-Rio.\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("lua_notice");
 
 
 static const char *const kKeywordHints[] = {
@@ -339,7 +335,7 @@ void lua_initrepl(lua_State *L) {
     prompt = get_prompt(L, 1);
     if ((g_historypath = linenoiseGetHistoryPath(lua_progname))) {
       if (linenoiseHistoryLoad(g_historypath) == -1) {
-        fprintf(stderr, "%r%s: failed to load history: %m%n", g_historypath);
+        fprintf(stderr, "%r%s: failed to load history: %m\n", g_historypath);
         free(g_historypath);
         g_historypath = 0;
       }

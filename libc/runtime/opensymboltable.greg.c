@@ -22,15 +22,16 @@
 #include "libc/dce.h"
 #include "libc/elf/tinyelf.internal.h"
 #include "libc/errno.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/limits.h"
 #include "libc/log/libfatal.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/alg.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
@@ -48,16 +49,25 @@ static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
   size_t n, m, tsz, size;
   const Elf64_Sym *symtab, *sym;
   ptrdiff_t names_offset, name_base_offset, stp_offset;
+  long pagesz = __pagesize;
   map = MAP_FAILED;
-  if ((fd = open(filename, O_RDONLY | O_CLOEXEC)) == -1) return 0;
-  if ((filesize = lseek(fd, 0, SEEK_END)) == -1) goto SystemError;
-  if (filesize > INT_MAX) goto RaiseE2big;
-  if (filesize < 64) goto RaiseEnoexec;
+  if ((fd = open(filename, O_RDONLY | O_CLOEXEC)) == -1)
+    return 0;
+  if ((filesize = lseek(fd, 0, SEEK_END)) == -1)
+    goto SystemError;
+  if (filesize > INT_MAX)
+    goto RaiseE2big;
+  if (filesize < 64)
+    goto RaiseEnoexec;
   elf = map = mmap(0, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
-  if (map == MAP_FAILED) goto SystemError;
-  if (READ32LE((char *)map) != READ32LE("\177ELF")) goto RaiseEnoexec;
-  if (!(name_base = GetStrtab(map, &m))) goto RaiseEnobufs;
-  if (!(symtab = GetSymtab(map, &n))) goto RaiseEnobufs;
+  if (map == MAP_FAILED)
+    goto SystemError;
+  if (READ32LE((char *)map) != READ32LE("\177ELF"))
+    goto RaiseEnoexec;
+  if (!(name_base = GetStrtab(map, &m)))
+    goto RaiseEnobufs;
+  if (!(symtab = GetSymtab(map, &n)))
+    goto RaiseEnobufs;
   tsz = 0;
   tsz += sizeof(struct SymbolTable);
   tsz += sizeof(struct Symbol) * n;
@@ -65,13 +75,14 @@ static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
   tsz += sizeof(unsigned) * n;
   name_base_offset = tsz;
   tsz += m;
-  tsz = ROUNDUP(tsz, FRAMESIZE);
+  tsz = ROUNDUP(tsz, pagesz);
   stp_offset = tsz;
   size = tsz;
   tsz += sizeof(const Elf64_Sym *) * n;
-  tsz = ROUNDUP(tsz, FRAMESIZE);
+  tsz = ROUNDUP(tsz, pagesz);
   t = mmap(0, tsz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-  if (t == MAP_FAILED) goto SystemError;
+  if (t == MAP_FAILED)
+    goto SystemError;
   t->magic = SYMBOLS_MAGIC;
   t->abi = SYMBOLS_ABI;
   t->size = size;
@@ -90,8 +101,10 @@ static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
                                ELF64_ST_TYPE(sym->st_info) == STT_OBJECT))) {
       continue;
     }
-    if (sym->st_value > t->addr_end) continue;
-    if (sym->st_value < t->addr_base) continue;
+    if (sym->st_value > t->addr_end)
+      continue;
+    if (sym->st_value < t->addr_base)
+      continue;
     x = sym->st_value - t->addr_base;
     stp[m++] = (unsigned long)x << 32 | i;
   }
@@ -117,7 +130,7 @@ static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
     ++j;
   }
   t->count = j;
-  munmap(stp, ROUNDUP(sizeof(const Elf64_Sym *) * n, FRAMESIZE));
+  munmap(stp, sizeof(const Elf64_Sym *) * n);
   munmap(map, filesize);
   close(fd);
   return t;

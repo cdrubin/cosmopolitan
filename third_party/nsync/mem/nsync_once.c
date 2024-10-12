@@ -17,16 +17,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "third_party/nsync/atomic.h"
 #include "third_party/nsync/atomic.internal.h"
+#include "third_party/nsync/time.h"
 #include "third_party/nsync/common.internal.h"
 #include "third_party/nsync/mu_semaphore.h"
 #include "third_party/nsync/once.h"
 #include "third_party/nsync/races.internal.h"
+#include "libc/thread/thread.h"
 #include "third_party/nsync/wait_s.internal.h"
-
-asm(".ident\t\"\\n\\n\
-*NSYNC (Apache 2.0)\\n\
-Copyright 2016 Google, Inc.\\n\
-https://github.com/google/nsync\"");
+__static_yoink("nsync_notice");
 
 /* An once_sync_s struct contains a lock, and a condition variable on which
    threads may wait for an nsync_once to be initialized by another thread.
@@ -93,10 +91,10 @@ static void nsync_run_once_impl (nsync_once *once, struct once_sync_s *s,
 				if (attempts < 50) {
 					attempts += 10;
 				}
-				deadline = nsync_time_add (nsync_time_now (), nsync_time_ms (attempts));
-				nsync_cv_wait_with_deadline (&s->once_cv, &s->once_mu, deadline, NULL);
+				deadline = nsync_time_add (nsync_time_now (NSYNC_CLOCK), nsync_time_ms (attempts));
+				nsync_cv_wait_with_deadline (&s->once_cv, &s->once_mu, NSYNC_CLOCK, deadline, NULL);
 			} else {
-				attempts = nsync_spin_delay_ (attempts);
+				attempts = pthread_delay_np (once, attempts);
 			}
 		}
 		if (s != NULL) {

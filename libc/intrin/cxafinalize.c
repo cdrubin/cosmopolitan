@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/bsf.h"
-#include "libc/intrin/cxaatexit.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/cxaatexit.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -43,7 +43,7 @@ StartOverLocked:
     for (;;) {
       mask = b->mask;
       while (mask) {
-        i = _bsf(mask);
+        i = bsf(mask);
         mask &= ~(1u << i);
         if (!pred || pred == b->p[i].pred) {
           b->mask &= ~(1u << i);

@@ -15,7 +15,7 @@ TOOL_BUILD_OBJS =							\
 	$(TOOL_BUILD_SRCS:%.c=o/$(MODE)/%.o)
 
 TOOL_BUILD_COMS =							\
-	$(TOOL_BUILD_SRCS:%.c=o/$(MODE)/%.com)
+	$(TOOL_BUILD_SRCS:%.c=o/$(MODE)/%)
 
 TOOL_BUILD_CHECKS =							\
 	$(TOOL_BUILD).pkg						\
@@ -45,7 +45,6 @@ TOOL_BUILD_DIRECTDEPS =							\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
 	LIBC_THREAD							\
-	LIBC_TIME							\
 	LIBC_TINYMATH							\
 	LIBC_X								\
 	NET_HTTP							\
@@ -57,6 +56,7 @@ TOOL_BUILD_DIRECTDEPS =							\
 	THIRD_PARTY_MUSL						\
 	THIRD_PARTY_REGEX						\
 	THIRD_PARTY_STB							\
+	THIRD_PARTY_TZ							\
 	THIRD_PARTY_XED							\
 	THIRD_PARTY_ZLIB						\
 	THIRD_PARTY_ZLIB_GZ						\
@@ -69,7 +69,7 @@ o/$(MODE)/tool/build/build.pkg:						\
 		$(TOOL_BUILD_OBJS)					\
 		$(foreach x,$(TOOL_BUILD_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/tool/build/%.com.dbg:						\
+o/$(MODE)/tool/build/%.dbg:						\
 		$(TOOL_BUILD_DEPS)					\
 		o/$(MODE)/tool/build/build.pkg				\
 		o/$(MODE)/tool/build/%.o				\
@@ -78,17 +78,19 @@ o/$(MODE)/tool/build/%.com.dbg:						\
 	@$(APELINK)
 
 o/$(MODE)/tool/build/dso/sandbox-$(ARCH).so.zip.o			\
-o/$(MODE)/tool/build/false.com.zip.o					\
-o/$(MODE)/tool/build/echo.com.zip.o					\
-o/$(MODE)/tool/build/cocmd.com.zip.o: private				\
+o/$(MODE)/tool/build/false.zip.o					\
+o/$(MODE)/tool/build/echo.zip.o						\
+o/$(MODE)/tool/build/cocmd.zip.o: private				\
 		ZIPOBJ_FLAGS +=						\
 			-B
 
 # we need pic because:
 #   so it can be an LD_PRELOAD payload
+# we need fsanitize-trap=all becuase:
+#   so we don't need to pull in the entire ubsan runtime
 o/$(MODE)/tool/build/dso/sandbox.o: private				\
 		CFLAGS +=						\
-			-fPIC
+			-fPIC -fsanitize-trap=all
 
 o/$(MODE)/tool/build/dso/sandbox.o:					\
 		libc/calls/calls.h					\
@@ -96,7 +98,7 @@ o/$(MODE)/tool/build/dso/sandbox.o:					\
 		libc/calls/pledge.h					\
 		libc/runtime/runtime.h					\
 		libc/calls/pledge.internal.h				\
-		libc/intrin/promises.internal.h				\
+		libc/intrin/promises.h					\
 		tool/build/BUILD.mk
 
 o/$(MODE)/tool/build/dso/sandbox-$(ARCH).so:				\
@@ -115,7 +117,7 @@ o/$(MODE)/tool/build/dso/sandbox-$(ARCH).so:				\
 		o/$(MODE)/libc/sysv/restorert.o				\
 		$(OUTPUT_OPTION)
 
-o/$(MODE)/tool/build/pledge.com.dbg:					\
+o/$(MODE)/tool/build/pledge.dbg:					\
 		$(TOOL_BUILD_DEPS)					\
 		o/$(MODE)/tool/build/build.pkg				\
 		o/$(MODE)/tool/build/dso/sandbox-$(ARCH).so.zip.o	\
@@ -135,8 +137,8 @@ o/$(MODE)/tool/build/dso/dlopen_helper.so:				\
 		o/$(MODE)/tool/build/dso/dlopen_helper.o		\
 		$(OUTPUT_OPTION)
 
-o/$(MODE)/tool/build/dlopen_test.com.runs:				\
-		o/$(MODE)/tool/build/dlopen_test.com			\
+o/$(MODE)/tool/build/dlopen_test.runs:					\
+		o/$(MODE)/tool/build/dlopen_test			\
 		o/$(MODE)/tool/build/dso/dlopen_helper.so
 	$< o/$(MODE)/tool/build/dso/dlopen_helper.so
 

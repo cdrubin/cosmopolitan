@@ -18,15 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/str/blake2.h"
 #include "libc/assert.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/str/str.h"
 
 #define ROR(v, n) (((v) >> (n)) | ((v) << (64 - (n))))
 
-asm(".ident\t\"\\n\\n\
-boringssl blake2b (ISC License)\\n\
-Copyright 2021 Google LLC\"");
-asm(".include \"libc/disclaimer.inc\"");
+__notice(blake2b_notice, "\
+boringssl blake2b (ISC License)\n\
+Copyright 2021 Google LLC");
 
 // https://tools.ietf.org/html/rfc7693#section-2.6
 static const uint64_t kIV[8] = {
@@ -118,7 +117,8 @@ int BLAKE2B256_Update(struct Blake2b *b2b, const void *in_data, size_t len) {
   if (todo > len) {
     todo = len;
   }
-  if (todo) memcpy(&b2b->block.bytes[b2b->block_used], data, todo);
+  if (todo)
+    memcpy(&b2b->block.bytes[b2b->block_used], data, todo);
   b2b->block_used += todo;
   data += todo;
   len -= todo;
@@ -137,7 +137,8 @@ int BLAKE2B256_Update(struct Blake2b *b2b, const void *in_data, size_t len) {
     data += BLAKE2B_CBLOCK;
     len -= BLAKE2B_CBLOCK;
   }
-  if (len) memcpy(b2b->block.bytes, data, len);
+  if (len)
+    memcpy(b2b->block.bytes, data, len);
   b2b->block_used = len;
   return 0;
 }

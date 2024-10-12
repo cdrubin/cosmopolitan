@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
+#include "libc/thread/lock.h"
 #include "libc/thread/thread.h"
 
 /**
@@ -24,7 +25,6 @@
  *
  * @param type can be one of
  *     - `PTHREAD_MUTEX_NORMAL`
- *     - `PTHREAD_MUTEX_DEFAULT`
  *     - `PTHREAD_MUTEX_RECURSIVE`
  *     - `PTHREAD_MUTEX_ERRORCHECK`
  * @return 0 on success, or error on failure
@@ -35,7 +35,7 @@ errno_t pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type) {
     case PTHREAD_MUTEX_NORMAL:
     case PTHREAD_MUTEX_RECURSIVE:
     case PTHREAD_MUTEX_ERRORCHECK:
-      attr->_type = type;
+      attr->_word = MUTEX_SET_TYPE(attr->_word, type);
       return 0;
     default:
       return EINVAL;

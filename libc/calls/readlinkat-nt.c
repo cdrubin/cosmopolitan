@@ -18,7 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/ctype.h"
+#include "libc/intrin/strace.h"
 #include "libc/mem/alloca.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
@@ -40,15 +41,18 @@ static textwindows ssize_t sys_readlinkat_nt_impl(int dirfd, const char *path,
                                                   char *buf, size_t bufsiz) {
 
   char16_t path16[PATH_MAX];
-  if (__mkntpathat(dirfd, path, 0, path16) == -1) return -1;
+  if (__mkntpathat(dirfd, path, 0, path16) == -1)
+    return -1;
   size_t len = strlen16(path16);
   bool must_be_directory = len > 1 && path16[len - 1] == '\\';
-  if (must_be_directory) path16[--len] = 0;
+  if (must_be_directory)
+    path16[--len] = 0;
 
   int64_t h;
   ssize_t rc;
 #pragma GCC push_options
 #pragma GCC diagnostic ignored "-Walloca-larger-than="
+#pragma GCC diagnostic ignored "-Wanalyzer-out-of-bounds"
   uint32_t mem = 6000;
   volatile char *memory = alloca(mem);
   CheckLargeStackAllocation((char *)memory, mem);
@@ -116,7 +120,17 @@ static textwindows ssize_t sys_readlinkat_nt_impl(int dirfd, const char *path,
         }
         rc = j;
       } else {
-        NTTRACE("sys_readlinkat_nt() should have kNtIoReparseTagSymlink");
+        // e.g. 0xA000001D means IO_REPARSE_TAG_LX_SYMLINK
+        //
+        //     "WSL symlinks can't be opened from Windows, only from
+        //      within WSL, so if we identify them as fs.ModeSymlink,
+        //      then functions like filepath.Walk would fail when trying
+        //      to follow the link."
+        //
+        //            —Quoth Quim Muntal (dev on Go team at Microsoft)
+        //
+        // See also MSDN Learn § 2.1.2.1 Reparse Tags
+        NTTRACE("reparse tag %#x != kNtIoReparseTagSymlink", rdb->ReparseTag);
         rc = einval();
       }
     } else {

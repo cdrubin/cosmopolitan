@@ -16,9 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/dce.h"
-#include "libc/notice.inc"
 
 	nop
 
@@ -37,7 +36,7 @@ __gc:	.ftrace2
 
 #ifdef __x86_64__
 
-	mov	%fs:0,%rcx			// __get_tls()
+	mov	%gs:0x30,%rcx			// __get_tls()
 	mov	0x18(%rcx),%rcx			// tls::garbages
 	decl	(%rcx)				// --g->i
 	mov	(%rcx),%r8d			// r8 = g->i
@@ -67,7 +66,7 @@ __gc:	.ftrace2
 
 //	if this code fails
 //	check if CosmoTib's size changed
-	sub	x8,x28,#192			// __get_tls()
+	sub	x8,x28,#512			// __get_tls()
 	ldr	x9,[x8,0x18]			// tib::garbages
 	ldr	x10,[x9]			// g->i
 	ldr	x8,[x9,8]			// g->p

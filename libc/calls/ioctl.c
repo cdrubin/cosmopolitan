@@ -18,17 +18,16 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/serialize.h"
 #include "libc/intrin/cmpxchg.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/fds.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/alloca.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/console.h"
@@ -39,9 +38,11 @@
 #include "libc/nt/iphlpapi.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/ipadapteraddresses.h"
+#include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
+#include "libc/serialize.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/struct/ifconf.h"
 #include "libc/sock/struct/ifreq.h"
@@ -58,6 +59,8 @@
 /* Maximum number of unicast addresses handled for each interface */
 #define MAX_UNICAST_ADDR 32
 #define MAX_NAME_CLASH   ((int)('z' - 'a')) /* Allow a..z */
+
+__msabi extern typeof(__sys_ioctlsocket_nt) *const __imp_ioctlsocket;
 
 static struct HostAdapterInfoNode {
   struct HostAdapterInfoNode *next;
@@ -76,7 +79,7 @@ static int ioctl_default(int fd, unsigned long request, void *arg) {
   } else if (__isfdopen(fd)) {
     if (g_fds.p[fd].kind == kFdSocket) {
       handle = g_fds.p[fd].handle;
-      if ((rc = _weaken(__sys_ioctlsocket_nt)(handle, request, arg)) != -1) {
+      if ((rc = __imp_ioctlsocket(handle, request, arg)) != -1) {
         return rc;
       } else {
         return _weaken(__winsockerr)();
@@ -97,7 +100,7 @@ static int ioctl_fionread(int fd, uint32_t *arg) {
   } else if (__isfdopen(fd)) {
     handle = g_fds.p[fd].handle;
     if (g_fds.p[fd].kind == kFdSocket) {
-      if ((rc = _weaken(__sys_ioctlsocket_nt)(handle, FIONREAD, arg)) != -1) {
+      if ((rc = __imp_ioctlsocket(handle, FIONREAD, arg)) != -1) {
         return rc;
       } else {
         return _weaken(__winsockerr)();
@@ -107,8 +110,9 @@ static int ioctl_fionread(int fd, uint32_t *arg) {
       *arg = MAX(0, bytes);
       return 0;
     } else if (g_fds.p[fd].kind == kFdDevNull) {
-      *arg = 1;
-      return 0;
+      return enotty();
+    } else if (g_fds.p[fd].kind == kFdDevRandom) {
+      return einval();
     } else if (GetFileType(handle) == kNtFileTypePipe) {
       uint32_t avail;
       if (PeekNamedPipe(handle, 0, 0, 0, &avail, 0)) {
@@ -244,15 +248,23 @@ static textwindows struct HostAdapterInfoNode *appendHostInfo(
      * IFF_PROMISC          ** NOT SUPPORTED, unknown how to retrieve it
      */
     flags = 0;
-    if (aa->OperStatus == kNtIfOperStatusUp) flags |= IFF_UP | IFF_RUNNING;
-    if (aa->IfType == kNtIfTypePpp) flags |= IFF_POINTOPOINT;
-    if (!(aa->Flags & kNtIpAdapterNoMulticast)) flags |= IFF_MULTICAST;
-    if (aa->IfType == kNtIfTypeSoftwareLoopback) flags |= IFF_LOOPBACK;
-    if (aa->FirstPrefix) flags |= IFF_BROADCAST;
+    if (aa->OperStatus == kNtIfOperStatusUp)
+      flags |= IFF_UP | IFF_RUNNING;
+    if (aa->IfType == kNtIfTypePpp)
+      flags |= IFF_POINTOPOINT;
+    if (!(aa->Flags & kNtIpAdapterNoMulticast))
+      flags |= IFF_MULTICAST;
+    if (aa->IfType == kNtIfTypeSoftwareLoopback)
+      flags |= IFF_LOOPBACK;
+    if (aa->FirstPrefix)
+      flags |= IFF_BROADCAST;
     node->flags = flags;
   } else {
     /* Copy from previous node */
-    node->flags = parentInfoNode->flags;
+    if (parentInfoNode)
+      node->flags = parentInfoNode->flags;
+    else
+      node->flags = 0;
   }
 
   ip = ntohl(
@@ -344,13 +356,16 @@ static textwindows int createHostInfo(
     baseName[IFNAMSIZ - 2] = '\0';
     /* Replace any space with a '_' */
     for (i = 0; i < IFNAMSIZ - 2; ++i) {
-      if (baseName[i] == ' ') baseName[i] = '_';
-      if (!baseName[i]) break;
+      if (baseName[i] == ' ')
+        baseName[i] = '_';
+      if (!baseName[i])
+        break;
     }
     for (count = 0, ua = aa->FirstUnicastAddress, ap = aa->FirstPrefix;
          (ua != NULL) && (count < MAX_UNICAST_ADDR); ++count) {
       node = appendHostInfo(node, baseName, aa, &ua, &ap, count);
-      if (!node) goto err;
+      if (!node)
+        goto err;
       if (!__hostInfo) {
         __hostInfo = node;
         if (_cmpxchg(&once, false, true)) {
@@ -444,7 +459,8 @@ static textwindows int ioctl_siocgifconf_nt(int fd, struct ifconf *ifc) {
 static textwindows int ioctl_siocgifaddr_nt(int fd, struct ifreq *ifr) {
   struct HostAdapterInfoNode *node;
   node = findAdapterByName(ifr->ifr_name);
-  if (!node) return ebadf();
+  if (!node)
+    return ebadf();
   memcpy(&ifr->ifr_addr, &node->unicast, sizeof(struct sockaddr));
   return 0;
 }
@@ -453,7 +469,8 @@ static textwindows int ioctl_siocgifaddr_nt(int fd, struct ifreq *ifr) {
 static textwindows int ioctl_siocgifflags_nt(int fd, struct ifreq *ifr) {
   struct HostAdapterInfoNode *node;
   node = findAdapterByName(ifr->ifr_name);
-  if (!node) return ebadf();
+  if (!node)
+    return ebadf();
   ifr->ifr_flags = node->flags;
   return 0;
 }
@@ -462,7 +479,8 @@ static textwindows int ioctl_siocgifflags_nt(int fd, struct ifreq *ifr) {
 static textwindows int ioctl_siocgifnetmask_nt(int fd, struct ifreq *ifr) {
   struct HostAdapterInfoNode *node;
   node = findAdapterByName(ifr->ifr_name);
-  if (!node) return ebadf();
+  if (!node)
+    return ebadf();
   memcpy(&ifr->ifr_netmask, &node->netmask, sizeof(struct sockaddr));
   return 0;
 }
@@ -473,7 +491,8 @@ static textwindows int ioctl_siocgifnetmask_nt(int fd, struct ifreq *ifr) {
 static textwindows int ioctl_siocgifbrdaddr_nt(int fd, struct ifreq *ifr) {
   struct HostAdapterInfoNode *node;
   node = findAdapterByName(ifr->ifr_name);
-  if (!node) return ebadf();
+  if (!node)
+    return ebadf();
   memcpy(&ifr->ifr_broadaddr, &node->broadcast, sizeof(struct sockaddr));
   return 0;
 }
@@ -495,6 +514,7 @@ static int ioctl_siocgifconf_sysv(int fd, struct ifconf *ifc) {
   }
 #pragma GCC push_options
 #pragma GCC diagnostic ignored "-Walloca-larger-than="
+#pragma GCC diagnostic ignored "-Wanalyzer-out-of-bounds"
   bufMax = 15000; /* conservative guesstimate */
   b = alloca(bufMax);
   CheckLargeStackAllocation(b, bufMax);
@@ -513,7 +533,8 @@ static int ioctl_siocgifconf_sysv(int fd, struct ifconf *ifc) {
     for (p = b, e = p + MIN(bufMax, READ32LE(ifcBsd)); p + 16 + 16 <= e;
          p += IsBsd() ? 16 + MAX(16, p[16] & 255) : 40) {
       fam = p[IsBsd() ? 17 : 16] & 255;
-      if (fam != AF_INET) continue;
+      if (fam != AF_INET)
+        continue;
       ip = READ32BE(p + 20);
       bzero(req, sizeof(*req));
       memcpy(req->ifr_name, p, 16);
@@ -541,8 +562,10 @@ static inline void ioctl_sockaddr2linux(void *saddr) {
  * requires adjustment between Linux and XNU
  */
 static int ioctl_siocgifaddr_sysv(int fd, uint64_t op, struct ifreq *ifr) {
-  if (sys_ioctl(fd, op, ifr) == -1) return -1;
-  if (IsBsd()) ioctl_sockaddr2linux(&ifr->ifr_addr);
+  if (sys_ioctl(fd, op, ifr) == -1)
+    return -1;
+  if (IsBsd())
+    ioctl_sockaddr2linux(&ifr->ifr_addr);
   return 0;
 }
 

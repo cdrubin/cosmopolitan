@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/bsf.h"
-#include "libc/intrin/cxaatexit.internal.h"
+#include "libc/intrin/cxaatexit.h"
 #include "libc/log/log.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -41,17 +41,17 @@ void __cxa_printexits(FILE *f, void *pred) {
     do {
       mask = b->mask;
       while (mask) {
-        i = _bsf(mask);
+        i = bsf(mask);
         mask &= ~(1u << i);
         if (!pred || pred == b->p[i].pred) {
           symbol = GetSymbolByAddr((intptr_t)b->p[i].fp);
           if (symbol) {
             snprintf(name, sizeof(name), "%s", symbol);
           } else {
-            snprintf(name, sizeof(name), "0x%016lx", b->p[i].fp);
+            snprintf(name, sizeof(name), "0x%016lx", (unsigned long)b->p[i].fp);
           }
-          fprintf(f, "%-22s 0x%016lx 0x%016lx\n", name, b->p[i].arg,
-                  b->p[i].pred);
+          fprintf(f, "%-22s 0x%016lx 0x%016lx\n", name,
+                  (unsigned long)b->p[i].arg, (unsigned long)b->p[i].pred);
         }
       }
     } while ((b = b->next));

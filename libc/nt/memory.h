@@ -1,5 +1,6 @@
 #ifndef COSMOPOLITAN_LIBC_NT_MEMORY_H_
 #define COSMOPOLITAN_LIBC_NT_MEMORY_H_
+#include "libc/nt/struct/memextendedparameter.h"
 #include "libc/nt/struct/memorybasicinformation.h"
 #include "libc/nt/struct/memoryrangeentry.h"
 #include "libc/nt/struct/securityattributes.h"
@@ -81,6 +82,31 @@ void *HeapReAlloc(int64_t hHeap, uint32_t dwFlags, void *lpMem,
 
 void *GlobalAlloc(uint32_t uFlags, uint64_t dwBytes) __wur;
 void *GlobalFree(void *hMem);
+
+/**
+ * @param AllocationType
+ *     - kNtMemReserve
+ *     - kNtMemReplacePlaceholder
+ *     - kNtMemLargePages
+ */
+void *MapViewOfFile3(
+    intptr_t FileMapping, intptr_t Process, void *opt_BaseAddress,
+    uint64_t Offset, size_t ViewSize, unsigned AllocationType,
+    unsigned PageProtection,
+    struct NtMemExtendedParameter *in_out_opt_ExtendedParameters,
+    unsigned ParameterCount);
+
+void *VirtualAlloc2(
+    intptr_t opt_Process, void *opt_BaseAddress, size_t Size,
+    unsigned AllocationType, unsigned PageProtection,
+    struct NtMemExtendedParameter *in_out_opt_ExtendedParameters,
+    unsigned ParameterCount);
+
+bool32 PrefetchVirtualMemory(int64_t hProcess, uintptr_t NumberOfEntries,
+                             struct NtMemoryRangeEntry *VirtualAddresses,
+                             uint32_t reserved_Flags);
+bool32 OfferVirtualMemory(void *inout_VirtualAddress, size_t Size,
+                          int Priority);
 
 #if ShouldUseMsabiAttribute()
 #include "libc/nt/thunk/memory.inc"

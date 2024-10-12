@@ -23,7 +23,7 @@
 #include "libc/calls/struct/statfs.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nt/enum/fsinformationclass.h"
 #include "libc/nt/enum/status.h"
 #include "libc/nt/files.h"
@@ -54,7 +54,8 @@ textwindows int sys_fstatfs_nt(int64_t handle, struct statfs *f) {
   st = NtQueryVolumeInformationFile(handle, &io, &fs, sizeof(fs),
                                     kNtFileFsFullSizeInformation);
   if (!NtSuccess(st)) {
-    if (st == kNtStatusDllNotFound) return enosys();
+    if (st == kNtStatusDllNotFound)
+      return enosys();
     return eio();
   }
   for (h = j = i = 0; FileSystemNameBuffer[i]; i++) {

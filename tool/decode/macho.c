@@ -21,14 +21,14 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/libgen.h"
-#include "libc/intrin/safemacros.internal.h"
-#include "libc/macho.internal.h"
+#include "libc/intrin/safemacros.h"
+#include "libc/macho.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
@@ -48,7 +48,7 @@ static size_t machosize;
 static void startfile(void) {
   showtitle("αcτµαlly pδrταblε εxεcµταblε", "tool/decode/macho", NULL, NULL,
             &kModelineAsm);
-  printf("#include \"libc/macho.internal.h\"\n\n", path);
+  printf("#include \"libc/macho.h\"\n\n", path);
 }
 
 static void showmachoheader(void) {
@@ -187,7 +187,8 @@ static void showmacholoadgeneric(struct MachoLoadCommand *lc) {
       bzero(glyphs, sizeof(glyphs));
     }
     glyphs[col] = kCp437[c];
-    if (col) putchar(',');
+    if (col)
+      putchar(',');
     printf("0x%02x", c);
     if (++col == COLS) {
       col = 0;
@@ -334,7 +335,8 @@ void showall(void) {
 int main(int argc, char *argv[]) {
   int64_t fd;
   struct stat st[1];
-  if (argc != 2) fprintf(stderr, "usage: %s FILE\n", argv[0]), exit(1);
+  if (argc != 2)
+    fprintf(stderr, "usage: %s FILE\n", argv[0]), exit(1);
   if ((fd = open((path = argv[1]), O_RDONLY)) == -1 || fstat(fd, st) == -1 ||
       (macho = mmap(NULL, (machosize = st->st_size), PROT_READ, MAP_SHARED, fd,
                     0)) == MAP_FAILED) {

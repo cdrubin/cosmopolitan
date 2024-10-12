@@ -62,7 +62,10 @@
 #include "libc/sysv/consts/xopen.h"
 #include "libc/thread/thread.h"
 #include "third_party/hiredis/sds.h"
+#include "libc/ctype.h"
 #include "third_party/hiredis/sdsalloc.h"
+
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 
 static inline int sdsHdrSize(char type) {
     switch(type&SDS_TYPE_MASK) {

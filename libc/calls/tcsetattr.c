@@ -24,8 +24,7 @@
 #include "libc/calls/termios.internal.h"
 #include "libc/dce.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/mem/alloca.h"
 #include "libc/sysv/consts/termios.h"
@@ -35,9 +34,12 @@ void __on_tcsetattr(int);
 int tcsetattr_nt(int, int, const struct termios *);
 
 static const char *DescribeTcsa(char buf[12], int opt) {
-  if (opt == TCSANOW) return "TCSANOW";
-  if (opt == TCSADRAIN) return "TCSADRAIN";
-  if (opt == TCSAFLUSH) return "TCSAFLUSH";
+  if (opt == TCSANOW)
+    return "TCSANOW";
+  if (opt == TCSADRAIN)
+    return "TCSADRAIN";
+  if (opt == TCSAFLUSH)
+    return "TCSAFLUSH";
   FormatInt32(buf, opt);
   return buf;
 }
@@ -57,10 +59,6 @@ static int tcsetattr_impl(int fd, int opt, const struct termios *tio) {
       _weaken(__on_tcsetattr)(fd);
       once = true;
     }
-  }
-
-  if (IsAsan() && !__asan_is_valid(tio, sizeof(*tio))) {
-    return efault();
   }
 
   if (IsMetal()) {

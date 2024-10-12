@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/ctype.h"
 #include "libc/str/str.h"
 #include "net/http/ip.h"
 
@@ -38,7 +39,8 @@ struct Cidr ParseCidr(const char *s, size_t n) {
   size_t i;
   const char *p;
   struct Cidr c;
-  if (n == -1) n = s ? strlen(s) : 0;
+  if (n == -1)
+    n = s ? strlen(s) : 0;
   if ((p = strchr(s, '/'))) {
     if ((c.addr = ParseIp(s, (i = p - s))) != -1) {
       c.cidr = 0;

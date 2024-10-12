@@ -23,17 +23,18 @@
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/str/tpdecodecb.internal.h"
 #include "libc/str/utf16.h"
 #include "libc/sysv/errfuns.h"
 #include "third_party/gdtoa/gdtoa.h"
 
-#define READ                 \
-  ({                         \
-    int c = callback(arg);   \
-    if (c != -1) ++consumed; \
-    c;                       \
+#define READ               \
+  ({                       \
+    int c = callback(arg); \
+    if (c != -1)           \
+      ++consumed;          \
+    c;                     \
   })
 
 #define FP_BUFFER_GROW 48
@@ -49,6 +50,12 @@
       fpbuf[fpbufcur] = '\0';                 \
     }                                         \
     c;                                        \
+  })
+#define UNBUFFER                \
+  ({                            \
+    if (c != -1) {              \
+      fpbuf[--fpbufcur] = '\0'; \
+    }                           \
   })
 
 /**
@@ -144,7 +151,8 @@ int __vcscanf(int callback(void *),    //
               break;
             case 'c':
               rawmode = true;
-              if (!width) width = 1;
+              if (!width)
+                width = 1;
               // fallthrough
             case 's':
               while (isspace(c)) {
@@ -246,11 +254,15 @@ int __vcscanf(int callback(void *),    //
                 c = READ;
               }
               fpbufsize = FP_BUFFER_GROW;
-              fpbuf = malloc(fpbufsize);
-              fpbufcur = 0;
-              fpbuf[fpbufcur++] = c;
-              fpbuf[fpbufcur] = '\0';
-              goto ConsumeFloatingPointNumber;
+              if ((fpbuf = malloc(fpbufsize))) {
+                fpbufcur = 0;
+                fpbuf[fpbufcur++] = c;
+                fpbuf[fpbufcur] = '\0';
+                goto ConsumeFloatingPointNumber;
+              } else {
+                items = -1;
+                goto Done;
+              }
             default:
               items = einval();
               goto Done;
@@ -369,10 +381,11 @@ int __vcscanf(int callback(void *),    //
                   }
                 } while ((c = BUFFER) != -1 && c != ')');
                 if (c == ')') {
-                  c = BUFFER;
+                  c = READ;
                 }
                 goto GotFloatingPointNumber;
               } else {
+                UNBUFFER;
                 goto GotFloatingPointNumber;
               }
             } else {
@@ -410,9 +423,7 @@ int __vcscanf(int callback(void *),    //
                   goto Done;
                 }
               } else {
-                if (c != -1 && unget) {
-                  unget(c, arg);
-                }
+                UNBUFFER;
                 goto GotFloatingPointNumber;
               }
             } else {
@@ -465,13 +476,24 @@ int __vcscanf(int callback(void *),    //
         Continue:
           continue;
         Break:
-          if (c != -1 && unget) {
-            unget(c, arg);
-          }
+          UNBUFFER;
           break;
         } while ((c = BUFFER) != -1);
       GotFloatingPointNumber:
-        fp = strtod((char *)fpbuf, NULL);
+        /* An empty buffer can't be a valid float; don't even bother parsing. */
+        bool valid = fpbufcur > 0;
+        if (valid) {
+          char *ep;
+          fp = strtod((char *)fpbuf, &ep);
+          /* We should have parsed the whole buffer. */
+          valid = ep == (char *)fpbuf + fpbufcur;
+        }
+        free(fpbuf);
+        fpbuf = NULL;
+        fpbufcur = fpbufsize = 0;
+        if (!valid) {
+          goto Done;
+        }
         if (!discard) {
           ++items;
           void *out = va_arg(va, void *);
@@ -481,9 +503,6 @@ int __vcscanf(int callback(void *),    //
             *(double *)out = (double)fp;
           }
         }
-        free(fpbuf);
-        fpbuf = NULL;
-        fpbufcur = fpbufsize = 0;
         continue;
       ReportConsumed:
         n_ptr = va_arg(va, int *);
@@ -498,12 +517,16 @@ int __vcscanf(int callback(void *),    //
         if (discard) {
           buf = NULL;
         } else if (ismalloc) {
-          buf = malloc(bufsize * charbytes);
-          struct FreeMe *entry;
-          if (buf && (entry = calloc(1, sizeof(struct FreeMe)))) {
-            entry->ptr = buf;
-            entry->next = freeme;
-            freeme = entry;
+          if ((buf = malloc(bufsize * charbytes))) {
+            struct FreeMe *entry;
+            if (buf && (entry = calloc(1, sizeof(struct FreeMe)))) {
+              entry->ptr = buf;
+              entry->next = freeme;
+              freeme = entry;
+            }
+          } else {
+            items = -1;
+            goto Done;
           }
         } else {
           buf = va_arg(va, void *);
@@ -537,6 +560,12 @@ int __vcscanf(int callback(void *),    //
               if (!j && c == -1 && !items) {
                 items = -1;
                 goto Done;
+              } else if (rawmode && j != width) {
+                /* The C standard says that %c "matches a sequence of characters
+                 * of
+                 * **exactly** the number specified by the field width". If we
+                 * have fewer characters, what we've just read is invalid. */
+                goto Done;
               } else if (!rawmode && j < bufsize) {
                 if (charbytes == sizeof(char)) {
                   buf[j] = '\0';
@@ -556,7 +585,8 @@ int __vcscanf(int callback(void *),    //
           buf = NULL;
         } else {
           do {
-            if (isspace(c)) break;
+            if (isspace(c))
+              break;
           } while ((c = READ) != -1);
         }
         break;
@@ -571,9 +601,11 @@ Done:
   while (freeme) {
     struct FreeMe *entry = freeme;
     freeme = entry->next;
-    if (items == -1) free(entry->ptr);
+    if (items == -1)
+      free(entry->ptr);
     free(entry);
   }
-  if (fpbuf) free(fpbuf);
+  if (fpbuf)
+    free(fpbuf);
   return items;
 }

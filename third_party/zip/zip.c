@@ -20,8 +20,7 @@
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/sched.h"
 #include "libc/sysv/consts/timer.h"
-#include "libc/time/struct/tm.h"
-#include "libc/time/time.h"       /* for tzset() declaration */
+#include "libc/time.h"       /* for tzset() declaration */
 #if defined(WIN32) || defined(WINDLL)
 #  define WIN32_LEAN_AND_MEAN
 #include "libc/nt/accounting.h"
@@ -56,6 +55,7 @@
 #include "libc/str/str.h"
 #include "libc/errno.h"
 #include "libc/sysv/consts/sig.h"
+#include "libc/ctype.h"
 #include "third_party/bzip2/bzlib.h"
 
 #ifdef VMS

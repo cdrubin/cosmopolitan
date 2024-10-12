@@ -22,11 +22,11 @@
 #include "dsp/tty/ttyrgb.h"
 #include "dsp/tty/windex.h"
 #include "libc/assert.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/runtime/runtime.h"
@@ -666,7 +666,8 @@ static char *CopyBlock(char *v, const struct TtyRgb chunk[hasatleast 4],
                        struct Glyph *glyph) {
   unsigned i;
   CHECK_LT(pick.bg, 4);
-  if (pick.fg != 0xff) CHECK_LT(pick.fg, 4);
+  if (pick.fg != 0xff)
+    CHECK_LT(pick.fg, 4);
   i = 0;
   if (pick.fg == 0xff) {
     if (!ttyeq(*bg, chunk[pick.bg])) {
@@ -744,7 +745,8 @@ static dontinline char *CopyRun(char *v, size_t n,
     v = CopyGlyph(v, *glyph);
     *x += 2;
     *c += 2;
-    if (*x >= n) break;
+    if (*x >= n)
+      break;
     CopyChunk(chunk, *c, n);
   } while (ChunkEq(chunk, lastchunk));
   *x -= 2;

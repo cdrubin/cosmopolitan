@@ -16,13 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/str/slice.h"
 
 int CompareSlices(const char *a, size_t n, const char *b, size_t m) {
   int c;
-  if ((c = memcmp(a, b, MIN(n, m)))) return c;
-  if (n < m) return -1;
-  if (n > m) return +1;
+  if ((c = memcmp(a, b, MIN(n, m))))
+    return c;
+  if (n < m)
+    return -1;
+  if (n > m)
+    return +1;
   return 0;
 }

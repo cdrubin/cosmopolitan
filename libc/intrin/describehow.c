@@ -17,13 +17,16 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/sysv/consts/sig.h"
 
-const char *(DescribeHow)(char buf[12], int how) {
-  if (how == SIG_BLOCK) return "SIG_BLOCK";
-  if (how == SIG_UNBLOCK) return "SIG_UNBLOCK";
-  if (how == SIG_SETMASK) return "SIG_SETMASK";
+const char *_DescribeHow(char buf[12], int how) {
+  if (how == SIG_BLOCK)
+    return "SIG_BLOCK";
+  if (how == SIG_UNBLOCK)
+    return "SIG_UNBLOCK";
+  if (how == SIG_SETMASK)
+    return "SIG_SETMASK";
   FormatInt32(buf, how);
   return buf;
 }

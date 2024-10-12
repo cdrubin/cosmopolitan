@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/intrin/likely.h"
 #include "libc/str/str.h"
 
@@ -52,8 +51,8 @@ static const char kUtf8Dispatch[] = {
 bool32 isutf8(const void *data, size_t size) {
   long c;
   const char *p, *e;
-  if (size == -1) size = data ? strlen(data) : 0;
-  if (IsAsan()) __asan_verify(data, size);
+  if (size == -1)
+    size = data ? strlen(data) : 0;
   p = data;
   e = p + size;
   while (p < e) {
@@ -76,8 +75,10 @@ bool32 isutf8(const void *data, size_t size) {
       }
     }
 #endif
-    if (LIKELY((c = *p++ & 255) < 0200)) continue;
-    if (UNLIKELY(c < 0300)) return false;
+    if (LIKELY((c = *p++ & 255) < 0200))
+      continue;
+    if (UNLIKELY(c < 0300))
+      return false;
     switch (kUtf8Dispatch[c - 0300]) {
       case 0:
         return false;

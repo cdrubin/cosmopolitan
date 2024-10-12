@@ -16,8 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
-#include "libc/notice.inc"
+#include "libc/macros.h"
 
 //	Canary for -fstack-protector.
 //

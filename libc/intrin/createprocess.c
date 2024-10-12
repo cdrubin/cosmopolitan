@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/thunk/msabi.h"
@@ -44,7 +44,8 @@ CreateProcess(const char16_t *opt_lpApplicationName, char16_t *lpCommandLine,
                             bInheritHandles, dwCreationFlags, opt_lpEnvironment,
                             opt_lpCurrentDirectory, lpStartupInfo,
                             opt_out_lpProcessInformation);
-  if (!ok) __winerr();
+  if (!ok)
+    __winerr();
   NTTRACE("CreateProcess(%#!hs, %#!hs, %s, %s, %hhhd, %u, %p, %#!hs, %p, %p) → "
           "%hhhd% m",
           opt_lpApplicationName, lpCommandLine,

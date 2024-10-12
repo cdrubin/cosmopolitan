@@ -24,19 +24,11 @@ void nsync_yield_(void);
 /* Retrieve the per-thread cache of the waiter object.  Platform specific. */
 void *nsync_per_thread_waiter_(void (*dest)(void *));
 
-/* Used in spinloops to delay resumption of the loop.
-   Usage:
-       unsigned attempts = 0;
-       while (try_something) {
-          attempts = nsync_spin_delay_ (attempts);
-       } */
-unsigned nsync_spin_delay_(unsigned attempts);
-
 /* Spin until (*w & test) == 0, then atomically perform *w = ((*w | set) &
    ~clear), perform an acquire barrier, and return the previous value of *w.
    */
 uint32_t nsync_spin_test_and_set_(nsync_atomic_uint32_ *w, uint32_t test,
-                                  uint32_t set, uint32_t clear);
+                                  uint32_t set, uint32_t clear, void *symbol);
 
 /* Abort after printing the nul-temrinated string s[]. */
 void nsync_panic_(const char *s) wontreturn;
@@ -210,6 +202,7 @@ typedef struct waiter_s {
   struct wait_condition_s cond;      /* A condition on which to acquire a mu. */
   struct Dll same_condition;         /* Links neighbours in nw.q with same
                                         non-nil condition. */
+  struct waiter_s * next_free;
 } waiter;
 static const uint32_t WAITER_TAG = 0x0590239f;
 static const uint32_t NSYNC_WAITER_TAG = 0x726d2ba9;
@@ -218,7 +211,7 @@ static const uint32_t NSYNC_WAITER_TAG = 0x726d2ba9;
   0x1 /* waiter reserved by a thread, even when not in use */
 #define WAITER_IN_USE 0x2 /* waiter in use by a thread */
 
-#define ASSERT(x) npassert(x)
+#define ASSERT(x) unassert(x)
 
 /* Return a pointer to the nsync_waiter_s containing struct Dll *e. */
 #define DLL_NSYNC_WAITER(e)                 \
@@ -253,6 +246,7 @@ void nsync_waiter_free_(waiter *w);
    discipline.  */
 struct nsync_note_s_ {
   struct Dll parent_child_link; /* parent's children, under parent->note_mu  */
+  int clock; /* system clock that should be used */
   int expiry_time_valid; /* whether expiry_time is valid; r/o after init */
   nsync_time
       expiry_time;  /* expiry time, if expiry_time_valid != 0; r/o after init */
@@ -273,7 +267,7 @@ void nsync_mu_unlock_slow_(nsync_mu *mu, lock_type *l_type);
 struct Dll *nsync_remove_from_mu_queue_(struct Dll *mu_queue, struct Dll *e);
 void nsync_maybe_merge_conditions_(struct Dll *p, struct Dll *n);
 nsync_time nsync_note_notified_deadline_(nsync_note n);
-int nsync_sem_wait_with_cancel_(waiter *w, nsync_time abs_deadline,
+int nsync_sem_wait_with_cancel_(waiter *w, int clock, nsync_time abs_deadline,
                                 nsync_note cancel_note);
 
 COSMOPOLITAN_C_END_

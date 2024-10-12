@@ -24,7 +24,7 @@
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/overlapped.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "third_party/linenoise/linenoise.h"
 
 #define Read32(s) (s[3] << 24 | s[2] << 16 | s[1] << 8 | s[0])
@@ -40,9 +40,12 @@ static uint32_t GetFileExtension(const char16_t *s) {
   n = s ? strlen16(s) : 0;
   for (i = w = 0; n--;) {
     wint_t c = s[n];
-    if (!IsGraph(c)) return 0;
-    if (c == '.') break;
-    if (++i > 4) return 0;
+    if (!IsGraph(c))
+      return 0;
+    if (c == '.')
+      break;
+    if (++i > 4)
+      return 0;
     w <<= 8;
     w |= kToLower[c];
   }

@@ -16,14 +16,15 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/describentoverlapped.internal.h"
+#include "libc/intrin/describentoverlapped.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
-const char *(DescribeNtOverlapped)(char b[128], const struct NtOverlapped *o) {
+const char *_DescribeNtOverlapped(char b[128], const struct NtOverlapped *o) {
   int i = 0, n = 128;
   bool gotsome = false;
-  if (!o) return "NULL";
+  if (!o)
+    return "NULL";
   i += ksnprintf(b + i, MAX(0, n - i), "{");
 
   if (o->hEvent) {

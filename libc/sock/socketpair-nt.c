@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
@@ -33,7 +34,8 @@
 #include "libc/sysv/errfuns.h"
 #ifdef __x86_64__
 
-textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
+textwindows static int sys_socketpair_nt_impl(int family, int type, int proto,
+                                              int sv[2]) {
   uint32_t mode;
   int64_t hpipe, h1;
   char16_t pipename[64];
@@ -45,7 +47,8 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
   }
 
   oflags = 0;
-  if (type & SOCK_CLOEXEC) oflags |= O_CLOEXEC;
+  if (type & SOCK_CLOEXEC)
+    oflags |= O_CLOEXEC;
   type &= ~SOCK_CLOEXEC;
 
   if (type == SOCK_STREAM) {
@@ -62,8 +65,10 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
   writer = __reservefd_unlocked(-1);
   __fds_unlock();
   if (reader == -1 || writer == -1) {
-    if (reader != -1) __releasefd(reader);
-    if (writer != -1) __releasefd(writer);
+    if (reader != -1)
+      __releasefd(reader);
+    if (writer != -1)
+      __releasefd(writer);
     return -1;
   }
   if ((hpipe = CreateNamedPipe(
@@ -105,6 +110,14 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
 
   __fds_unlock();
 
+  return rc;
+}
+
+textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
+  int rc;
+  BLOCK_SIGNALS;
+  rc = sys_socketpair_nt_impl(family, type, proto, sv);
+  ALLOW_SIGNALS;
   return rc;
 }
 

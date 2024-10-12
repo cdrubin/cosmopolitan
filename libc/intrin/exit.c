@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/promises.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/promises.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/nexgen32e/vendor.internal.h"
 #include "libc/nt/enum/status.h"
@@ -109,7 +109,8 @@ wontreturn void _Exit(int exitcode) {
       "push\t$0\n\t"
       "cli\n\t"
       "lidt\t(%rsp)");
-  for (;;) asm("ud2");
+  for (;;)
+    asm("ud2");
 #else
   __builtin_unreachable();
 #endif

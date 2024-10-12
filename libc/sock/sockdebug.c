@@ -18,8 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/macros.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/sockaddr.h"
 #include "libc/sock/struct/sockaddr6.h"
@@ -28,8 +28,8 @@
 #include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/sock.h"
 
-const char *(DescribeSockaddr)(char buf[128], const struct sockaddr *sa,
-                               size_t sasize) {
+const char *_DescribeSockaddr(char buf[128], const struct sockaddr *sa,
+                              size_t sasize) {
   int e;
   size_t n;
   char *p, ip[72];
@@ -56,7 +56,7 @@ const char *(DescribeSockaddr)(char buf[128], const struct sockaddr *sa,
         p = stpcpy(p, ip);
         *p++ = ']';
         *p++ = ':';
-        p = FormatUint32(p, in6->sin6_port);
+        p = FormatUint32(p, ntohs(in6->sin6_port));
       }
     } else if (sa->sa_family == AF_UNIX &&
                sasize >= sizeof(struct sockaddr_un)) {
@@ -64,7 +64,8 @@ const char *(DescribeSockaddr)(char buf[128], const struct sockaddr *sa,
       unix = (const struct sockaddr_un *)sa;
       n = strnlen(unix->sun_path, sizeof(unix->sun_path));
       n = MIN(n, 128 - 1);
-      if (n) memcpy(buf, unix->sun_path, n);
+      if (n)
+        memcpy(buf, unix->sun_path, n);
       buf[n] = 0;
     }
   }

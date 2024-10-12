@@ -27,9 +27,8 @@
 #include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 
@@ -84,9 +83,11 @@ static void copy_file_range_init(void) {
  * @return number of bytes transferred, or -1 w/ errno
  * @raise EXDEV if source and destination are on different filesystems
  * @raise EBADF if `infd` or `outfd` aren't open files or append-only
+ * @raise EOPNOTSUPP if filesystem doesn't support this operation
  * @raise EPERM if `fdout` refers to an immutable file on Linux
  * @raise ECANCELED if thread was cancelled in masked mode
  * @raise EINVAL if ranges overlap or `flags` is non-zero
+ * @raise EINVAL on eCryptFs filesystems that have a bug
  * @raise EFBIG if `setrlimit(RLIMIT_FSIZE)` is exceeded
  * @raise EFAULT if one of the pointers memory is bad
  * @raise ERANGE if overflow happens computing ranges
@@ -109,11 +110,6 @@ ssize_t copy_file_range(int infd, int64_t *opt_in_out_inoffset, int outfd,
 
   if (!g_copy_file_range.ok) {
     rc = enosys();
-  } else if (IsAsan() && ((opt_in_out_inoffset &&
-                           !__asan_is_valid(opt_in_out_inoffset, 8)) ||
-                          (opt_in_out_outoffset &&
-                           !__asan_is_valid(opt_in_out_outoffset, 8)))) {
-    rc = efault();
   } else if (__isfdkind(outfd, kFdZip)) {
     rc = ebadf();
   } else if (__isfdkind(infd, kFdZip)) {

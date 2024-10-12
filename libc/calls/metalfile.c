@@ -29,10 +29,10 @@
 #include "libc/assert.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/metalfile.internal.h"
-#include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/directmap.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/weaken.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/pc.internal.h"
 #include "libc/runtime/runtime.h"
@@ -75,7 +75,9 @@ textstartup void InitializeMetalFile(void) {
     memcpy(copied_base, (void *)(BANE + IMAGE_BASE_PHYSICAL), size);
     __ape_com_base = copied_base;
     __ape_com_size = size;
-    KINFOF("%s @ %p,+%#zx", APE_COM_NAME, copied_base, size);
+    // TODO(tkchia): LIBC_CALLS doesn't depend on LIBC_VGA so references
+    //               to its functions need to be weak
+    // KINFOF("%s @ %p,+%#zx", APE_COM_NAME, copied_base, size);
   }
 }
 

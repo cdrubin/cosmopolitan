@@ -19,7 +19,7 @@
 #include "libc/serialize.h"
 #include "libc/intrin/bsf.h"
 #include "libc/intrin/bswap.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/runtime/runtime.h"
@@ -33,12 +33,7 @@
 #include "third_party/mbedtls/platform.h"
 #include "third_party/mbedtls/profile.h"
 #include "third_party/mbedtls/select.h"
-
-asm(".ident\t\"\\n\\n\
-Mbed TLS (Apache 2.0)\\n\
-Copyright ARM Limited\\n\
-Copyright Mbed TLS Contributors\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("mbedtls_notice");
 
 /**
  * @fileoverview Big Numbers.

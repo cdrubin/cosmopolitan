@@ -17,8 +17,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/mem/mem.h"
 #include "libc/stdio/stdio.h"
-#include "libc/time/struct/tm.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "third_party/mbedtls/asn1.h"
 #include "third_party/mbedtls/certs.h"
 #include "third_party/mbedtls/common.h"
@@ -28,12 +27,7 @@
 #include "third_party/mbedtls/platform.h"
 #include "third_party/mbedtls/x509.h"
 #include "third_party/mbedtls/x509_crt.h"
-
-asm(".ident\t\"\\n\\n\
-Mbed TLS (Apache 2.0)\\n\
-Copyright ARM Limited\\n\
-Copyright Mbed TLS Contributors\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("mbedtls_notice");
 
 /*
  *  X.509 common functions for parsing and verification

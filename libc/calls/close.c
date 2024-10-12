@@ -20,14 +20,14 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/fds.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/runtime/zipos.internal.h"
 #include "libc/sock/syscall_fd.internal.h"
@@ -74,7 +74,6 @@ static int close_impl(int fd) {
  * - openat()
  * - socket()
  * - accept()
- * - epoll_create()
  * - landlock_create_ruleset()
  *
  * This function should never be reattempted if an error is returned;
@@ -93,16 +92,18 @@ static int close_impl(int fd) {
  */
 int close(int fd) {
   int rc;
-  if (__isfdkind(fd, kFdZip)) {   // XXX IsWindows()?
+  if (__isfdkind(fd, kFdZip)) {  // XXX IsWindows()?
     BLOCK_SIGNALS;
     __fds_lock();
     rc = close_impl(fd);
-    if (!__vforked) __releasefd(fd);
+    if (!__vforked)
+      __releasefd(fd);
     __fds_unlock();
     ALLOW_SIGNALS;
   } else {
     rc = close_impl(fd);
-    if (!__vforked) __releasefd(fd);
+    if (!__vforked)
+      __releasefd(fd);
   }
   STRACE("close(%d) → %d% m", fd, rc);
   return rc;

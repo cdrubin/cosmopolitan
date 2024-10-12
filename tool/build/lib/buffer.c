@@ -19,7 +19,7 @@
 #include "tool/build/lib/buffer.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/stdio/stdio.h"
@@ -32,7 +32,8 @@ void AppendData(struct Buffer *b, const char *data, size_t len) {
   unsigned n;
   if (b->i + len + 1 > b->n) {
     n = MAX(b->i + len + 1, MAX(16, b->n + (b->n >> 1)));
-    if (!(p = realloc(b->p, n))) return;
+    if (!(p = realloc(b->p, n)))
+      return;
     b->p = p;
     b->n = n;
   }

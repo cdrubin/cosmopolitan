@@ -18,15 +18,15 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/intrin/describebacktrace.internal.h"
+#include "libc/intrin/describebacktrace.h"
 #include "libc/runtime/runtime.h"
 #include "third_party/nsync/common.internal.h"
 
 /* Aborts after printing the nul-terminated string s[]. */
 void nsync_panic_ (const char *s) {
-	tinyprint(2, "error: nsync panic: ", s,
-		"cosmoaddr2line ", program_invocation_name, " ",
-		DescribeBacktrace (__builtin_frame_address (0)), "\n",
-		NULL);
+	tinyprint (2, "error: nsync panic: ", s,
+		   "cosmoaddr2line ", program_invocation_name, " ",
+		   DescribeBacktrace (__builtin_frame_address (0)), "\n",
+		   NULL);
 	_Exit (44);
 }

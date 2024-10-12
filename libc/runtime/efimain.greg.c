@@ -21,7 +21,7 @@
 #include "libc/dce.h"
 #include "libc/intrin/newbie.h"
 #include "libc/intrin/weaken.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nt/efi.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/runtime/e820.internal.h"
@@ -29,6 +29,9 @@
 #include "libc/runtime/pc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 
 #ifdef __x86_64__
 
@@ -106,7 +109,8 @@ static void EfiInitVga(struct mman *mm, EFI_SYSTEM_TABLE *SystemTable) {
     default:
       notpossible;
   }
-  if (!bytes_per_pix) notpossible;
+  if (!bytes_per_pix)
+    notpossible;
   mm->pc_video_type = vid_typ;
   mm->pc_video_stride = GraphMode->Info->PixelsPerScanLine * bytes_per_pix;
   mm->pc_video_width = GraphMode->Info->HorizontalResolution;
@@ -157,12 +161,12 @@ static void EfiInitAcpi(struct mman *mm, EFI_SYSTEM_TABLE *SystemTable) {
  *       -net none        \
  *       -drive format=raw,file=fat:rw:o/tool/viz
  *     FS0:
- *     deathstar.com
+ *     deathstar
  *
  * @see libc/dce.h
  */
 __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
-                                    EFI_SYSTEM_TABLE *SystemTable) {
+                           EFI_SYSTEM_TABLE *SystemTable) {
   struct mman *mm;
   uint32_t DescVersion;
   uintptr_t i, j, MapSize;
@@ -214,17 +218,18 @@ __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
   SystemTable->BootServices->HandleProtocol(ImageHandle,
                                             &kEfiLoadedImageProtocol, &ImgInfo);
   CmdLine = (const char16_t *)ImgInfo->LoadOptions;
-  if (!CmdLine || !CmdLine[0]) CmdLine = u"BOOTX64.EFI";
-  Args = GetDosArgv(CmdLine, ArgBlock->ArgBlock,
-                    sizeof(ArgBlock->ArgBlock), ArgBlock->Args,
-                    ARRAYLEN(ArgBlock->Args));
+  if (!CmdLine || !CmdLine[0])
+    CmdLine = u"BOOTX64.EFI";
+  Args = GetDosArgv(CmdLine, ArgBlock->ArgBlock, sizeof(ArgBlock->ArgBlock),
+                    ArgBlock->Args, ARRAYLEN(ArgBlock->Args));
 
   /*
    * Gets information about our current video mode.  Clears the screen.
    * TODO: if needed, switch to a video mode that has a linear frame buffer
    * type we support.
    */
-  if (_weaken(vga_console)) EfiInitVga(mm, SystemTable);
+  if (_weaken(vga_console))
+    EfiInitVga(mm, SystemTable);
 
   /*
    * Gets a pointer to the ACPI RSDP.
@@ -248,7 +253,8 @@ __msabi EFI_STATUS EfiMain(EFI_HANDLE ImageHandle,
       case EfiLoaderData:
       case EfiBootServicesCode:
       case EfiBootServicesData:
-        if (Desc->PhysicalStart != 0) break;
+        if (Desc->PhysicalStart != 0)
+          break;
         /* fallthrough */
       case EfiConventionalMemory:
         mm->e820[j].addr = Desc->PhysicalStart;

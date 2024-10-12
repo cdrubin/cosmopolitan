@@ -19,7 +19,7 @@
 #include "libc/assert.h"
 #include "libc/fmt/conv.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/stdio/stdio.h"
@@ -48,16 +48,20 @@ void Multiply%dx%d(uint64_t C[%d], const uint64_t A[%d], const uint64_t B[%d]) {
   uint64_t z,h,l;\n\
   uint64_t ",
          (n + m) * 64, n * 64, m * 64, n + m, n, m, n, m, n + m, n, m);
-  Rs = gc(calloc(sizeof(*Rs), n + m + 1));
-  Ra = gc(calloc(sizeof(*Ra), n + m + 1));
+  if (!(Rs = calloc(sizeof(*Rs), n + m + 1)))
+    __builtin_trap();
+  if (!(Ra = calloc(sizeof(*Ra), n + m + 1)))
+    __builtin_trap();
   for (j = 0; j < n; ++j) {
-    if (j) printf(", ");
+    if (j)
+      printf(", ");
     printf("H%d", j);
   }
   printf(";\n");
   printf("  uint64_t ");
   for (j = 0; j < n + m; ++j) {
-    if (j) printf(", ");
+    if (j)
+      printf(", ");
     printf("R%d", j);
   }
   printf(";\n");
@@ -170,6 +174,8 @@ void Multiply%dx%d(uint64_t C[%d], const uint64_t A[%d], const uint64_t B[%d]) {
   }
   printf("}\n");
   fflush(stdout);
+  free(Ra);
+  free(Rs);
 }
 
 int main(int argc, char *argv[]) {

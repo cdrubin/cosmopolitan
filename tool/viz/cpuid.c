@@ -26,7 +26,7 @@
 #include "libc/nexgen32e/x86info.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "libc/x/xasprintf.h"
 #include "tool/decode/lib/idname.h"
 #include "tool/decode/lib/x86idnames.h"
@@ -34,6 +34,15 @@
 
 #define CANIUSE(FEATURE) caniuse(#FEATURE, X86_HAVE(FEATURE))
 #define SHOW(CONSTANT)   show(#CONSTANT, CONSTANT)
+
+static void cpuid(unsigned leaf, unsigned subleaf, unsigned *eax, unsigned *ebx,
+                  unsigned *ecx, unsigned *edx) {
+  asm("movq\t%%rbx,%%rsi\n\t"
+      "cpuid\n\t"
+      "xchgq\t%%rbx,%%rsi"
+      : "=a"(*eax), "=S"(*ebx), "=c"(*ecx), "=d"(*edx)
+      : "0"(leaf), "2"(subleaf));
+}
 
 static void caniuse(const char *feature, bool present) {
   printf("%-20s%s%s%s\n", feature, present ? GREEN : RED,
@@ -70,7 +79,7 @@ static void showstrata(void) {
   }
 }
 
-void showcachesizes(void) {
+void showcachesizes_intel(void) {
   unsigned i;
   CPUID4_ITERATE(i, {
     printf("%-19s%s%s %2u-way %,9u byte cache w/%s %,6u sets of %u byte lines "
@@ -90,6 +99,81 @@ void showcachesizes(void) {
   });
 }
 
+static const char *const kAmdAssociativityStr[16] = {
+    "Disabled",               //
+    "1 way (direct mapped)",  //
+    "2 way",                  //
+    "4 way",                  //
+    "8 way",                  //
+    "16 way",                 //
+    "32 way",                 //
+    "48 way",                 //
+    "64 way",                 //
+    "96 way",                 //
+    "128 way",                //
+    "Fully Associative",      //
+};
+
+void showcachesizes_amd() {
+  unsigned eax, ebx, ecx, edx;
+
+  cpuid(0x80000005, 0, &eax, &ebx, &ecx, &edx);
+
+  unsigned L1_dataCache_size = (ecx >> 24) & 0xff;
+  unsigned L1_dataCache_associativity = (ecx >> 16) & 0xff;
+  unsigned L1_dataCache_linesPerTag = (ecx >> 8) & 0xff;
+  unsigned L1_dataCache_lineSize = (ecx >> 0) & 0xff;
+
+  unsigned L1_instrCache_size = (ecx >> 24) & 0xff;
+  unsigned L1_instrCache_associativity = (ecx >> 16) & 0xff;
+  unsigned L1_instrCache_linesPerTag = (ecx >> 8) & 0xff;
+  unsigned L1_instrCache_lineSize = (ecx >> 0) & 0xff;
+
+  cpuid(0x80000006, 0, &eax, &ebx, &ecx, &edx);
+
+  unsigned L2_size = (ecx >> 16) & 0xffff;
+  unsigned L2_associativity = (ecx >> 12) & 0xf;
+  unsigned L2_linesPerTag = (ecx >> 8) & 0xf;
+  unsigned L2_lineSize = (ecx >> 0) & 0xff;
+
+  unsigned L3_size = (edx >> 18) & 0x3fff;
+  unsigned L3_associativity = (edx >> 12) & 0xf;
+  unsigned L3_linesPerTag = (edx >> 8) & 0xf;
+  unsigned L3_lineSize = (edx >> 0) & 0xff;
+
+  printf("L1 Data Cache:\n"
+         "\tSize: %d KB\n"
+         "\tAssociativity: %d way\n"
+         "\tLines per Tag: %d\n"
+         "\tLine Size: %d B\n"
+         "\n"
+         "L1 Instruction Cache:\n"
+         "\tSize: %d KB\n"
+         "\tAssociativity: %d way\n"
+         "\tLines per Tag: %d\n"
+         "\tLine Size: %d B\n",
+         L1_dataCache_size, L1_dataCache_associativity,
+         L1_dataCache_linesPerTag, L1_dataCache_lineSize, L1_instrCache_size,
+         L1_instrCache_associativity, L1_instrCache_linesPerTag,
+         L1_instrCache_lineSize);
+
+  printf("L2 Cache:\n"
+         "\tSize: %d KB\n"
+         "\tAssociativity: %s\n"
+         "\tLines per Tag: %d\n"
+         "\tLine Size: %d B\n"
+         "\n"
+         "L3 Cache:\n"
+         "\tSize: %d KB\n"
+         "\tAssociativity: %s\n"
+         "\tLines per Tag: %d\n"
+         "\tLine Size: %d B\n",
+         L2_size, kAmdAssociativityStr[L2_associativity & 15], L2_linesPerTag,
+         L2_lineSize, L3_size * 512,
+         kAmdAssociativityStr[L3_associativity & 15], L3_linesPerTag,
+         L3_lineSize);
+}
+
 int main(int argc, char *argv[]) {
   int x;
   long tsc_aux;
@@ -102,9 +186,12 @@ int main(int argc, char *argv[]) {
 
   if (KCPUIDS(16H, EAX)) {
     printf("\n");
-    if ((x = KCPUIDS(16H, EAX) & 0x7fff)) decimal("frequency", x, "mhz");
-    if ((x = KCPUIDS(16H, EBX) & 0x7fff)) decimal("turbo", x, "mhz");
-    if ((x = KCPUIDS(16H, ECX) & 0x7fff)) decimal("bus", x, "mhz");
+    if ((x = KCPUIDS(16H, EAX) & 0x7fff))
+      decimal("frequency", x, "mhz");
+    if ((x = KCPUIDS(16H, EBX) & 0x7fff))
+      decimal("turbo", x, "mhz");
+    if ((x = KCPUIDS(16H, ECX) & 0x7fff))
+      decimal("bus", x, "mhz");
   }
 
   if (X86_HAVE(HYPERVISOR)) {
@@ -143,7 +230,8 @@ int main(int argc, char *argv[]) {
   printf("\n");
   printf("Caches\n");
   printf("──────\n");
-  showcachesizes();
+  showcachesizes_intel();
+  showcachesizes_amd();
 
   printf("\n");
   printf("Features\n");
@@ -160,21 +248,15 @@ int main(int argc, char *argv[]) {
          X86_HAVE(AVX2) ? "present" : "unavailable", RESET,
          (!X86_HAVE(AVX2) && ({
            unsigned eax, ebx, ecx, edx;
-           asm("push\t%%rbx\n\t"
-               "cpuid\n\t"
-               "mov\t%%ebx,%1\n\t"
-               "pop\t%%rbx"
-               : "=a"(eax), "=rm"(ebx), "=c"(ecx), "=d"(edx)
-               : "0"(7), "2"(0));
-           (void)eax;
-           (void)ecx;
-           (void)edx;
+           cpuid(7, 0, &eax, &ebx, &ecx, &edx);
            !!(ebx & (1u << 5));
          }))
              ? " (disabled by operating system)"
              : "");
 
   CANIUSE(AVXVNNI);
+  CANIUSE(AVXVNNIINT8);
+  CANIUSE(AVXVNNIINT16);
   CANIUSE(AVX512BW);
   CANIUSE(AVX512CD);
   CANIUSE(AVX512DQ);
@@ -186,6 +268,7 @@ int main(int argc, char *argv[]) {
   CANIUSE(AVX512VL);
   CANIUSE(AVX512_4FMAPS);
   CANIUSE(AVX512_4VNNIW);
+  CANIUSE(AVX512_FP16);
   CANIUSE(AVX512_BF16);
   CANIUSE(AVX512_BITALG);
   CANIUSE(AVX512_VBMI2);
@@ -281,6 +364,7 @@ int main(int argc, char *argv[]) {
   CANIUSE(TM2);
   CANIUSE(TME);
   CANIUSE(TSC);
+  CANIUSE(INVTSC);
   CANIUSE(TSC_ADJUST);
   CANIUSE(TSC_DEADLINE_TIMER);
   CANIUSE(TSX_FORCE_ABORT);

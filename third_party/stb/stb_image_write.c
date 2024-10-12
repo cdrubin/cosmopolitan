@@ -21,7 +21,7 @@
 #include "libc/assert.h"
 #include "libc/fmt/conv.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/nexgen32e.h"
@@ -29,10 +29,10 @@
 #include "libc/str/str.h"
 #include "third_party/zlib/zlib.h"
 
-asm(".ident\t\"\\n\\n\
-stb_image_write (Public Domain)\\n\
-Credit: Sean Barrett, et al.\\n\
-http://nothings.org/stb\"");
+__notice(stb_image_write_notice, "\
+stb_image_write (Public Domain)\n\
+Credit: Sean Barrett, et al.\n\
+http://nothings.org/stb");
 
 #define STBIW_UCHAR(x)                       (unsigned char)((x)&0xff)
 

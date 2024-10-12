@@ -13,18 +13,15 @@
 # 3. You should fix up the `#pragma GCC aarch64` things.
 #
 
-s=/opt/cross11portcosmo/lib/gcc/aarch64-linux-musl/11.2.0/include
+s=/opt/include
 d=third_party/aarch64
 
 FILES='
 arm_acle
+arm_bf16
 arm_fp16
 arm_neon
-acc_prof
-arm_bf16
 arm_sve
-acc_prof
-openacc
 '
 
 strip_c_comments() {

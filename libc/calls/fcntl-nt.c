@@ -20,19 +20,19 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/createfileflags.internal.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/flock.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/wincrash.internal.h"
 #include "libc/errno.h"
+#include "libc/intrin/fds.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/leaky.internal.h"
 #include "libc/intrin/weaken.h"
 #include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
+#include "libc/mem/leaks.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/fileflagandattributes.h"
@@ -75,15 +75,13 @@ static textwindows struct FileLock *NewFileLock(void) {
     fl = g_locks.free;
     g_locks.free = fl->next;
   } else {
-    unassert((fl = _weaken(malloc)(sizeof(*fl))));
+    unassert((fl = may_leak(_weaken(malloc)(sizeof(*fl)))));
   }
   bzero(fl, sizeof(*fl));
   fl->next = g_locks.list;
   g_locks.list = fl;
   return fl;
 }
-
-IGNORE_LEAKS(NewFileLock)
 
 static textwindows void FreeFileLock(struct FileLock *fl) {
   fl->next = g_locks.free;
@@ -129,7 +127,8 @@ textwindows void sys_fcntl_nt_lock_cleanup(int fd) {
 
 static textwindows int64_t GetfileSize(int64_t handle) {
   struct NtByHandleFileInformation wst;
-  if (!GetFileInformationByHandle(handle, &wst)) return __winerr();
+  if (!GetFileInformationByHandle(handle, &wst))
+    return __winerr();
   return (wst.nFileSizeHigh + 0ull) << 32 | wst.nFileSizeLow;
 }
 
@@ -152,11 +151,12 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
     case SEEK_SET:
       break;
     case SEEK_CUR:
-      off = f->pointer + off;
+      off = f->cursor->shared->pointer + off;
       break;
     case SEEK_END: {
       int64_t size;
-      if ((size = GetfileSize(f->handle)) == -1) return -1;
+      if ((size = GetfileSize(f->handle)) == -1)
+        return -1;
       off = size - off;
       break;
     }
@@ -254,7 +254,8 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
   }
 
   if (l->l_type == F_UNLCK) {
-    if (cmd == F_GETLK) return einval();
+    if (cmd == F_GETLK)
+      return einval();
 
     // allow a big range to unlock many small ranges
     for (flp = &g_locks.list, fl = *flp; fl;) {
@@ -318,7 +319,8 @@ static textwindows int sys_fcntl_nt_lock(struct Fd *f, int fd, int cmd,
 }
 
 static textwindows int sys_fcntl_nt_dupfd(int fd, int cmd, int start) {
-  if (start < 0) return einval();
+  if (start < 0)
+    return einval();
   return sys_dup_nt(fd, -1, (cmd == F_DUPFD_CLOEXEC ? _O_CLOEXEC : 0), start);
 }
 
@@ -328,7 +330,8 @@ textwindows int sys_fcntl_nt(int fd, int cmd, uintptr_t arg) {
   if (__isfdkind(fd, kFdFile) ||     //
       __isfdkind(fd, kFdSocket) ||   //
       __isfdkind(fd, kFdConsole) ||  //
-      __isfdkind(fd, kFdDevNull)) {
+      __isfdkind(fd, kFdDevNull) ||  //
+      __isfdkind(fd, kFdDevRandom)) {
     if (cmd == F_GETFL) {
       rc = g_fds.p[fd].flags & (O_ACCMODE | _O_APPEND | _O_DIRECT |
                                 _O_NONBLOCK | _O_RANDOM | _O_SEQUENTIAL);
@@ -348,9 +351,14 @@ textwindows int sys_fcntl_nt(int fd, int cmd, uintptr_t arg) {
       }
       rc = 0;
     } else if (cmd == F_SETLK || cmd == F_SETLKW || cmd == F_GETLK) {
-      pthread_mutex_lock(&g_locks.mu);
-      rc = sys_fcntl_nt_lock(g_fds.p + fd, fd, cmd, arg);
-      pthread_mutex_unlock(&g_locks.mu);
+      struct Fd *f = g_fds.p + fd;
+      if (f->cursor) {
+        pthread_mutex_lock(&g_locks.mu);
+        rc = sys_fcntl_nt_lock(f, fd, cmd, arg);
+        pthread_mutex_unlock(&g_locks.mu);
+      } else {
+        rc = ebadf();
+      }
     } else if (cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC) {
       rc = sys_fcntl_nt_dupfd(fd, cmd, arg);
     } else {

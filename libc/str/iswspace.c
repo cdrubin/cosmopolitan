@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/str/str.h"
+#include "libc/wctype.h"
 
 /**
  * Returns nonzero if c is space character.
@@ -41,7 +41,6 @@ int iswspace(wint_t c) {
     case 0x2004:  // THREE-PER-EM SPACE (Zs)
     case 0x2005:  // FOUR-PER-EM SPACE (Zs)
     case 0x2006:  // SIX-PER-EM SPACE (Zs)
-    case 0x2007:  // FIGURE SPACE (Zs)
     case 0x2008:  // PUNCTUATION SPACE (Zs)
     case 0x2009:  // THIN SPACE (Zs)
     case 0x200a:  // HAIR SPACE (Zs)

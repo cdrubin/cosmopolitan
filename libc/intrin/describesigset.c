@@ -21,7 +21,6 @@
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/popcnt.h"
 #include "libc/str/str.h"
@@ -32,17 +31,18 @@
 
 #define append(...) o += ksnprintf(buf + o, N - o, __VA_ARGS__)
 
-const char *(DescribeSigset)(char buf[N], int rc, const sigset_t *ss) {
+const char *_DescribeSigset(char buf[N], int rc, const sigset_t *ss) {
   int olderr;
   bool gotsome;
   const char *s;
   int sig, o = 0;
   sigset_t sigset;
 
-  if (rc == -1) return "n/a";
-  if (!ss) return "NULL";
-  if ((!IsAsan() && kisdangerous(ss)) ||
-      (IsAsan() && !__asan_is_valid(ss, sizeof(*ss)))) {
+  if (rc == -1)
+    return "n/a";
+  if (!ss)
+    return "NULL";
+  if (kisdangerous(ss)) {
     ksnprintf(buf, N, "%p", ss);
     return buf;
   }

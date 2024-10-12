@@ -16,16 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/calls.h"
-#include "libc/limits.h"
-#include "libc/str/str.h"
+#include "libc/ctype.h"
 
 /**
  * Returns true if c is hexadecimal digit.
  */
 int isxdigit(int c) {
-  return ('0' <= c && c <= '9') || ('A' <= c && c <= 'F') ||
+  return ('0' <= c && c <= '9') ||  //
+         ('A' <= c && c <= 'F') ||  //
          ('a' <= c && c <= 'f');
 }
 

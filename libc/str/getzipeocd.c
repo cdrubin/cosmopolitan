@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 
 typedef char v16qi __attribute__((__vector_size__(16)));
 typedef short v8hi __attribute__((__vector_size__(16)));
@@ -83,6 +83,7 @@ void *GetZipEocd(const void *f, size_t n, int *e) {
       return (void *)(p + i);
     }
   } while (i > 0 && i-- + 0x10000 + 0x1000 >= n);
-  if (e) *e = err;
+  if (e)
+    *e = err;
   return 0;
 }

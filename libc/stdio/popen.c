@@ -70,14 +70,20 @@ FILE *popen(const char *cmdline, const char *mode) {
     errno = rc;
     return 0;
   }
-  if (pipe2(pipefds, O_CLOEXEC) == -1) return NULL;
+  if (pipe2(pipefds, O_CLOEXEC) == -1)
+    return NULL;
   if ((f = fdopen(pipefds[dir], mode))) {
     switch ((pid = fork())) {
       case 0:
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
         unassert(dup2(pipefds[!dir], !dir) == !dir);
+#pragma GCC diagnostic pop
         // we can't rely on cloexec because cocmd builtins don't execve
-        if (pipefds[0] != !dir) unassert(!close(pipefds[0]));
-        if (pipefds[1] != !dir) unassert(!close(pipefds[1]));
+        if (pipefds[0] != !dir)
+          unassert(!close(pipefds[0]));
+        if (pipefds[1] != !dir)
+          unassert(!close(pipefds[1]));
         // "The popen() function shall ensure that any streams from
         //  previous popen() calls that remain open in the parent
         //  process are closed in the new child process." -POSIX

@@ -12,16 +12,19 @@ LIBC_STR_A_INCS = $(filter %.inc,$(LIBC_STR_A_FILES))
 LIBC_STR_A_SRCS_A = $(filter %.s,$(LIBC_STR_A_FILES))
 LIBC_STR_A_SRCS_S = $(filter %.S,$(LIBC_STR_A_FILES))
 LIBC_STR_A_SRCS_C = $(filter %.c,$(LIBC_STR_A_FILES))
+LIBC_STR_A_SRCS_CC = $(filter %.cc,$(LIBC_STR_A_FILES))
 
 LIBC_STR_A_SRCS =						\
 	$(LIBC_STR_A_SRCS_A)					\
 	$(LIBC_STR_A_SRCS_S)					\
-	$(LIBC_STR_A_SRCS_C)
+	$(LIBC_STR_A_SRCS_C)					\
+	$(LIBC_STR_A_SRCS_CC)
 
 LIBC_STR_A_OBJS =						\
 	$(LIBC_STR_A_SRCS_A:%.s=o/$(MODE)/%.o)			\
 	$(LIBC_STR_A_SRCS_S:%.S=o/$(MODE)/%.o)			\
-	$(LIBC_STR_A_SRCS_C:%.c=o/$(MODE)/%.o)
+	$(LIBC_STR_A_SRCS_C:%.c=o/$(MODE)/%.o)			\
+	$(LIBC_STR_A_SRCS_CC:%.cc=o/$(MODE)/%.o)
 
 LIBC_STR_A_CHECKS =						\
 	$(LIBC_STR_A).pkg					\
@@ -43,9 +46,6 @@ $(LIBC_STR_A):	libc/str/					\
 $(LIBC_STR_A).pkg:						\
 		$(LIBC_STR_A_OBJS)				\
 		$(foreach x,$(LIBC_STR_A_DIRECTDEPS),$($(x)_A).pkg)
-
-o/$(MODE)/libc/str/wow.o: private				\
-		CC = gcc
 
 o/$(MODE)/libc/str/wmemset.o					\
 o/$(MODE)/libc/str/memset16.o					\
@@ -87,8 +87,15 @@ o/$(MODE)/libc/str/windowstimetotimespec.o: private		\
 		CFLAGS +=					\
 			-O2
 
+# we need -O3 because:
+#   we're dividing by constants
+o/$(MODE)/libc/str/iso8601.o					\
+o/$(MODE)/libc/str/iso8601us.o: private				\
+		CFLAGS +=					\
+			-O3
+
 $(LIBC_STR_A_OBJS): private					\
-		COPTS +=					\
+		CFLAGS +=					\
 			-fno-sanitize=all			\
 			-Wframe-larger-than=4096		\
 			-Walloca-larger-than=4096

@@ -29,9 +29,9 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sig.h"
@@ -54,9 +54,8 @@ long _pthread_cancel_ack(void) {
     pthread_exit(PTHREAD_CANCELED);
   }
   pt->pt_flags |= PT_NOCANCEL;
-  if (IsOpenbsd()) {
+  if (IsOpenbsd())
     pt->pt_flags |= PT_OPENBSD_KLUDGE;
-  }
   return ecanceled();
 }
 
@@ -66,10 +65,14 @@ static void _pthread_cancel_sig(int sig, siginfo_t *si, void *arg) {
 
   // check thread runtime state is initialized and cancelled
   struct PosixThread *pt;
-  if (!__tls_enabled) return;
-  if (!(pt = _pthread_self())) return;
-  if (pt->pt_flags & PT_NOCANCEL) return;
-  if (!atomic_load_explicit(&pt->pt_canceled, memory_order_acquire)) return;
+  if (!__tls_enabled)
+    return;
+  if (!(pt = _pthread_self()))
+    return;
+  if (pt->pt_flags & PT_NOCANCEL)
+    return;
+  if (!atomic_load_explicit(&pt->pt_canceled, memory_order_acquire))
+    return;
 
   // in asynchronous mode the asynchronous signal calls exit
   if (pt->pt_flags & PT_ASYNC) {
@@ -137,7 +140,8 @@ static errno_t _pthread_cancel_single(struct PosixThread *pt) {
   // send the cancelation signal
   errno_t err;
   err = pthread_kill((pthread_t)pt, SIGTHR);
-  if (err == ESRCH) err = 0;
+  if (err == ESRCH)
+    err = 0;
   return err;
 }
 
@@ -184,7 +188,6 @@ static errno_t _pthread_cancel_everyone(void) {
  * - `connect`
  * - `copy_file_range`
  * - `creat`
- * - `epoll_wait`
  * - `fcntl(F_OFD_SETLKW)`
  * - `fcntl(F_SETLKW)`
  * - `fdatasync`
@@ -346,6 +349,7 @@ static errno_t _pthread_cancel_everyone(void) {
  * @param thread may be 0 to cancel all threads except self
  * @return 0 on success, or errno on error
  * @raise ESRCH if system thread wasn't alive or we lost a race
+ * @cancelationpoint
  */
 errno_t pthread_cancel(pthread_t thread) {
   struct PosixThread *arg;
@@ -369,9 +373,12 @@ errno_t pthread_cancel(pthread_t thread) {
  */
 void pthread_testcancel(void) {
   struct PosixThread *pt;
-  if (!__tls_enabled) return;
-  if (!(pt = _pthread_self())) return;
-  if (pt->pt_flags & PT_NOCANCEL) return;
+  if (!__tls_enabled)
+    return;
+  if (!(pt = _pthread_self()))
+    return;
+  if (pt->pt_flags & PT_NOCANCEL)
+    return;
   if ((!(pt->pt_flags & PT_MASKED) || (pt->pt_flags & PT_ASYNC)) &&
       atomic_load_explicit(&pt->pt_canceled, memory_order_acquire)) {
     pthread_exit(PTHREAD_CANCELED);
@@ -393,13 +400,18 @@ void pthread_testcancel(void) {
  *
  * @return 0 if not cancelled or cancelation is blocked or `ECANCELED`
  *     in masked mode when the calling thread has been cancelled
+ * @cancelationpoint
  */
 errno_t pthread_testcancel_np(void) {
   struct PosixThread *pt;
-  if (!__tls_enabled) return 0;
-  if (!(pt = _pthread_self())) return 0;
-  if (pt->pt_flags & PT_NOCANCEL) return 0;
-  if (!atomic_load_explicit(&pt->pt_canceled, memory_order_acquire)) return 0;
+  if (!__tls_enabled)
+    return 0;
+  if (!(pt = _pthread_self()))
+    return 0;
+  if (pt->pt_flags & PT_NOCANCEL)
+    return 0;
+  if (!atomic_load_explicit(&pt->pt_canceled, memory_order_acquire))
+    return 0;
   if (!(pt->pt_flags & PT_MASKED) || (pt->pt_flags & PT_ASYNC)) {
     pthread_exit(PTHREAD_CANCELED);
   } else {

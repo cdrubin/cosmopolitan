@@ -19,12 +19,13 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/errno.h"
+#include "libc/fmt/itoa.h"
 #include "libc/fmt/libgen.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/alg.h"
+#include "libc/mem/leaks.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
@@ -32,7 +33,7 @@
 #include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
@@ -45,48 +46,48 @@
   "copyright 2023 justine tunney\n" \
   "https://github.com/jart/cosmopolitan\n"
 
-#define MANUAL                                                      \
-  " -r o// -o OUTPUT INPUT...\n"                                    \
-  "\n"                                                              \
-  "DESCRIPTION\n"                                                   \
-  "\n"                                                              \
-  "  Generates header file dependencies for your makefile\n"        \
-  "\n"                                                              \
-  "  This tool computes the transitive closure of included paths\n" \
-  "  for every source file in your repository. This program does\n" \
-  "  it orders of a magnitude faster than `gcc -M` on each file.\n" \
-  "\n"                                                              \
-  "  Includes look like this:\n"                                    \
-  "\n"                                                              \
-  "    - #include <stdio.h>\n"                                      \
-  "    - #include \"samedir.h\"\n"                                  \
-  "    - #include \"root/of/repository/foo.h\"\n"                   \
-  "    - .include \"asm/x86_64/foo.s\"\n"                           \
-  "\n"                                                              \
-  "  Your generated make code looks like this:\n"                   \
-  "\n"                                                              \
-  "    o//package/foo.o: \\\n"                                      \
-  "      package/foo.c \\\n"                                        \
-  "      package/foo.h \\\n"                                        \
-  "      package/bar.h \\\n"                                        \
-  "      libc/isystem/stdio.h\n"                                    \
-  "    o//package/bar.o: \\\n"                                      \
-  "      package/bar.c \\\n"                                        \
-  "      package/bar.h\n"                                           \
-  "\n"                                                              \
-  "FLAGS\n"                                                         \
-  "\n"                                                              \
-  "  -h         show usage\n"                                       \
-  "  -o OUTPUT  set output path\n"                                  \
-  "  -g ROOT    set generated path [default: o/]\n"                 \
-  "  -r ROOT    set build output path, e.g. o/$(MODE)/\n"           \
-  "  -S PATH    isystem include path [default: libc/isystem/]\n"    \
-  "  -s         hermetically sealed mode [repeatable]\n"            \
-  "\n"                                                              \
-  "ARGUMENTS\n"                                                     \
-  "\n"                                                              \
-  "  OUTPUT     shall be makefile code\n"                           \
-  "  INPUT      should be source or @args.txt\n"                    \
+#define MANUAL                                                               \
+  " -r o// -o OUTPUT INPUT...\n"                                             \
+  "\n"                                                                       \
+  "DESCRIPTION\n"                                                            \
+  "\n"                                                                       \
+  "  Generates header file dependencies for your makefile\n"                 \
+  "\n"                                                                       \
+  "  This tool computes the transitive closure of included paths\n"          \
+  "  for every source file in your repository. This program does\n"          \
+  "  it orders of a magnitude faster than `gcc -M` on each file.\n"          \
+  "\n"                                                                       \
+  "  Includes look like this:\n"                                             \
+  "\n"                                                                       \
+  "    - #include <stdio.h>\n"                                               \
+  "    - #include \"samedir.h\"\n"                                           \
+  "    - #include \"root/of/repository/foo.h\"\n"                            \
+  "    - .include \"asm/x86_64/foo.s\"\n"                                    \
+  "\n"                                                                       \
+  "  Your generated make code looks like this:\n"                            \
+  "\n"                                                                       \
+  "    o//package/foo.o: \\\n"                                               \
+  "      package/foo.c \\\n"                                                 \
+  "      package/foo.h \\\n"                                                 \
+  "      package/bar.h \\\n"                                                 \
+  "      libc/isystem/stdio.h\n"                                             \
+  "    o//package/bar.o: \\\n"                                               \
+  "      package/bar.c \\\n"                                                 \
+  "      package/bar.h\n"                                                    \
+  "\n"                                                                       \
+  "FLAGS\n"                                                                  \
+  "\n"                                                                       \
+  "  -h         show usage\n"                                                \
+  "  -o OUTPUT  set output path\n"                                           \
+  "  -g ROOT    set generated path [default: o/]\n"                          \
+  "  -r ROOT    set build output path, e.g. o/$(MODE)/\n"                    \
+  "  -S PATH    isystem include path [repeatable; default: libc/isystem/]\n" \
+  "  -s         hermetically sealed mode [repeatable]\n"                     \
+  "\n"                                                                       \
+  "ARGUMENTS\n"                                                              \
+  "\n"                                                                       \
+  "  OUTPUT     shall be makefile code\n"                                    \
+  "  INPUT      should be source or @args.txt\n"                             \
   "\n"
 
 #define Read32(s) (s[3] << 24 | s[2] << 16 | s[1] << 8 | s[0])
@@ -118,6 +119,11 @@ struct Edges {
   struct Edge *p;
 };
 
+struct Paths {
+  long n;
+  const char *p[64];
+};
+
 static const uint32_t kSourceExts[] = {
     EXT("s"),    // assembly
     EXT("S"),    // assembly with c preprocessor
@@ -135,7 +141,7 @@ static const char *prog;
 static struct Edges edges;
 static struct Sauce *sauces;
 static struct Sources sources;
-static const char *systempath;
+static struct Paths systempaths;
 static const char *buildroot;
 static const char *genroot;
 static const char *outpath;
@@ -170,37 +176,44 @@ static wontreturn void DieOom(void) {
 static unsigned Hash(const void *s, size_t l) {
   unsigned h;
   h = crc32c(0, s, l);
-  if (!h) h = 1;
+  if (!h)
+    h = 1;
   return h;
 }
 
 static void *Malloc(size_t n) {
   void *p;
-  if (!(p = malloc(n))) DieOom();
+  if (!(p = malloc(n)))
+    DieOom();
   return p;
 }
 
 static void *Calloc(size_t n, size_t z) {
   void *p;
-  if (!(p = calloc(n, z))) DieOom();
+  if (!(p = calloc(n, z)))
+    DieOom();
   return p;
 }
 
 static void *Realloc(void *p, size_t n) {
-  if (!(p = realloc(p, n))) DieOom();
+  if (!(p = realloc(p, n)))
+    DieOom();
   return p;
 }
 
 static void Appendw(char **b, uint64_t w) {
-  if (appendw(b, w) == -1) DieOom();
+  if (appendw(b, w) == -1)
+    DieOom();
 }
 
 static void Appends(char **b, const char *s) {
-  if (appends(b, s) == -1) DieOom();
+  if (appends(b, s) == -1)
+    DieOom();
 }
 
 static void Appendd(char **b, const void *p, size_t n) {
-  if (appendd(b, p, n) == -1) DieOom();
+  if (appendd(b, p, n) == -1)
+    DieOom();
 }
 
 static unsigned FindFirstFromEdge(unsigned id) {
@@ -253,7 +266,8 @@ static void Rehash(void) {
   sources.n = sources.n ? sources.n << 1 : 16;
   sources.p = Calloc(sources.n, sizeof(struct Source));
   for (i = 0; i < old.n; ++i) {
-    if (!old.p[i].hash) continue;
+    if (!old.p[i].hash)
+      continue;
     step = 0;
     do {
       j = (old.p[i].hash + step * (step + 1) / 2) & (sources.n - 1);
@@ -280,7 +294,8 @@ static int HashSource(const char *name, size_t len, bool create) {
       step++;
     } while (sources.p[i].hash);
   }
-  if (!create) return -1;
+  if (!create)
+    return -1;
   if (++sources.i >= (sources.n >> 1)) {
     Rehash();
     step = 0;
@@ -328,9 +343,8 @@ static const char *FindIncludePath(const char *map, size_t mapsize,
 
   // scan backwards for hash character
   for (;;) {
-    if (q == map) {
-      return false;
-    }
+    if (q == map)
+      return 0;
     if (IsBlank(q[-1])) {
       --q;
       continue;
@@ -342,7 +356,7 @@ static const char *FindIncludePath(const char *map, size_t mapsize,
       --q;
       break;
     } else {
-      return false;
+      return 0;
     }
   }
 
@@ -359,7 +373,7 @@ static const char *FindIncludePath(const char *map, size_t mapsize,
       if (q[-1] == '\n') {
         break;
       } else {
-        return false;
+        return 0;
       }
     }
   }
@@ -378,7 +392,7 @@ static const char *FindIncludePath(const char *map, size_t mapsize,
       ++q;
       break;
     } else {
-      return false;
+      return 0;
     }
   }
 
@@ -395,19 +409,17 @@ static void LoadRelationships(int argc, char *argv[]) {
   struct GetArgs ga;
   int srcid, dependency;
   static char srcdirbuf[PATH_MAX];
-  const char *p, *pe, *src, *path, *pathend, *srcdir;
+  const char *p, *pe, *src, *path, *pathend, *srcdir, *final;
   getargs_init(&ga, argv + optind);
-  while ((src = getargs_next(&ga))) {
+  while ((src = getargs_next(&ga)))
     CreateSourceId(src);
-  }
   getargs_destroy(&ga);
   getargs_init(&ga, argv + optind);
   while ((src = getargs_next(&ga))) {
     is_assembly = endswith(src, ".s");
     srcid = GetSourceId(src);
-    if (strlcpy(srcdirbuf, src, PATH_MAX) >= PATH_MAX) {
+    if (strlcpy(srcdirbuf, src, PATH_MAX) >= PATH_MAX)
       DiePathTooLong(src);
-    }
     srcdir = dirname(srcdirbuf);
     if ((fd = open(src, O_RDONLY)) == -1) {
       if (errno == ENOENT && ga.path) {
@@ -421,63 +433,81 @@ static void LoadRelationships(int argc, char *argv[]) {
       }
       DieSys(src);
     }
-    if ((rc = lseek(fd, 0, SEEK_END)) == -1) {
+    if ((rc = lseek(fd, 0, SEEK_END)) == -1)
       DieSys(src);
-    }
     if ((size = rc)) {
       // repeatedly map to same fixed address so in order to weasel out
       // of incurring the additional overhead of all these munmap calls
-      map = mmap((void *)0x311987030000, size, PROT_READ,
-                 MAP_SHARED | MAP_FIXED, fd, 0);
-      if (map == MAP_FAILED) {
+      map = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0);
+      if (map == MAP_FAILED)
         DieSys(src);
-      }
       for (p = map, pe = map + size; p < pe; ++p) {
-        char *bp;
+        if (!(p = memmem(p, pe - p, "include ", 8)))
+          break;
+        if (!(path = FindIncludePath(map, size, p, is_assembly)))
+          continue;
+        // copy the specified include path
         char right;
-        char buf[PATH_MAX];
-        if (!(p = memmem(p, pe - p, "include ", 8))) break;
-        if (!(path = FindIncludePath(map, size, p, is_assembly))) continue;
-        bp = buf;
         if (path[-1] == '<') {
-          if (!systempath) continue;
-          bp = stpcpy(bp, systempath);
+          if (!systempaths.n)
+            continue;
           right = '>';
         } else {
           right = '"';
         }
-        if ((pathend = memchr(path, right, pe - path))) {
-          const char *final;
-          char juf[PATH_MAX];
-          if ((bp - buf) + (pathend - path) >= PATH_MAX) {
-            tinyprint(2, src, ": include path too long\n", NULL);
-            exit(1);
+        if (!(pathend = memchr(path, right, pe - path)))
+          continue;
+        if (pathend - path >= PATH_MAX) {
+          tinyprint(2, src, ": uses really long include path\n", NULL);
+          exit(1);
+        }
+        char juf[PATH_MAX];
+        char incpath[PATH_MAX];
+        *(char *)mempcpy(incpath, path, pathend - path) = 0;
+        if (right == '>') {
+          // handle angle bracket includes
+          dependency = -1;
+          for (long i = 0; i < systempaths.n; ++i) {
+            if (!(final =
+                      __join_paths(juf, PATH_MAX, systempaths.p[i], incpath)))
+              DiePathTooLong(incpath);
+            if ((dependency = GetSourceId(final)) != -1)
+              break;
           }
-          *(bp = mempcpy(bp, path, pathend - path)) = 0;
-          // let foo/bar.c say `#include "foo/hdr.h"`
-          dependency = GetSourceId((final = buf));
-          // let foo/bar.c say `#include "hdr.h"`
-          if (dependency == -1 && right == '"' && !strchr(buf, '/')) {
-            if (!(final = __join_paths(juf, PATH_MAX, srcdir, buf))) {
-              DiePathTooLong(buf);
-            }
-            dependency = GetSourceId(final);
-          }
-          if (dependency == -1) {
-            if (startswith(buf, genroot)) {
-              dependency = CreateSourceId(src);
-            } else if (!hermetic) {
-              continue;
-            } else if (hermetic == 1 && right == '>') {
+          if (dependency != -1) {
+            AppendEdge(&edges, dependency, srcid);
+            p = pathend + 1;
+          } else {
+            if (hermetic == 1) {
               // chances are the `#include <foo>` is in some #ifdef
               // that'll never actually be executed; thus we ignore
               // since landlock make unveil() shall catch it anyway
               continue;
+            }
+            tinyprint(2, incpath,
+                      ": system header not specified by the HDRS/SRCS/INCS "
+                      "make variables defined by the hermetic mono repo\n",
+                      NULL);
+            exit(1);
+          }
+        } else {
+          // handle double quote includes
+          // let foo/bar.c say `#include "foo/hdr.h"`
+          dependency = GetSourceId((final = incpath));
+          // let foo/bar.c say `#include "hdr.h"`
+          if (dependency == -1 && !strchr(final, '/')) {
+            if (!(final = __join_paths(juf, PATH_MAX, srcdir, final)))
+              DiePathTooLong(incpath);
+            dependency = GetSourceId(final);
+          }
+          if (dependency == -1) {
+            if (startswith(final, genroot)) {
+              dependency = CreateSourceId(src);
             } else {
-              tinyprint(
-                  2, final,
-                  ": path not specified by HDRS/SRCS/INCS make variables\n",
-                  NULL);
+              tinyprint(2, incpath,
+                        ": path not specified by HDRS/SRCS/INCS make variables "
+                        "(it was included by ",
+                        src, ")\n", NULL);
               exit(1);
             }
           }
@@ -485,10 +515,11 @@ static void LoadRelationships(int argc, char *argv[]) {
           p = pathend + 1;
         }
       }
+      if (munmap(map, size))
+        DieSys(src);
     }
-    if (close(fd)) {
+    if (close(fd))
       DieSys(src);
-    }
   }
   getargs_destroy(&ga);
 }
@@ -496,6 +527,12 @@ static void LoadRelationships(int argc, char *argv[]) {
 static wontreturn void ShowUsage(int rc, int fd) {
   tinyprint(fd, VERSION, "\nUSAGE\n\n  ", prog, MANUAL, NULL);
   exit(rc);
+}
+
+static void AddPath(struct Paths *paths, const char *path) {
+  if (paths->n == ARRAYLEN(paths->p))
+    Die("too many path arguments");
+  paths->p[paths->n++] = path;
 }
 
 static void GetOpts(int argc, char *argv[]) {
@@ -506,27 +543,21 @@ static void GetOpts(int argc, char *argv[]) {
         ++hermetic;
         break;
       case 'S':
-        if (systempath) {
-          Die("multiple system paths not supported yet");
-        }
-        systempath = optarg;
+        AddPath(&systempaths, optarg);
         break;
       case 'o':
-        if (outpath) {
+        if (outpath)
           Die("multiple output paths specified");
-        }
         outpath = optarg;
         break;
       case 'r':
-        if (buildroot) {
+        if (buildroot)
           Die("multiple build roots specified");
-        }
         buildroot = optarg;
         break;
       case 'g':
-        if (genroot) {
+        if (genroot)
           Die("multiple generated roots specified");
-        }
         genroot = optarg;
         break;
       case 'n':
@@ -537,56 +568,51 @@ static void GetOpts(int argc, char *argv[]) {
         ShowUsage(1, 2);
     }
   }
-  if (optind == argc) {
+  if (optind == argc)
     Die("missing input argument");
-  }
-  if (!genroot) {
+  if (!genroot)
     genroot = "o/";
-  }
-  if (!endswith(genroot, "/")) {
+  if (!endswith(genroot, "/"))
     Die("generated output path must end with slash");
-  }
-  if (!buildroot) {
+  if (!buildroot)
     Die("need build output path");
-  }
-  if (!endswith(buildroot, "/")) {
+  if (!endswith(buildroot, "/"))
     Die("build output path must end with slash");
-  }
-  if (!startswith(buildroot, genroot)) {
+  if (!startswith(buildroot, genroot))
     Die("build output path must start with generated output path");
+  if (!systempaths.n && hermetic) {
+    AddPath(&systempaths, "third_party/libcxx/include/");
+    AddPath(&systempaths, "libc/isystem/");
   }
-  if (!systempath && hermetic) {
-    systempath = "libc/isystem/";
-  }
-  if (systempath && !hermetic) {
+  if (systempaths.n && !hermetic)
     Die("system path can only be specified in hermetic mode");
-  }
-  if (systempath) {
+  long j = 0;
+  for (long i = 0; i < systempaths.n; ++i) {
     size_t n;
     struct stat st;
-    if (stat(systempath, &st)) {
-      DieSys(systempath);
+    const char *path = systempaths.p[i];
+    if (!stat(path, &st)) {
+      systempaths.p[j++] = path;
+      if (!S_ISDIR(st.st_mode)) {
+        errno = ENOTDIR;
+        DieSys(path);
+      }
     }
-    if (!S_ISDIR(st.st_mode)) {
-      errno = ENOTDIR;
-      DieSys(systempath);
-    }
-    if ((n = strlen(systempath)) >= PATH_MAX) {
-      DiePathTooLong(systempath);
-    }
-    if (!n || systempath[n - 1] != '/') {
+    if ((n = strlen(path)) >= PATH_MAX)
+      DiePathTooLong(path);
+    if (!n || path[n - 1] != '/')
       Die("system path must end with slash");
-    }
   }
+  systempaths.n = j;
 }
 
 static const char *StripExt(char pathbuf[hasatleast PATH_MAX], const char *s) {
   static char *dot;
-  if (strlcpy(pathbuf, s, PATH_MAX) >= PATH_MAX) {
+  if (strlcpy(pathbuf, s, PATH_MAX) >= PATH_MAX)
     DiePathTooLong(s);
-  }
   dot = strrchr(pathbuf, '.');
-  if (dot) *dot = '\0';
+  if (dot)
+    *dot = '\0';
   return pathbuf;
 }
 
@@ -596,9 +622,12 @@ static uint32_t GetFileExtension(const char *s) {
   n = s ? strlen(s) : 0;
   for (i = w = 0; n--;) {
     wint_t c = s[n];
-    if (!IsGraph(c)) return 0;
-    if (c == '.') break;
-    if (++i > 4) return 0;
+    if (!IsGraph(c))
+      return 0;
+    if (c == '.')
+      break;
+    if (++i > 4)
+      return 0;
     w <<= 8;
     w |= kToLower[c];
   }
@@ -608,20 +637,18 @@ static uint32_t GetFileExtension(const char *s) {
 static bool IsObjectSource(const char *name) {
   int i;
   uint32_t ext;
-  if ((ext = GetFileExtension(name))) {
-    for (i = 0; i < ARRAYLEN(kSourceExts); ++i) {
-      if (ext == kSourceExts[i]) {
+  if ((ext = GetFileExtension(name)))
+    for (i = 0; i < ARRAYLEN(kSourceExts); ++i)
+      if (ext == kSourceExts[i])
         return true;
-      }
-    }
-  }
   return false;
 }
 
 __funline bool Bts(uint32_t *p, size_t i) {
   uint32_t k;
   k = 1u << (i & 31);
-  if (p[i >> 5] & k) return true;
+  if (p[i >> 5] & k)
+    return true;
   p[i >> 5] |= k;
   return false;
 }
@@ -629,7 +656,8 @@ __funline bool Bts(uint32_t *p, size_t i) {
 static void Dive(char **makefile, uint32_t *visited, unsigned id) {
   int i;
   for (i = FindFirstFromEdge(id); i < edges.i && edges.p[i].from == id; ++i) {
-    if (Bts(visited, edges.p[i].to)) continue;
+    if (Bts(visited, edges.p[i].to))
+      continue;
     Appendw(makefile, READ32LE(" \\\n\t"));
     Appends(makefile, names + sauces[edges.p[i].to].name);
     Dive(makefile, visited, edges.p[i].to);
@@ -647,8 +675,10 @@ static char *Explore(void) {
   visited = Malloc(visilen * sizeof(*visited));
   for (i = 0; i < sources.i; ++i) {
     path = names + sauces[i].name;
-    if (!IsObjectSource(path)) continue;
-    if (startswith(path, genroot)) continue;
+    if (!IsObjectSource(path))
+      continue;
+    if (startswith(path, genroot))
+      continue;
     Appendw(&makefile, '\n');
     Appends(&makefile, buildroot);
     Appends(&makefile, StripExt(buf, path));
@@ -673,27 +703,24 @@ int main(int argc, char *argv[]) {
   ShowCrashReports();
 #endif
   prog = argv[0];
-  if (!prog) prog = "mkdeps";
+  if (!prog)
+    prog = "mkdeps";
   GetOpts(argc, argv);
   LoadRelationships(argc, argv);
   Crunch();
   makefile = Explore();
-  if (outpath &&
-      (fd = open(outpath, O_WRONLY | O_CREAT | O_TRUNC, 0644)) == -1) {
+  if (outpath && (fd = open(outpath, O_WRONLY | O_CREAT | O_TRUNC, 0644)) == -1)
     DieSys(outpath);
-  }
   n = appendz(makefile).i;
-  for (i = 0; i < n; i += (size_t)rc) {
-    if ((rc = write(fd, makefile + i, n - i)) == -1) {
+  for (i = 0; i < n; i += (size_t)rc)
+    if ((rc = write(fd, makefile + i, n - i)) == -1)
       DieSys(outpath);
-    }
-  }
-  if (outpath && close(fd)) {
+  if (outpath && close(fd))
     DieSys(outpath);
-  }
   free(makefile);
   free(edges.p);
   free(sauces);
   free(names);
+  CheckForMemoryLeaks();
   return 0;
 }

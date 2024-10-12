@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/timeval.h"
+#include "libc/intrin/fds.h"
 #include "libc/nt/struct/linger.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
@@ -36,18 +36,25 @@ textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
                                   const void *optval, uint32_t optlen) {
 
   // socket read/write timeouts
+  // timeout of zero means wait forever (default)
   if (level == SOL_SOCKET &&
       (optname == SO_RCVTIMEO || optname == SO_SNDTIMEO)) {
-    if (!(optval && optlen == sizeof(struct timeval))) return einval();
+    if (!optval)
+      return einval();
+    if (optlen < sizeof(struct timeval))
+      return einval();
     const struct timeval *tv = optval;
     int64_t ms = timeval_tomillis(*tv);
-    if (ms >= 0xffffffffu) ms = 0;  // wait forever (default)
-    if (optname == SO_RCVTIMEO) fd->rcvtimeo = ms;
-    if (optname == SO_SNDTIMEO) fd->sndtimeo = ms;
+    if (ms > -1u)
+      ms = -1u;
+    if (optname == SO_RCVTIMEO)
+      fd->rcvtimeo = ms;
+    if (optname == SO_SNDTIMEO)
+      fd->sndtimeo = ms;
     return 0;  // we want to handle this on our own
   }
 
-  // how to make close() a blocking i/o call
+  // how to make close() a blocking i/o call lool
   union {
     uint32_t millis;
     struct linger_nt linger;

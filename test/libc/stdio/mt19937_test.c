@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
 #include "libc/log/check.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -35,8 +35,10 @@ void GetRandom(void *p, size_t n) {
   for (i = 0; i < n; i += rc) {
     m = MIN(n - i, 256);
     rc = getrandom((char *)p + i, m, 0);
-    if (rc == -1 && errno == EINTR) continue;
-    if (rc <= 0) abort();
+    if (rc == -1 && errno == EINTR)
+      continue;
+    if (rc <= 0)
+      abort();
   }
 }
 

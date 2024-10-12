@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/securityimpersonationlevel.h"
 #include "libc/nt/errors.h"
@@ -84,7 +84,8 @@ static int64_t GetCurrentProcessSecurityToken(void) {
 
 bool32 ElevateSeDebugPrivilege(void) {
   int64_t hToken;
-  if (!(hToken = GetCurrentProcessSecurityToken())) return false;
+  if (!(hToken = GetCurrentProcessSecurityToken()))
+    return false;
   SetPrivilegeNt(hToken, u"SeDebugPrivilege", true);
   RevertToSelf();
   CloseHandle(hToken);

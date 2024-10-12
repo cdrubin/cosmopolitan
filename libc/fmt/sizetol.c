@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/ctype.h"
 #include "libc/fmt/conv.h"
 #include "libc/stdckdint.h"
 #include "libc/str/str.h"
@@ -83,7 +84,8 @@ long sizetol(const char *s, long b) {
     c = *s++;
   } while (c == ' ' || c == '\t');
   d = c == '-' ? -1 : 1;
-  if (c == '-' || c == '+') c = *s++;
+  if (c == '-' || c == '+')
+    c = *s++;
   if (!isdigit(c)) {
     return einval();
   }

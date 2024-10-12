@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/console.h"
 #include "libc/nt/thunk/msabi.h"
 
@@ -34,7 +34,8 @@ textwindows bool32 GenerateConsoleCtrlEvent(uint32_t dwCtrlEvent,
                                             uint32_t dwProcessGroupId) {
   bool32 ok;
   ok = __imp_GenerateConsoleCtrlEvent(dwCtrlEvent, dwProcessGroupId);
-  if (!ok) __winerr();
+  if (!ok)
+    __winerr();
   NTTRACE("GenerateConsoleCtrlEvent(%x, %d) → %hhhd% m", dwCtrlEvent,
           dwProcessGroupId, ok);
   return ok;

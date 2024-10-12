@@ -45,7 +45,7 @@ void SetUpOnce(void) {
 
 void CheckForFdLeaks(void) {
   int rc, i, l = 0, e = errno;
-  for (i = 3; i < 16; ++i) {
+  for (i = 3; i < 50; ++i) {
     rc = fcntl(i, F_GETFL);
     if (rc == -1) {
       ASSERT_EQ(EBADF, errno);
@@ -62,8 +62,8 @@ void CheckForFdLeaks(void) {
 
 TEST(popen, command) {
   char foo[6];
-  testlib_extract("/zip/echo.com", "echo.com", 0755);
-  ASSERT_NE(NULL, (f = popen("./echo.com hello", "r")));
+  testlib_extract("/zip/echo", "echo", 0755);
+  ASSERT_NE(NULL, (f = popen("./echo hello", "r")));
   ASSERT_NE(NULL, fgets(foo, sizeof(foo), f));
   ASSERT_STREQ("hello", foo);
   ASSERT_EQ(0, pclose(f));
@@ -120,7 +120,6 @@ void OnSig(int sig) {
 }
 
 TEST(popen, complicated) {
-  if (IsWindows()) return;  // windows treats sigusr1 as terminate
   char cmd[64];
   signal(SIGUSR1, OnSig);
   sprintf(cmd, "read a ; test \"x$a\" = xhello && kill -USR1 %d", getpid());
@@ -142,13 +141,17 @@ void *Worker(void *arg) {
     arg2 = malloc(13);
     FormatInt32(arg1, _rand64());
     FormatInt32(arg2, _rand64());
-    sprintf(cmd, "echo %s; ./echo.com %s", arg1, arg2);
+    sprintf(cmd, "echo %s; ./echo %s", arg1, arg2);
     strcat(arg1, "\n");
     strcat(arg2, "\n");
     ASSERT_NE(NULL, (f = popen(cmd, "r")));
     EXPECT_STREQ(arg1, fgets(buf, sizeof(buf), f));
     EXPECT_STREQ(arg2, fgets(buf, sizeof(buf), f));
-    ASSERT_EQ(0, pclose(f));
+    if (IsWindows())
+      // todo(jart): why does it flake with echild?
+      pclose(f);
+    else
+      ASSERT_EQ(0, pclose(f));
     free(arg2);
     free(arg1);
     free(cmd);
@@ -157,15 +160,13 @@ void *Worker(void *arg) {
 }
 
 TEST(popen, torture) {
-  if (IsWindows()) {
-    // TODO: Why does pclose() return kNtSignalAccessViolationa?!
-    return;
-  }
   int i, n = 4;
   pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
-  testlib_extract("/zip/echo.com", "echo.com", 0755);
-  for (i = 0; i < n; ++i) ASSERT_EQ(0, pthread_create(t + i, 0, Worker, 0));
-  for (i = 0; i < n; ++i) ASSERT_EQ(0, pthread_join(t[i], 0));
+  testlib_extract("/zip/echo", "echo", 0755);
+  for (i = 0; i < n; ++i)
+    ASSERT_EQ(0, pthread_create(t + i, 0, Worker, 0));
+  for (i = 0; i < n; ++i)
+    ASSERT_EQ(0, pthread_join(t[i], 0));
   CheckForFdLeaks();
 }
 

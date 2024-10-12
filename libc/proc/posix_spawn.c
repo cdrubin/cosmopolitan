@@ -22,7 +22,6 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/rlimit.internal.h"
 #include "libc/calls/struct/rusage.internal.h"
@@ -35,12 +34,12 @@
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/bsf.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/dll.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/fds.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/mem/alloca.h"
 #include "libc/mem/mem.h"
@@ -96,6 +95,10 @@
 
 #define CLOSER_CONTAINER(e) DLL_CONTAINER(struct Closer, elem, e)
 
+static atomic_bool has_vfork;  // i.e. not qemu/wsl/xnu/openbsd
+
+#ifdef __x86_64__
+
 struct Closer {
   int64_t handle;
   struct Dll elem;
@@ -107,20 +110,22 @@ struct SpawnFds {
   struct Dll *closers;
 };
 
-static atomic_bool has_vfork;  // i.e. not qemu/wsl/xnu/openbsd
-
 static textwindows int64_t spawnfds_handle(struct SpawnFds *fds, int fd) {
-  if (__is_cloexec(fds->p + fd)) return -1;
+  if (__is_cloexec(fds->p + fd))
+    return -1;
   return fds->p[fd].handle;
 }
 
 static textwindows errno_t spawnfds_ensure(struct SpawnFds *fds, int fd) {
   int n2;
   struct Fd *p2;
-  if (fd < 0) return EBADF;
-  if (fd < fds->n) return 0;
+  if (fd < 0)
+    return EBADF;
+  if (fd < fds->n)
+    return 0;
   n2 = fd + 1;
-  if (!(p2 = realloc(fds->p, n2 * sizeof(*fds->p)))) return ENOMEM;
+  if (!(p2 = realloc(fds->p, n2 * sizeof(*fds->p))))
+    return ENOMEM;
   bzero(p2 + fds->n, (n2 - fds->n) * sizeof(*fds->p));
   fds->p = p2;
   fds->n = n2;
@@ -141,7 +146,8 @@ static textwindows void spawnfds_destroy(struct SpawnFds *fds) {
 static textwindows int spawnfds_closelater(struct SpawnFds *fds,
                                            int64_t handle) {
   struct Closer *closer;
-  if (!(closer = malloc(sizeof(struct Closer)))) return ENOMEM;
+  if (!(closer = malloc(sizeof(struct Closer))))
+    return ENOMEM;
   closer->handle = handle;
   dll_init(&closer->elem);
   dll_make_last(&fds->closers, &closer->elem);
@@ -170,7 +176,8 @@ static textwindows errno_t spawnfds_dup2(struct SpawnFds *fds, int fildes,
   } else {
     return EBADF;
   }
-  if ((err = spawnfds_ensure(fds, newfildes))) return err;
+  if ((err = spawnfds_ensure(fds, newfildes)))
+    return err;
   struct Fd *neu = fds->p + newfildes;
   memcpy(neu, old, sizeof(struct Fd));
   neu->flags &= ~O_CLOEXEC;
@@ -189,9 +196,21 @@ static textwindows errno_t spawnfds_open(struct SpawnFds *fds, int64_t dirhand,
   errno_t err;
   char16_t path16[PATH_MAX];
   uint32_t perm, share, disp, attr;
-  if ((err = spawnfds_ensure(fds, fildes))) return err;
-  if (__mkntpathath(dirhand, path, 0, path16) != -1 &&
-      GetNtOpenFlags(oflag, mode, &perm, &share, &disp, &attr) != -1 &&
+  if (!strcmp(path, "/dev/null")) {
+    strcpy16(path16, u"NUL");
+  } else if (!strcmp(path, "/dev/stdin")) {
+    return spawnfds_dup2(fds, 0, fildes);
+  } else if (!strcmp(path, "/dev/stdout")) {
+    return spawnfds_dup2(fds, 1, fildes);
+  } else if (!strcmp(path, "/dev/stderr")) {
+    return spawnfds_dup2(fds, 2, fildes);
+  } else {
+    if (__mkntpathath(dirhand, path, 0, path16) == -1)
+      return errno;
+  }
+  if ((err = spawnfds_ensure(fds, fildes)))
+    return err;
+  if (GetNtOpenFlags(oflag, mode, &perm, &share, &disp, &attr) != -1 &&
       (h = CreateFile(path16, perm, share, &kNtIsInheritable, disp, attr, 0))) {
     spawnfds_closelater(fds, h);
     fds->p[fildes].kind = kFdFile;
@@ -277,8 +296,10 @@ static textwindows errno_t posix_spawn_nt_impl(
 
   // fork file descriptor table
   for (int fd = g_fds.n; fd--;) {
-    if (__is_cloexec(g_fds.p + fd)) continue;
-    if ((err = spawnfds_ensure(&fds, fd))) goto ReturnErr;
+    if (__is_cloexec(g_fds.p + fd))
+      continue;
+    if ((err = spawnfds_ensure(&fds, fd)))
+      goto ReturnErr;
     fds.p[fd] = g_fds.p[fd];
   }
 
@@ -292,30 +313,30 @@ static textwindows errno_t posix_spawn_nt_impl(
         case _POSIX_SPAWN_CLOSE:
           err = spawnfds_close(&fds, a->fildes);
           STRACE("spawnfds_close(%d) → %s", a->fildes,
-                 (DescribeErrno)(errno_buf, err));
+                 _DescribeErrno(errno_buf, err));
           break;
         case _POSIX_SPAWN_DUP2:
           err = spawnfds_dup2(&fds, a->fildes, a->newfildes);
           STRACE("spawnfds_dup2(%d, %d) → %s", a->fildes, a->newfildes,
-                 (DescribeErrno)(errno_buf, err));
+                 _DescribeErrno(errno_buf, err));
           break;
         case _POSIX_SPAWN_OPEN:
           err = spawnfds_open(&fds, dirhand, a->path, a->oflag, a->mode,
                               a->fildes);
           STRACE("spawnfds_open(%#s, %s, %s, %d) → %s", a->path,
-                 (DescribeOpenFlags)(oflags_buf, a->oflag),
-                 (DescribeOpenMode)(openmode_buf, a->oflag, a->mode), a->fildes,
-                 (DescribeErrno)(errno_buf, err));
+                 _DescribeOpenFlags(oflags_buf, a->oflag),
+                 _DescribeOpenMode(openmode_buf, a->oflag, a->mode), a->fildes,
+                 _DescribeErrno(errno_buf, err));
           break;
         case _POSIX_SPAWN_CHDIR:
           err = spawnfds_chdir(&fds, dirhand, a->path, &dirhand);
           STRACE("spawnfds_chdir(%#s) → %s", a->path,
-                 (DescribeErrno)(errno_buf, err));
+                 _DescribeErrno(errno_buf, err));
           break;
         case _POSIX_SPAWN_FCHDIR:
           err = spawnfds_fchdir(&fds, a->fildes, &dirhand);
           STRACE("spawnfds_fchdir(%d) → %s", a->fildes,
-                 (DescribeErrno)(errno_buf, err));
+                 _DescribeErrno(errno_buf, err));
           break;
         default:
           __builtin_unreachable();
@@ -329,12 +350,8 @@ static textwindows errno_t posix_spawn_nt_impl(
   // figure out flags
   uint32_t dwCreationFlags = 0;
   short flags = attrp && *attrp ? (*attrp)->flags : 0;
-  if (flags & POSIX_SPAWN_SETSID) {
-    dwCreationFlags |= kNtDetachedProcess;
-  }
-  if (flags & POSIX_SPAWN_SETPGROUP) {
+  if (flags & (POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSID))
     dwCreationFlags |= kNtCreateNewProcessGroup;
-  }
 
   // create process startinfo
   struct NtStartupInfo startinfo = {
@@ -356,6 +373,19 @@ static textwindows errno_t posix_spawn_nt_impl(
     }
   }
 
+  // UNC paths break some things when they are not needed.
+  if (lpCurrentDirectory) {
+    size_t n = strlen16(lpCurrentDirectory);
+    if (n > 4 && n < 260 &&               //
+        lpCurrentDirectory[0] == '\\' &&  //
+        lpCurrentDirectory[1] == '\\' &&  //
+        lpCurrentDirectory[2] == '?' &&   //
+        lpCurrentDirectory[3] == '\\') {
+      memmove(lpCurrentDirectory, lpCurrentDirectory + 4,
+              (n - 4 + 1) * sizeof(char16_t));
+    }
+  }
+
   // inherit signal mask
   sigset_t childmask;
   char maskvar[6 + 21];
@@ -369,12 +399,14 @@ static textwindows errno_t posix_spawn_nt_impl(
   // launch process
   int rc = -1;
   struct NtProcessInformation procinfo;
-  if (!envp) envp = environ;
+  if (!envp)
+    envp = environ;
   if ((fdspec = __describe_fds(fds.p, fds.n, &startinfo, hCreatorProcess,
                                &lpExplicitHandles, &dwExplicitHandleCount))) {
-    rc = ntspawn(dirhand, path, argv, envp, (char *[]){fdspec, maskvar, 0},
-                 dwCreationFlags, lpCurrentDirectory, 0, lpExplicitHandles,
-                 dwExplicitHandleCount, &startinfo, &procinfo);
+    rc = ntspawn(&(struct NtSpawnArgs){
+        dirhand, path, argv, envp, (char *[]){fdspec, maskvar, 0},
+        dwCreationFlags, lpCurrentDirectory, 0, lpExplicitHandles,
+        dwExplicitHandleCount, &startinfo, &procinfo});
   }
   if (rc == -1) {
     err = errno;
@@ -385,7 +417,8 @@ static textwindows errno_t posix_spawn_nt_impl(
   CloseHandle(procinfo.hThread);
   proc->pid = procinfo.dwProcessId;
   proc->handle = procinfo.hProcess;
-  if (pid) *pid = proc->pid;
+  if (pid)
+    *pid = proc->pid;
   __proc_lock();
   __proc_add(proc);
   __proc_unlock();
@@ -395,8 +428,10 @@ static textwindows errno_t posix_spawn_nt_impl(
 }
 
 static const char *DescribePid(char buf[12], int err, int *pid) {
-  if (err) return "n/a";
-  if (!pid) return "NULL";
+  if (err)
+    return "n/a";
+  if (!pid)
+    return "NULL";
   FormatInt32(buf, *pid);
   return buf;
 }
@@ -405,10 +440,7 @@ static textwindows dontinline errno_t posix_spawn_nt(
     int *pid, const char *path, const posix_spawn_file_actions_t *file_actions,
     const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]) {
   int err;
-  if (!path || !argv ||
-      (IsAsan() && (!__asan_is_valid_str(path) ||      //
-                    !__asan_is_valid_strlist(argv) ||  //
-                    (envp && !__asan_is_valid_strlist(envp))))) {
+  if (!path || !argv) {
     err = EFAULT;
   } else {
     err = posix_spawn_nt_impl(pid, path, file_actions, attrp, argv, envp);
@@ -418,6 +450,8 @@ static textwindows dontinline errno_t posix_spawn_nt(
          DescribeStringList(envp), !err ? "0" : _strerrno(err));
   return err;
 }
+
+#endif  // __x86_64__
 
 /**
  * Spawns process, the POSIX way, e.g.
@@ -436,23 +470,101 @@ static textwindows dontinline errno_t posix_spawn_nt(
  *     posix_spawnattr_destroy(&sa);
  *     while (wait(&status) != -1);
  *
- * This provides superior process creation performance across systems
+ * The posix_spawn() function may be used to launch subprocesses. The
+ * primary advantage of using posix_spawn() instead of the traditional
+ * fork() / execve() combination for launching processes is efficiency
+ * and cross-platform compatibility.
  *
- * Processes are normally spawned by calling fork() and execve(), but
- * that goes slow on Windows if the caller has allocated a nontrivial
- * number of memory mappings, all of which need to be copied into the
- * forked child, only to be destroyed a moment later. On UNIX systems
- * fork() bears a similar cost that's 100x less bad, which is copying
- * the page tables. So what this implementation does is on Windows it
- * calls CreateProcess() directly and on UNIX it uses vfork() if it's
- * possible (XNU and OpenBSD don't have it). On UNIX this API has the
- * benefit of avoiding the footguns of using vfork() directly because
- * this implementation will ensure signal handlers can't be called in
- * the child process since that'd likely corrupt the parent's memory.
- * On systems with a real vfork() implementation, the execve() status
- * code is returned by this function via shared memory; otherwise, it
- * gets passed via a temporary pipe (on systems like QEmu, Blink, and
- * XNU/OpenBSD) whose support is auto-detected at runtime.
+ * 1. On Linux, FreeBSD, and NetBSD:
+ *
+ *    Cosmopolitan Libc's posix_spawn() uses vfork() under the hood on
+ *    these platforms automatically, since it's faster than fork(). It's
+ *    because vfork() creates a child process without needing to copy
+ *    the parent's page tables, making it more efficient, especially for
+ *    large processes. Furthermore, vfork() avoids the need to acquire
+ *    every single mutex (see pthread_atfork() for more details) which
+ *    makes it scalable in multi-threaded apps, since the other threads
+ *    in your app can keep going while the spawning thread waits for the
+ *    subprocess to call execve(). Normally vfork() is error-prone since
+ *    there exists few functions that are @vforksafe. the posix_spawn()
+ *    API is designed to offer maximum assurance that you can't shoot
+ *    yourself in the foot. If you do, then file a bug with Cosmo.
+ *
+ * 2. On Windows:
+ *
+ *    posix_spawn() avoids fork() entirely. Windows doesn't natively
+ *    support fork(), and emulating it can be slow and memory-intensive.
+ *    By using posix_spawn(), we get a much faster process creation on
+ *    Windows systems, because it only needs to call CreateProcess().
+ *    Your file actions are replayed beforehand in a simulated way. Only
+ *    Cosmopolitan Libc offers this level of quality. With Cygwin you'd
+ *    have to use its proprietary APIs to achieve the same performance.
+ *
+ * 3. Simplified error handling:
+ *
+ *    posix_spawn() combines process creation and program execution in a
+ *    single call, reducing the points of failure and simplifying error
+ *    handling. One important thing that happens with Cosmopolitan's
+ *    posix_spawn() implementation is that the error code of execve()
+ *    inside your subprocess, should it fail, will be propagated to your
+ *    parent process. This will happen efficiently via vfork() shared
+ *    memory in the event your Linux environment supports this. If it
+ *    doesn't, then Cosmopolitan will fall back to a throwaway pipe().
+ *    The pipe is needed on platforms like XNU and OpenBSD which do not
+ *    support vfork(). It's also needed under QEMU User.
+ *
+ * 4. Signal safety:
+ *
+ *    posix_spawn() guarantees your signal handler callback functions
+ *    won't be executed in the child process. By default, it'll remove
+ *    sigaction() callbacks atomically. This ensures that if something
+ *    like a SIGTERM or SIGHUP is sent to the child process before it's
+ *    had a chance to call execve(), then the child process will simply
+ *    be terminated (like the spawned process would) instead of running
+ *    whatever signal handlers the spawning process has installed. If
+ *    you've set some signals to SIG_IGN, then that'll be preserved for
+ *    the child process by posix_spawn(), unless you explicitly call
+ *    posix_spawnattr_setsigdefault() to reset them.
+ *
+ * 5. Portability:
+ *
+ *    posix_spawn() is part of the POSIX standard, making it more
+ *    portable across different UNIX-like systems and Windows (with
+ *    appropriate libraries). Even the non-POSIX APIs we use here are
+ *    portable; e.g. posix_spawn_file_actions_addchdir_np() is supported
+ *    by glibc, musl libc, and apple libc too.
+ *
+ * When using posix_spawn() you have the option of passing an attributes
+ * object that specifies how the child process should be created. These
+ * functions are provided by Cosmopolitan Libc for setting attributes:
+ *
+ * - posix_spawnattr_init()
+ * - posix_spawnattr_destroy()
+ * - posix_spawnattr_setflags()
+ * - posix_spawnattr_getflags()
+ * - posix_spawnattr_setsigmask()
+ * - posix_spawnattr_getsigmask()
+ * - posix_spawnattr_setpgroup()
+ * - posix_spawnattr_getpgroup()
+ * - posix_spawnattr_setrlimit_np()
+ * - posix_spawnattr_getrlimit_np()
+ * - posix_spawnattr_setschedparam()
+ * - posix_spawnattr_getschedparam()
+ * - posix_spawnattr_setschedpolicy()
+ * - posix_spawnattr_getschedpolicy()
+ * - posix_spawnattr_setsigdefault()
+ * - posix_spawnattr_getsigdefault()
+ *
+ * You can also pass an ordered list of file actions to perform. The
+ * following APIs are provided by Cosmopolitan Libc for doing that:
+ *
+ * - posix_spawn_file_actions_init()
+ * - posix_spawn_file_actions_destroy()
+ * - posix_spawn_file_actions_adddup2()
+ * - posix_spawn_file_actions_addopen()
+ * - posix_spawn_file_actions_addclose()
+ * - posix_spawn_file_actions_addchdir_np()
+ * - posix_spawn_file_actions_addfchdir_np()
  *
  * @param pid if non-null shall be set to child pid on success
  * @param path is resolved path of program which is not `$PATH` searched
@@ -472,99 +584,89 @@ errno_t posix_spawn(int *pid, const char *path,
                     const posix_spawn_file_actions_t *file_actions,
                     const posix_spawnattr_t *attrp, char *const argv[],
                     char *const envp[]) {
-  if (IsWindows()) {
+#ifdef __x86_64__
+  if (IsWindows())
     return posix_spawn_nt(pid, path, file_actions, attrp, argv, envp);
-  }
+#endif
   int pfds[2];
   bool use_pipe;
   volatile int status = 0;
   sigset_t blockall, oldmask;
   int child, res, cs, e = errno;
   volatile bool can_clobber = false;
+  short flags = attrp && *attrp ? (*attrp)->flags : 0;
   sigfillset(&blockall);
   sigprocmask(SIG_SETMASK, &blockall, &oldmask);
   pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cs);
-  if ((use_pipe = !atomic_load_explicit(&has_vfork, memory_order_acquire))) {
+  if ((use_pipe = (flags & POSIX_SPAWN_USEFORK) ||
+                  !atomic_load_explicit(&has_vfork, memory_order_acquire))) {
     if (pipe2(pfds, O_CLOEXEC)) {
       res = errno;
       goto ParentFailed;
     }
   }
-  if (!(child = vfork())) {
+  if (!(child = (flags & POSIX_SPAWN_USEFORK) ? fork() : vfork())) {
     can_clobber = true;
     sigset_t childmask;
     bool lost_cloexec = 0;
     struct sigaction dfl = {0};
-    short flags = attrp && *attrp ? (*attrp)->flags : 0;
-    if (use_pipe) close(pfds[0]);
-    for (int sig = 1; sig < _NSIG; sig++) {
+    if (use_pipe)
+      close(pfds[0]);
+    for (int sig = 1; sig < _NSIG; sig++)
       if (__sighandrvas[sig] != (long)SIG_DFL &&
           (__sighandrvas[sig] != (long)SIG_IGN ||
            ((flags & POSIX_SPAWN_SETSIGDEF) &&
-            sigismember(&(*attrp)->sigdefault, sig) == 1))) {
+            sigismember(&(*attrp)->sigdefault, sig) == 1)))
         sigaction(sig, &dfl, 0);
-      }
-    }
-    if (flags & POSIX_SPAWN_SETSID) {
+    if (flags & POSIX_SPAWN_SETSID)
       setsid();
-    }
-    if ((flags & POSIX_SPAWN_SETPGROUP) && setpgid(0, (*attrp)->pgroup)) {
+    if ((flags & POSIX_SPAWN_SETPGROUP) && setpgid(0, (*attrp)->pgroup))
       goto ChildFailed;
-    }
-    if ((flags & POSIX_SPAWN_RESETIDS) && setgid(getgid())) {
+    if ((flags & POSIX_SPAWN_RESETIDS) && setgid(getgid()))
       goto ChildFailed;
-    }
-    if ((flags & POSIX_SPAWN_RESETIDS) && setuid(getuid())) {
+    if ((flags & POSIX_SPAWN_RESETIDS) && setuid(getuid()))
       goto ChildFailed;
-    }
     if (file_actions) {
       struct _posix_faction *a;
       for (a = *file_actions; a; a = a->next) {
         if (use_pipe && pfds[1] == a->fildes) {
           int p2;
-          if ((p2 = dup(pfds[1])) == -1) {
+          if ((p2 = dup(pfds[1])) == -1)
             goto ChildFailed;
-          }
           lost_cloexec = true;
           close(pfds[1]);
           pfds[1] = p2;
         }
         switch (a->action) {
           case _POSIX_SPAWN_CLOSE:
-            if (close(a->fildes)) {
+            if (close(a->fildes))
               goto ChildFailed;
-            }
             break;
           case _POSIX_SPAWN_DUP2:
-            if (dup2(a->fildes, a->newfildes) == -1) {
+            if (dup2(a->fildes, a->newfildes) == -1)
               goto ChildFailed;
-            }
             break;
           case _POSIX_SPAWN_OPEN: {
             int t;
-            if ((t = openat(AT_FDCWD, a->path, a->oflag, a->mode)) == -1) {
+            if ((t = openat(AT_FDCWD, a->path, a->oflag, a->mode)) == -1)
               goto ChildFailed;
-            }
             if (t != a->fildes) {
               if (dup2(t, a->fildes) == -1) {
                 close(t);
                 goto ChildFailed;
               }
-              if (close(t)) {
+              if (close(t))
                 goto ChildFailed;
-              }
             }
             break;
           }
           case _POSIX_SPAWN_CHDIR:
-            if (chdir(a->path) == -1) {
+            if (chdir(a->path) == -1)
               goto ChildFailed;
-            }
             break;
           case _POSIX_SPAWN_FCHDIR:
-            if (fchdir(a->fildes) == -1) {
+            if (fchdir(a->fildes) == -1)
               goto ChildFailed;
-            }
             break;
           default:
             __builtin_unreachable();
@@ -572,22 +674,18 @@ errno_t posix_spawn(int *pid, const char *path,
       }
     }
     if (IsLinux() || IsFreebsd() || IsNetbsd()) {
-      if (flags & POSIX_SPAWN_SETSCHEDULER) {
+      if (flags & POSIX_SPAWN_SETSCHEDULER)
         if (sched_setscheduler(0, (*attrp)->schedpolicy,
-                               &(*attrp)->schedparam) == -1) {
+                               &(*attrp)->schedparam) == -1)
           goto ChildFailed;
-        }
-      }
-      if (flags & POSIX_SPAWN_SETSCHEDPARAM) {
-        if (sched_setparam(0, &(*attrp)->schedparam)) {
+      if (flags & POSIX_SPAWN_SETSCHEDPARAM)
+        if (sched_setparam(0, &(*attrp)->schedparam))
           goto ChildFailed;
-        }
-      }
     }
-    if (flags & POSIX_SPAWN_SETRLIMIT) {
+    if (flags & POSIX_SPAWN_SETRLIMIT_NP) {
       int rlimset = (*attrp)->rlimset;
       while (rlimset) {
-        int resource = _bsf(rlimset);
+        int resource = bsf(rlimset);
         rlimset &= ~(1u << resource);
         if (setrlimit(resource, (*attrp)->rlim + resource)) {
           // MacOS ARM64 RLIMIT_STACK always returns EINVAL
@@ -597,16 +695,16 @@ errno_t posix_spawn(int *pid, const char *path,
         }
       }
     }
-    if (lost_cloexec) {
+    if (lost_cloexec)
       fcntl(pfds[1], F_SETFD, FD_CLOEXEC);
-    }
     if (flags & POSIX_SPAWN_SETSIGMASK) {
       childmask = (*attrp)->sigmask;
     } else {
       childmask = oldmask;
     }
     sigprocmask(SIG_SETMASK, &childmask, 0);
-    if (!envp) envp = environ;
+    if (!envp)
+      envp = environ;
     execve(path, argv, envp);
   ChildFailed:
     res = errno;
@@ -617,30 +715,28 @@ errno_t posix_spawn(int *pid, const char *path,
     }
     _Exit(127);
   }
-  if (use_pipe) {
+  if (use_pipe)
     close(pfds[1]);
-  }
   if (child != -1) {
     if (!use_pipe) {
       res = status;
     } else {
-      if (can_clobber) {
+      if (can_clobber)
         atomic_store_explicit(&has_vfork, true, memory_order_release);
-      }
       res = 0;
       read(pfds[0], &res, sizeof(res));
     }
     if (!res) {
-      if (pid) *pid = child;
+      if (pid)
+        *pid = child;
     } else {
       wait4(child, 0, 0, 0);
     }
   } else {
     res = errno;
   }
-  if (use_pipe) {
+  if (use_pipe)
     close(pfds[0]);
-  }
 ParentFailed:
   sigprocmask(SIG_SETMASK, &oldmask, 0);
   pthread_setcancelstate(cs, 0);

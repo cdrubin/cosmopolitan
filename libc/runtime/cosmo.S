@@ -16,11 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
-#include "libc/notice.inc"
+#include "libc/macros.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/map.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/dce.h"
 #ifdef __x86_64__
@@ -46,7 +45,7 @@ cosmo:	push	%rbp
 #endif /* SYSDEBUG */
 
 #ifndef NOX87
-//	Windows always initializes FPU to douuble precision.
+//	Windows always initializes FPU to double precision.
 //	WSL breaks Linux ABI by initializing FPU to double precision.
 //	This code makes long double long again.
 //
@@ -76,6 +75,19 @@ cosmo:	push	%rbp
 #ifdef __FAST_MATH__
 	push	%rax
 	stmxcsr	(%rsp)
+//
+//	Enable hardware optimizations in violation of the IEEE standard.
+//
+//	- 0x0040 enables "DAZ: Denormals Are Zeros" in MXCSR. This causes the
+//	  processor to turn denormal inputs into zero, before computing them.
+//	  See Intel Manual Vol. 1 §10.2.3.4
+//
+//	- 0x8000 enables "FTZ: Flush To Zero" in MXCSR. This means a floating
+//	  point operation that results in underflow will be set to zero, with
+//	  the same sign, rather than producing a denormalized output. It will
+//	  happen only if underflow trapping hasnt been enabled. See the Intel
+//	  Manual Vol. 1 §10.2.3.3.
+//
 	orl	$0x8040,(%rsp)
 	ldmxcsr	(%rsp)
 	pop	%rax
@@ -85,19 +97,18 @@ cosmo:	push	%rbp
 	call	_init
 
 //	call constructors
-	ezlea	__init_array_end,ax		// static ctors in forward order
-	.weak	__init_array_end		// could be called multiple times
-	ezlea	__init_array_start,cx		// idempotency recommended
-	.weak	__init_array_start		// @see ape/ape.lds
-1:	cmp	%rax,%rcx
+	.weak	__init_array_end
+	.weak	__init_array_start
+	mov	$__init_array_start,%eax
+1:	cmp	$__init_array_end,%eax
 	je	2f
-	sub	$8,%rax
 	push	%rax
-	push	%rcx
+	push	%rax
 	call	.Largs
 	call	*(%rax)
-	pop	%rcx
 	pop	%rax
+	pop	%rax
+	add	$8,%eax
 	jmp	1b
 
 //	call main()
@@ -122,16 +133,6 @@ cosmo:	push	%rbp
 	pop	%rsi
 	pop	%rdi
 	.init.end 304,_init_tls
-
-#if IsAsan()
-	.init.start 305,_init_symbols
-	push	%rdi
-	push	%rsi
-	call	__init_symbols
-	pop	%rsi
-	pop	%rdi
-	.init.end 305,_init_symbols
-#endif
 
 #ifdef FTRACE
 	.init.start 306,_init_ftrace

@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "net/https/https.h"
@@ -54,7 +54,8 @@ char *DescribeSslVerifyFailure(int flags) {
   p = malloc(1024);
   q = stpcpy(p, "verify failed");
   for (i = 0; i < ARRAYLEN(kSslVerifyStrings); ++i) {
-    if (!(flags & kSslVerifyStrings[i].code)) continue;
+    if (!(flags & kSslVerifyStrings[i].code))
+      continue;
     q = stpcpy(stpcpy(q, " "), kSslVerifyStrings[i].str);
   }
   return p;

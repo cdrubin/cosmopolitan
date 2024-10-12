@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/memory.h"
 #include "libc/nt/struct/securityattributes.h"
 #include "libc/nt/thunk/msabi.h"
@@ -42,7 +42,8 @@ textwindows int64_t CreateFileMapping(
   hHandle = __imp_CreateFileMappingW(opt_hFile, opt_lpFileMappingAttributes,
                                      flProtect, dwMaximumSizeHigh,
                                      dwMaximumSizeLow, opt_lpName);
-  if (!hHandle) __winerr();
+  if (!hHandle)
+    __winerr();
   NTTRACE("CreateFileMapping(%ld, %s, %s, %'zu, %#hs) → %ld% m", opt_hFile,
           DescribeNtSecurityAttributes(opt_lpFileMappingAttributes),
           DescribeNtPageFlags(flProtect),

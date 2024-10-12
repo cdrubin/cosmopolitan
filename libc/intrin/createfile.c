@@ -19,8 +19,8 @@
 #include "libc/nt/createfile.h"
 #include "libc/calls/sig.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
 #include "libc/nt/errors.h"
@@ -56,18 +56,20 @@ TryAgain:
   hHandle = __imp_CreateFileW(lpFileName, dwDesiredAccess, dwShareMode,
                               opt_lpSecurity, dwCreationDisposition,
                               dwFlagsAndAttributes, opt_hTemplateFile);
-  NTTRACE("CreateFile(%#hs, %s, %s, %s, %s, %s, %ld) → {%ld, %d}", lpFileName,
-          (DescribeNtFileAccessFlags)(buf_accessflags, dwDesiredAccess),
-          (DescribeNtFileShareFlags)(buf_shareflags, dwShareMode),
-          (DescribeNtSecurityAttributes)(buf_secattr, opt_lpSecurity),
-          DescribeNtCreationDisposition(dwCreationDisposition),
-          (DescribeNtFileFlagAttr)(buf_flagattr, dwFlagsAndAttributes),
+  NTTRACE("CreateFile(%#!hs, %s, %s, %s, %s, %s, %ld) → {%ld, %d}", lpFileName,
+          _DescribeNtFileAccessFlags(buf_accessflags, dwDesiredAccess),
+          _DescribeNtFileShareFlags(buf_shareflags, dwShareMode),
+          _DescribeNtSecurityAttributes(buf_secattr, opt_lpSecurity),
+          _DescribeNtCreationDisposition(dwCreationDisposition),
+          _DescribeNtFileFlagAttr(buf_flagattr, dwFlagsAndAttributes),
           opt_hTemplateFile, hHandle, __imp_GetLastError());
   if (hHandle == -1) {
     switch (__imp_GetLastError()) {
       case kNtErrorPipeBusy:
-        if (micros >= 1024) __imp_Sleep(micros / 1024);
-        if (micros < 1024 * 1024) micros <<= 1;
+        if (micros >= 1024)
+          __imp_Sleep(micros / 1024);
+        if (micros < 1024 * 1024)
+          micros <<= 1;
         goto TryAgain;
       case kNtErrorAccessDenied:
         // GetNtOpenFlags() always greedily requests execute permissions

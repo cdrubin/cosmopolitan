@@ -26,8 +26,8 @@
 #include "libc/elf/struct/sym.h"
 #include "libc/elf/struct/verdaux.h"
 #include "libc/elf/struct/verdef.h"
-#include "libc/intrin/getauxval.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/getauxval.h"
+#include "libc/intrin/strace.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/auxv.h"
@@ -35,7 +35,8 @@
 // needed to avoid asan restrictions on strcmp
 static int StrCmp(const char *l, const char *r) {
   size_t i = 0;
-  while (l[i] == r[i] && r[i]) ++i;
+  while (l[i] == r[i] && r[i])
+    ++i;
   return (l[i] & 255) - (r[i] & 255);
 }
 

@@ -28,8 +28,8 @@
 #include "libc/calls/ucontext.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/likely.h"
-#include "libc/intrin/promises.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/intrin/promises.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/sysv/consts/audit.h"
@@ -615,6 +615,8 @@ static const uint16_t kPledgeStdio[] = {
     __NR_linux_msync,              //
     __NR_linux_mmap | NOEXEC,      //
     __NR_linux_mlock,              //
+    __NR_linux_mlock2,             //
+    __NR_linux_munlock,            //
     __NR_linux_mremap,             //
     __NR_linux_munmap,             //
     __NR_linux_mincore,            //
@@ -710,6 +712,7 @@ static const uint16_t kPledgeRpath[] = {
 #endif                             //
     __NR_linux_fstat,              //
     __NR_linux_fstatat,            //
+    __NR_linux_statx,              //
 #ifdef __NR_linux_access           //
     __NR_linux_access,             //
 #endif                             //
@@ -737,6 +740,7 @@ static const uint16_t kPledgeWpath[] = {
     __NR_linux_lstat,               //
 #endif                              //
     __NR_linux_fstatat,             //
+    __NR_linux_statx,               //
 #ifdef __NR_linux_access            //
     __NR_linux_access,              //
 #endif                              //
@@ -950,14 +954,14 @@ static const uint16_t kPledgeUnveil[] = {
 
 // placeholder group
 //
-// pledge.com checks this to do auto-unveiling
+// pledge checks this to do auto-unveiling
 static const uint16_t kPledgeVminfo[] = {
     __NR_linux_sched_yield,  //
 };
 
 // placeholder group
 //
-// pledge.com uses this to auto-unveil /tmp and $TMPPATH with rwc
+// pledge uses this to auto-unveil /tmp and $TMPPATH with rwc
 // permissions. pledge() alone (without unveil() too) offers very
 // little security here. consider using them together.
 static const uint16_t kPledgeTmppath[] = {
@@ -1003,16 +1007,15 @@ static const struct sock_filter kPledgeStart[] = {
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(nr)),
 #ifdef __NR_linux_memfd_secret
     // forbid some system calls with ENOSYS (rather than EPERM)
-    BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, __NR_linux_memfd_secret, 5, 0),
+    BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, __NR_linux_memfd_secret, 4, 0),
 #else
     BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, __NR_linux_landlock_restrict_self + 1,
-             5, 0),
+             4, 0),
 #endif
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_rseq, 4, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_memfd_create, 3, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_openat2, 2, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_clone3, 1, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_statx, 0, 1),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_rseq, 3, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_memfd_create, 2, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_openat2, 1, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_linux_clone3, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (Enosys & SECCOMP_RET_DATA)),
 };
 
@@ -1023,24 +1026,27 @@ static const struct sock_filter kFilterIgnoreExitGroup[] = {
 
 static privileged unsigned long StrLen(const char *s) {
   unsigned long n = 0;
-  while (*s++) ++n;
+  while (*s++)
+    ++n;
   return n;
 }
 
 static privileged void *MemCpy(void *d, const void *s, unsigned long n) {
   unsigned long i = 0;
-  for (; i < n; ++i) ((char *)d)[i] = ((char *)s)[i];
+  for (; i < n; ++i)
+    ((char *)d)[i] = ((char *)s)[i];
   return (char *)d + n;
 }
 
 static privileged char *FixCpy(char p[17], uint64_t x, int k) {
-  while (k > 0) *p++ = "0123456789abcdef"[(x >> (k -= 4)) & 15];
+  while (k > 0)
+    *p++ = "0123456789abcdef"[(x >> (k -= 4)) & 15];
   *p = '\0';
   return p;
 }
 
 static privileged char *HexCpy(char p[17], uint64_t x) {
-  return FixCpy(p, x, ROUNDUP(x ? _bsrl(x) + 1 : 1, 4));
+  return FixCpy(p, x, ROUNDUP(x ? bsrl(x) + 1 : 1, 4));
 }
 
 static privileged int GetPid(void) {
@@ -1305,7 +1311,8 @@ static privileged void MonitorSigSys(void) {
 
 static privileged void AppendFilter(struct Filter *f,
                                     const struct sock_filter *p, size_t n) {
-  if (UNLIKELY(f->n + n > ARRAYLEN(f->p))) notpossible;
+  if (UNLIKELY(f->n + n > ARRAYLEN(f->p)))
+    notpossible;
   MemCpy(f->p + f->n, p, n * sizeof(*f->p));
   f->n += n;
 }
@@ -1635,7 +1642,6 @@ static privileged void AllowMmapExec(struct Filter *f) {
 //
 //   - MAP_LOCKED   (0x02000)
 //   - MAP_NONBLOCK (0x10000)
-//   - MAP_HUGETLB  (0x40000)
 //
 static privileged void AllowMmapNoexec(struct Filter *f) {
   static const struct sock_filter fragment[] = {
@@ -1644,7 +1650,7 @@ static privileged void AllowMmapNoexec(struct Filter *f) {
       /*L2*/ BPF_STMT(BPF_ALU | BPF_AND | BPF_K, ~(PROT_READ | PROT_WRITE)),
       /*L3*/ BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 8 - 4),
       /*L4*/ BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(args[3])),  // flags
-      /*L5*/ BPF_STMT(BPF_ALU | BPF_AND | BPF_K, 0x52000),
+      /*L5*/ BPF_STMT(BPF_ALU | BPF_AND | BPF_K, 0x12000),
       /*L6*/ BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 1),
       /*L7*/ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
       /*L8*/ BPF_STMT(BPF_LD | BPF_W | BPF_ABS, OFF(nr)),
@@ -2170,7 +2176,8 @@ static privileged void AppendPledge(struct Filter *f,   //
   if ((count = CountUnspecial(p, len))) {
     if (count < 256) {
       for (j = i = 0; i < len; ++i) {
-        if (p[i] & SPECIAL) continue;
+        if (p[i] & SPECIAL)
+          continue;
         // jump to ALLOW rule below if accumulator equals ordinal
         struct sock_filter fragment[] = {
             BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,  // instruction
@@ -2192,7 +2199,8 @@ static privileged void AppendPledge(struct Filter *f,   //
 
   // handle "special" ordinals which use hand-crafted bpf
   for (i = 0; i < len; ++i) {
-    if (!(p[i] & SPECIAL)) continue;
+    if (!(p[i] & SPECIAL))
+      continue;
     switch (p[i]) {
       case __NR_linux_mmap | EXEC:
         AllowMmapExec(f);

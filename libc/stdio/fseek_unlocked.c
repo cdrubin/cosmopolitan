@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/o.h"
@@ -40,7 +40,8 @@ int fseek_unlocked(FILE *f, int64_t offset, int whence) {
   int res;
   int64_t pos;
   if (f->fd != -1) {
-    if (__fflush_impl(f) == -1) return -1;
+    if (__fflush_impl(f) == -1)
+      return -1;
     if (whence == SEEK_CUR && f->beg < f->end) {
       offset -= f->end - f->beg;
     }

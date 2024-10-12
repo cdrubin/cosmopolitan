@@ -16,29 +16,41 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/asan.internal.h"
 #include "libc/calls/struct/timespec.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
+#include "libc/runtime/clktck.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 
-static int sys_clock_getres_poly(int clock, struct timespec *ts, int64_t real,
-                                 int64_t real_coarse, int64_t boot) {
-  ts->tv_sec = 0;
-  if (clock == CLOCK_REALTIME) {
-    ts->tv_nsec = real;
+static uint64_t hz_to_nanos(uint64_t frequency) {
+  if (!frequency)
     return 0;
-  } else if (clock == CLOCK_REALTIME_COARSE) {
-    ts->tv_nsec = real_coarse;
+  uint64_t quotient = 1000000000 / frequency;
+  uint64_t remainder = 1000000000 % frequency;
+  if (remainder > 0)
+    quotient += 1;
+  return quotient;
+}
+
+static int sys_clock_getres_poly(int clock, struct timespec *ts, int64_t prec) {
+  if (ts)
+    ts->tv_sec = 0;
+  if (clock == CLOCK_REALTIME ||   //
+      clock == CLOCK_BOOTTIME ||   //
+      clock == CLOCK_MONOTONIC ||  //
+      clock == CLOCK_MONOTONIC_RAW) {
+    if (ts)
+      ts->tv_nsec = prec;
     return 0;
-  } else if (clock == CLOCK_MONOTONIC) {
-    ts->tv_nsec = 10;
-    return 0;
-  } else if (clock == CLOCK_BOOTTIME) {
-    ts->tv_nsec = boot;
+  } else if (clock == CLOCK_REALTIME_COARSE ||
+             clock == CLOCK_MONOTONIC_COARSE ||
+             clock == CLOCK_THREAD_CPUTIME_ID ||
+             clock == CLOCK_PROCESS_CPUTIME_ID) {
+    if (ts)
+      *ts = timespec_fromnanos(hz_to_nanos(CLK_TCK));
     return 0;
   } else {
     return einval();
@@ -46,11 +58,11 @@ static int sys_clock_getres_poly(int clock, struct timespec *ts, int64_t real,
 }
 
 static int sys_clock_getres_nt(int clock, struct timespec *ts) {
-  return sys_clock_getres_poly(clock, ts, 100, 1000000, 1000000);
+  return sys_clock_getres_poly(clock, ts, 100);
 }
 
 static int sys_clock_getres_xnu(int clock, struct timespec *ts) {
-  return sys_clock_getres_poly(clock, ts, 1000, 1000, 1000);
+  return sys_clock_getres_poly(clock, ts, 1000);
 }
 
 /**
@@ -63,7 +75,7 @@ static int sys_clock_getres_xnu(int clock, struct timespec *ts) {
  */
 int clock_getres(int clock, struct timespec *ts) {
   int rc;
-  if (!ts || (IsAsan() && !__asan_is_valid_timespec(ts))) {
+  if (!ts) {
     rc = efault();
   } else if (clock == 127) {
     rc = einval();  // 127 is used by consts.sh to mean unsupported

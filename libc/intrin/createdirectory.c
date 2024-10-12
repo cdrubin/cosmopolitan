@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/files.h"
 #include "libc/nt/thunk/msabi.h"
 
@@ -34,7 +34,8 @@ textwindows bool32 CreateDirectory(const char16_t *lpPathName,
                                    const struct NtSecurityAttributes *lpSec) {
   bool32 ok;
   ok = __imp_CreateDirectoryW(lpPathName, lpSec);
-  if (!ok) __winerr();
+  if (!ok)
+    __winerr();
   NTTRACE("CreateDirectory(%#hs, %s) → %hhhd% m", lpPathName,
           DescribeNtSecurityAttributes(lpSec), ok);
   return ok;

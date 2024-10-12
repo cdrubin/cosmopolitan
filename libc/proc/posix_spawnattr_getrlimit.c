@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/rlimit.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/proc/posix_spawn.h"
 #include "libc/proc/posix_spawn.internal.h"
 #include "libc/stdio/sysparam.h"
@@ -31,8 +31,8 @@
  * @raise EINVAL if `resource` is invalid or unsupported by host
  * @raise ENOENT if `resource` is absent
  */
-int posix_spawnattr_getrlimit(const posix_spawnattr_t *attr, int resource,
-                              struct rlimit *rlim) {
+int posix_spawnattr_getrlimit_np(const posix_spawnattr_t *attr, int resource,
+                                 struct rlimit *rlim) {
   if (0 <= resource && resource < MIN(RLIM_NLIMITS, ARRAYLEN((*attr)->rlim))) {
     if (((*attr)->rlimset & (1u << resource))) {
       *rlim = (*attr)->rlim[resource];

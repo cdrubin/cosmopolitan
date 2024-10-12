@@ -18,15 +18,15 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "third_party/stb/stb_image_resize.h"
 #include "libc/assert.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
 
-asm(".ident\t\"\\n\\n\
-stb_image_resize (Public Domain)\\n\
-Credit: Jorge L Rodriguez (@VinoBS), Sean Barrett, et al.\\n\
-http://nothings.org/stb\"");
+__notice(stb_image_resize_notice, "\
+stb_image_resize (Public Domain)\n\
+Credit: Jorge L Rodriguez (@VinoBS), Sean Barrett, et al.\n\
+http://nothings.org/stb");
 
 #define STBIR_ASSERT(x)       assert(x)
 #define STBIR_MALLOC(size, c) ((void)(c), malloc(size))

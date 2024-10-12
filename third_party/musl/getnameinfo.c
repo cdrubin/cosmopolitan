@@ -36,12 +36,9 @@
 #include "libc/sysv/consts/af.h"
 #include "third_party/musl/lookup.internal.h"
 #include "third_party/musl/netdb.h"
+#include "libc/ctype.h"
 #include "third_party/musl/resolv.internal.h"
-
-asm(".ident\t\"\\n\\n\
-Musl libc (MIT License)\\n\
-Copyright 2005-2014 Rich Felker, et. al.\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("musl_libc_notice");
 
 #define PTR_MAX (64 + sizeof ".in-addr.arpa")
 #define RR_PTR 12
@@ -210,8 +207,10 @@ int getnameinfo(const struct sockaddr *restrict sa, socklen_t sl,
 			query[3] = 0; /* don't need AD flag */
 			int rlen = __res_send(query, qlen, reply, sizeof reply);
 			buf[0] = 0;
-			if (rlen > 0)
+			if (rlen > 0) {
+				if (rlen > sizeof reply) rlen = sizeof reply;
 				__dns_parse(reply, rlen, dns_parse_callback, buf);
+			}
 		}
 		if (!*buf) {
 			if (flags & NI_NAMEREQD) return EAI_NONAME;

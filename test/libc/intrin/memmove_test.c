@@ -16,14 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/nexgen32e.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/stdio/rand.h"
-#include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"

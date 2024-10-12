@@ -17,11 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/ctype.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/libgen.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/serialize.h"
 #include "libc/str/str.h"
@@ -33,7 +34,8 @@ void SetUpOnce(void) {
 }
 
 TEST(__getcwd, zero) {
-  if (IsQemu()) return;
+  if (IsQemuUser())
+    return;
   ASSERT_SYS(ERANGE, -1, __getcwd(0, 0));
 }
 
@@ -83,7 +85,8 @@ TEST(getcwd, testNullBuf_allocatesResult) {
 }
 
 TEST(getcwd, testWindows_addsFunnyPrefix) {
-  if (!IsWindows()) return;
+  if (!IsWindows())
+    return;
   char path[PATH_MAX];
   ASSERT_NE(0, getcwd(path, sizeof(path)));
   path[1] = tolower(path[1]);

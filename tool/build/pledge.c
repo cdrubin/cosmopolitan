@@ -29,6 +29,7 @@
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/ctype.h"
 #include "libc/dce.h"
 #include "libc/elf/def.h"
 #include "libc/elf/elf.h"
@@ -37,17 +38,17 @@
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
-#include "libc/serialize.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/promises.internal.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/promises.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/alloca.h"
 #include "libc/nexgen32e/kcpuids.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
+#include "libc/serialize.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/stdio.h"
@@ -202,8 +203,10 @@ long ParseSiSize(const char *s, long b) {
 }
 
 void AddPromise(const char *s) {
-  while (isspace(*s)) ++s;
-  if (!*s) return;
+  while (isspace(*s))
+    ++s;
+  if (!*s)
+    return;
   if (*g_promises) {
     strlcat(g_promises, " ", sizeof(g_promises));
   }
@@ -358,23 +361,32 @@ void NormalizeFileDescriptors(void) {
 int SetLimit(int r, long lo, long hi) {
   struct rlimit old;
   struct rlimit lim = {lo, hi};
-  if (r < 0 || r >= RLIM_NLIMITS) return 0;
-  if (!setrlimit(r, &lim)) return 0;
-  if (getrlimit(r, &old)) return -1;
+  if (r < 0 || r >= RLIM_NLIMITS)
+    return 0;
+  if (!setrlimit(r, &lim))
+    return 0;
+  if (getrlimit(r, &old))
+    return -1;
   lim.rlim_cur = MIN(lim.rlim_cur, old.rlim_max);
   lim.rlim_max = MIN(lim.rlim_max, old.rlim_max);
   return setrlimit(r, &lim);
 }
 
 static int GetBaseCpuFreqMhz(void) {
+#ifdef __x86_64__
   return KCPUIDS(16H, EAX) & 0x7fff;
+#else
+  return 0;
+#endif
 }
 
 int SetCpuLimit(int secs) {
 #ifdef __x86_64__
   int mhz, lim;
-  if (secs <= 0) return 0;
-  if (!(mhz = GetBaseCpuFreqMhz())) return eopnotsupp();
+  if (secs <= 0)
+    return 0;
+  if (!(mhz = GetBaseCpuFreqMhz()))
+    return eopnotsupp();
   lim = ceil(3100. / mhz * secs);
   return SetLimit(RLIMIT_CPU, lim, lim);
 #else
@@ -464,8 +476,10 @@ enum Strategy GetStrategy(void) {
 void ApplyFilesystemPolicy(unsigned long ipromises) {
   const char *p;
 
-  if (g_dontunveil) return;
-  if (!SupportsLandlock()) return;
+  if (g_dontunveil)
+    return;
+  if (!SupportsLandlock())
+    return;
 
   Unveil(g_prog, "rx");
 
@@ -587,7 +601,8 @@ void ApplyFilesystemPolicy(unsigned long ipromises) {
 
 void DropCapabilities(void) {
   int e, i;
-  if (!IsLinux()) return;
+  if (!IsLinux())
+    return;
   for (e = errno, i = 0;; ++i) {
     if (prctl(PR_CAPBSET_DROP, i) == -1) {
       if (errno == EINVAL || errno == EPERM) {
@@ -603,16 +618,21 @@ void DropCapabilities(void) {
 
 bool FileExistsAndIsNewerThan(const char *filepath, const char *thanpath) {
   struct stat st1, st2;
-  if (stat(filepath, &st1) == -1) return false;
-  if (stat(thanpath, &st2) == -1) return false;
-  if (st1.st_mtim.tv_sec < st2.st_mtim.tv_sec) return false;
-  if (st1.st_mtim.tv_sec > st2.st_mtim.tv_sec) return true;
+  if (stat(filepath, &st1) == -1)
+    return false;
+  if (stat(thanpath, &st2) == -1)
+    return false;
+  if (st1.st_mtim.tv_sec < st2.st_mtim.tv_sec)
+    return false;
+  if (st1.st_mtim.tv_sec > st2.st_mtim.tv_sec)
+    return true;
   return st1.st_mtim.tv_nsec >= st2.st_mtim.tv_nsec;
 }
 
 int Extract(const char *from, const char *to, int mode) {
   int fdin, fdout;
-  if ((fdin = open(from, O_RDONLY)) == -1) return -1;
+  if ((fdin = open(from, O_RDONLY)) == -1)
+    return -1;
   if ((fdout = creat(to, mode)) == -1) {
     close(fdin);
     return -1;
@@ -627,7 +647,8 @@ int Extract(const char *from, const char *to, int mode) {
 
 int CountEnviron(char **ep) {
   int res = 0;
-  while (*ep++) ++res;
+  while (*ep++)
+    ++res;
   return res;
 }
 
@@ -636,8 +657,8 @@ int main(int argc, char *argv[]) {
   bool hasfunbits;
   int useruid, usergid;
   int owneruid, ownergid;
-  int oldfsuid, oldfsgid;
   unsigned long ipromises;
+  int oldfsuid = 0, oldfsgid = 0;
 
   // parse flags
   GetOpts(argc, argv);
@@ -854,10 +875,10 @@ int main(int argc, char *argv[]) {
   // perform unveiling
   ApplyFilesystemPolicy(ipromises);
 
-  // pledge.com uses the return eperm instead of killing the process
-  // model. we do this becasue it's only possible to have sigsys print
-  // crash messages if we're not pledging exec, which is what this tool
-  // always has to do currently.
+  // pledge uses the return eperm instead of killing the process model.
+  // we do this becasue it's only possible to have sigsys print crash
+  // messages if we're not pledging exec, which is what this tool always
+  // has to do currently.
   if (g_kflag) {
     __pledge_mode = PLEDGE_PENALTY_KILL_PROCESS;
   } else {

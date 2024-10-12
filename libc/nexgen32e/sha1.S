@@ -31,12 +31,13 @@
 │  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.        │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
-.ident "\n\
-AVX2 SHA-1 (BSD-3 License)\n\
-Copyright 2014 Intel Corporation\n"
-.include "libc/disclaimer.inc"
+	.section .notice,"aR",@progbits
+	.asciz	"\n\n\
+AVX2 SHA-1 (BSD-3 License)n\
+Copyright 2014 Intel Corporation"
+	.previous
 
 #define	CTX	%rdi	/* arg1 */
 #define BUF	%rsi	/* arg2 */

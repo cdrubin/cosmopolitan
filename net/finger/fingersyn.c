@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/bsr.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 /**
  * Fingers IP+TCP SYN packet.
@@ -36,7 +36,7 @@ uint32_t FingerSyn(const char *p, size_t n) {
     // ttl<=128 Windows, OpenVMS 8+
     // ttl<=64  Mac, Linux, BSD, Solaris 8+, Tru64, HP-UX
     ttl = p[8] & 255;
-    h += _bsr(MAX(1, ttl - 1));
+    h += bsr(MAX(1, ttl - 1));
     h *= 0x9e3779b1;
     // TCP Options
     // We care about the order and presence of leading common options.

@@ -38,11 +38,7 @@
 #include "libc/str/str.h"
 #include "libc/thread/thread.h"
 #include "third_party/musl/passwd.h"
-
-asm(".ident\t\"\\n\\n\
-Musl libc (MIT License)\\n\
-Copyright 2005-2014 Rich Felker, et. al.\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("musl_libc_notice");
 
 #ifdef FTRACE
 // if the default mode debugging tools are enabled, and we're linking
@@ -95,8 +91,9 @@ __fopen_passwd(void)
 {
 	FILE *f;
 	char *s;
-	// MacOS has a fake /etc/passwd file without any user details.
-	if (!IsXnu() && (f = fopen("/etc/passwd", "rbe")))
+	// MacOS has a fake /etc/passwd file without any user details
+	// GetFileAttributes(u"\\etc\\passwd") takes 2 seconds sometimes
+	if (!IsXnu() && !IsWindows() && (f = fopen("/etc/passwd", "rbe")))
 		return f;
 	if (!(s = __create_synthetic_passwd_file()))
 		return 0;

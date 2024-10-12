@@ -53,9 +53,15 @@ $(THIRD_PARTY_NSYNC_A_OBJS): private			\
 			-ffreestanding			\
 			-fdata-sections			\
 			-ffunction-sections		\
-			-fno-sanitize=address		\
 			-Wframe-larger-than=4096	\
 			-Walloca-larger-than=4096
+
+# avoid the legacy sse decoding penalty on avx systems
+ifeq ($(MODE),)
+$(THIRD_PARTY_NSYNC_A_OBJS): private			\
+		COPTS +=				\
+			-mgeneral-regs-only
+endif
 
 # these assembly files are safe to build on aarch64
 o/$(MODE)/third_party/nsync/compat.o: third_party/nsync/compat.S
@@ -70,4 +76,5 @@ $(THIRD_PARTY_NSYNC_OBJS): third_party/nsync/BUILD.mk
 .PHONY: o/$(MODE)/third_party/nsync
 o/$(MODE)/third_party/nsync:				\
 	o/$(MODE)/third_party/nsync/mem			\
+	o/$(MODE)/third_party/nsync/testing		\
 	$(THIRD_PARTY_NSYNC_CHECKS)

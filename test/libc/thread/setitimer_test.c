@@ -26,7 +26,6 @@
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/itimer.h"
@@ -35,7 +34,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 
 atomic_int gotsig;
 atomic_int gottid;

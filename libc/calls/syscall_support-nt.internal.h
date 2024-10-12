@@ -4,6 +4,8 @@
 #include "libc/nt/struct/overlapped.h"
 COSMOPOLITAN_C_START_
 
+#define POLL_INTERVAL_MS 10
+
 bool isdirectory_nt(const char *);
 bool isregularfile_nt(const char *);
 bool issymlink_nt(const char *);
@@ -18,7 +20,7 @@ int sys_fcntl_nt_setfl(int, unsigned);
 int sys_pause_nt(void);
 int64_t __fix_enotdir(int64_t, char16_t *);
 int64_t __fix_enotdir3(int64_t, char16_t *, char16_t *);
-int64_t __winerr(void) nocallback privileged;
+int64_t __winerr(void) dontcallback privileged;
 int64_t ntreturn(uint32_t);
 void *GetProcAddressModule(const char *, const char *);
 void WinMainForked(void);

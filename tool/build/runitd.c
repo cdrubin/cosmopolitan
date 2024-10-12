@@ -30,25 +30,26 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/libgen.h"
-#include "libc/serialize.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/log/appendresourcereport.internal.h"
 #include "libc/log/check.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
-#include "libc/mem/gc.h"
+#include "libc/mem/leaks.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/proc/posix_spawn.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/syslib.internal.h"
+#include "libc/serialize.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
 #include "libc/sock/struct/sockaddr.h"
 #include "libc/stdio/append.h"
 #include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/at.h"
@@ -72,8 +73,7 @@
 #include "libc/temp.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/thread2.h"
-#include "libc/time/struct/tm.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "libc/x/x.h"
 #include "libc/x/xsigaction.h"
 #include "net/http/escape.h"
@@ -135,12 +135,12 @@
 #define INFOF(FMT, ...) LOGF(INFO, FMT, ##__VA_ARGS__)
 #define WARNF(FMT, ...) LOGF(WARN, FMT, ##__VA_ARGS__)
 
-#define LOGF(LVL, FMT, ...)                                               \
-  do {                                                                    \
-    if (g_log_level >= LOG_LEVEL_##LVL) {                                 \
-      kprintf("%r" #LVL " %6P %'18T %s:%d " FMT "\n", __FILE__, __LINE__, \
-              ##__VA_ARGS__);                                             \
-    }                                                                     \
+#define LOGF(LVL, FMT, ...)                                                   \
+  do {                                                                        \
+    if (g_log_level >= LOG_LEVEL_##LVL) {                                     \
+      kprintf("%r" #LVL " %6P %6H %'18T %s:%d " FMT "\n", __FILE__, __LINE__, \
+              ##__VA_ARGS__);                                                 \
+    }                                                                         \
   } while (0)
 
 struct Client {
@@ -444,11 +444,17 @@ void FreeClient(struct Client *client) {
 void *ClientWorker(void *arg) {
   uint32_t crc;
   sigset_t sigmask;
+  struct timespec ts0;
+  struct timespec ts1;
+  struct timespec ts2;
   int events, wstatus;
   struct Client *client = arg;
   uint32_t namesize, filesize;
   char *addrstr, *origname;
   unsigned char msg[4 + 1 + 4 + 4 + 4];
+
+  ts0 = timespec_mono();
+  ts1 = timespec_mono();
 
   SetupPresharedKeySsl(MBEDTLS_SSL_IS_SERVER, g_psk);
   defer(FreeClient, client);
@@ -459,9 +465,15 @@ void *ClientWorker(void *arg) {
   EzHandshake();
   addrstr = DescribeAddress(&client->addr);
   DEBUF("%s %s %s", DescribeAddress(&g_servaddr), "accepted", addrstr);
+  DEBUF("it took %'zu us to handshake client",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
 
   // get the executable
+  ts1 = timespec_mono();
+  ts2 = timespec_mono();
   Recv(client, msg, sizeof(msg));
+  DEBUF("it took %'zu us to receive #1",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts2)));
   if (READ32BE(msg) != RUNITD_MAGIC) {
     WARNF("%s magic mismatch!", addrstr);
     pthread_exit(0);
@@ -474,11 +486,19 @@ void *ClientWorker(void *arg) {
   filesize = READ32BE(msg + 9);
   crc = READ32BE(msg + 13);
   origname = gc(calloc(1, namesize + 1));
+  ts2 = timespec_mono();
   Recv(client, origname, namesize);
+  DEBUF("it took %'zu us to receive #2",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts2)));
   VERBF("%s sent %#s (%'u bytes @ %#s)", addrstr, origname, filesize,
         client->tmpexepath);
   char *exedata = gc(malloc(filesize));
+  ts2 = timespec_mono();
   Recv(client, exedata, filesize);
+  DEBUF("it took %'zu us to receive #3",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts2)));
+  DEBUF("it took %'zu us to receive executable from network",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
   if (crc32_z(0, exedata, filesize) != crc) {
     WARNF("%s crc mismatch! %#s", addrstr, origname);
     pthread_exit(0);
@@ -489,9 +509,10 @@ void *ClientWorker(void *arg) {
   // condition can happen, where etxtbsy is raised by our execve
   // we're using o_cloexec so it's guaranteed to fix itself fast
   // thus we use an optimistic approach to avoid expensive locks
-  sprintf(client->tmpexepath, "o/%s.XXXXXX.com",
+  ts1 = timespec_mono();
+  sprintf(client->tmpexepath, "o/%s.XXXXXX",
           basename(stripext(gc(strdup(origname)))));
-  int exefd = openatemp(AT_FDCWD, client->tmpexepath, 4, O_CLOEXEC, 0700);
+  int exefd = openatemp(AT_FDCWD, client->tmpexepath, 0, O_CLOEXEC, 0700);
   if (exefd == -1) {
     WARNF("%s failed to open temporary file %#s due to %m", addrstr,
           client->tmpexepath);
@@ -511,13 +532,17 @@ void *ClientWorker(void *arg) {
     WARNF("%s failed to close %#s due to %m", addrstr, origname);
     pthread_exit(0);
   }
+  DEBUF("it took %'zu us to write executable to disk",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
 
   // do the args
   int i = 0;
   char *args[8] = {0};
   args[i++] = client->tmpexepath;
-  if (use_strace) args[i++] = "--strace";
-  if (use_ftrace) args[i++] = "--ftrace";
+  if (use_strace)
+    args[i++] = "--strace";
+  if (use_ftrace)
+    args[i++] = "--ftrace";
 
   // run program, tee'ing stderr to both log and client
   DEBUF("spawning %s", client->tmpexepath);
@@ -549,7 +574,7 @@ RetryOnEtxtbsyRaceCondition:
   posix_spawnattr_t spawnattr;
   posix_spawn_file_actions_t spawnfila;
   sigemptyset(&sigmask);
-  started = timespec_real();
+  started = timespec_mono();
   pipe2(client->pipe, O_CLOEXEC);
   posix_spawnattr_init(&spawnattr);
   posix_spawnattr_setflags(&spawnattr,
@@ -559,8 +584,11 @@ RetryOnEtxtbsyRaceCondition:
   posix_spawn_file_actions_adddup2(&spawnfila, g_bogusfd, 0);
   posix_spawn_file_actions_adddup2(&spawnfila, client->pipe[1], 1);
   posix_spawn_file_actions_adddup2(&spawnfila, client->pipe[1], 2);
+  ts1 = timespec_mono();
   err = posix_spawn(&client->pid, client->tmpexepath, &spawnfila, &spawnattr,
                     args, environ);
+  DEBUF("it took %'zu us to call posix_spawn",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
   if (err) {
     if (err == ETXTBSY) {
       goto RetryOnEtxtbsyRaceCondition;
@@ -575,7 +603,7 @@ RetryOnEtxtbsyRaceCondition:
 
   DEBUF("communicating %s[%d]", origname, client->pid);
   struct timespec deadline =
-      timespec_add(timespec_real(), timespec_fromseconds(DEATH_CLOCK_SECONDS));
+      timespec_add(timespec_mono(), timespec_fromseconds(DEATH_CLOCK_SECONDS));
   for (;;) {
     if (g_interrupted) {
       WARNF("killing %d %s and hanging up %d due to interrupt", client->fd,
@@ -587,7 +615,7 @@ RetryOnEtxtbsyRaceCondition:
       PrintProgramOutput(client);
       pthread_exit(0);
     }
-    struct timespec now = timespec_real();
+    struct timespec now = timespec_mono();
     if (timespec_cmp(now, deadline) >= 0) {
       WARNF("killing %s (pid %d) which timed out after %d seconds", origname,
             client->pid, DEATH_CLOCK_SECONDS);
@@ -598,8 +626,11 @@ RetryOnEtxtbsyRaceCondition:
     fds[0].events = POLLIN;
     fds[1].fd = client->pipe[0];
     fds[1].events = POLLIN;
-    events = poll(fds, ARRAYLEN(fds),
-                  timespec_tomillis(timespec_sub(deadline, now)));
+    ts1 = timespec_mono();
+    int64_t ms = timespec_tomillis(timespec_sub(deadline, now));
+    events = poll(fds, ARRAYLEN(fds), MIN(ms, -1u));
+    DEBUF("it took %'zu us to call poll",
+          timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
     if (events == -1) {
       if (errno == EINTR) {
         INFOF("poll interrupted");
@@ -614,7 +645,10 @@ RetryOnEtxtbsyRaceCondition:
       if (fds[0].revents) {
         int received;
         char buf[512];
+        ts1 = timespec_mono();
         received = mbedtls_ssl_read(&ezssl, buf, sizeof(buf));
+        DEBUF("it took %'zu us to call mbedtls_ssl_read",
+              timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
         if (!received) {
           WARNF("%s client disconnected so killing worker %d", origname,
                 client->pid);
@@ -639,7 +673,10 @@ RetryOnEtxtbsyRaceCondition:
       }
       if (fds[1].revents) {
         char buf[512];
+        ts1 = timespec_mono();
         ssize_t got = read(client->pipe[0], buf, sizeof(buf));
+        DEBUF("it took %'zu us to call read",
+              timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
         if (got == -1) {
           WARNF("got %s reading %s output", strerror(errno), origname);
           goto HangupClientAndTerminateJob;
@@ -657,7 +694,10 @@ RetryOnEtxtbsyRaceCondition:
 WaitAgain:
   DEBUF("waitpid");
   struct rusage rusage;
+  ts1 = timespec_mono();
   int wrc = wait4(client->pid, &wstatus, 0, &rusage);
+  DEBUF("it took %'zu us to call wait4",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
   if (wrc == -1) {
     if (errno == EINTR) {
       WARNF("waitpid interrupted; killing %s pid %d", origname, client->pid);
@@ -675,7 +715,7 @@ WaitAgain:
   }
   client->pid = 0;
   int exitcode;
-  struct timespec ended = timespec_real();
+  struct timespec ended = timespec_mono();
   int64_t micros = timespec_tomicros(timespec_sub(ended, started));
   if (WIFEXITED(wstatus)) {
     if (WEXITSTATUS(wstatus)) {
@@ -710,13 +750,18 @@ WaitAgain:
     AppendResourceReport(&client->output, &rusage, "\n");
     PrintProgramOutput(client);
   }
+  ts1 = timespec_mono();
   SendProgramOutput(client);
   SendExitMessage(exitcode);
   mbedtls_ssl_close_notify(&ezssl);
+  DEBUF("it took %'zu us to send result to client",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts1)));
   if (etxtbsy_tries > 1) {
     WARNF("encountered %d ETXTBSY race conditions spawning %s",
           etxtbsy_tries - 1, origname);
   }
+  DEBUF("it took %'zu us TO DO EVERYTHING",
+        timespec_tomicros(timespec_sub(timespec_mono(), ts0)));
   pthread_exit(0);
 }
 
@@ -777,11 +822,14 @@ int Serve(void) {
 }
 
 void Daemonize(void) {
-  if (fork() > 0) _exit(0);
+  if (fork() > 0)
+    _exit(0);
   setsid();
-  if (fork() > 0) _exit(0);
+  if (fork() > 0)
+    _exit(0);
   dup2(g_bogusfd, 0);
-  if (!g_sendready) dup2(g_bogusfd, 1);
+  if (!g_sendready)
+    dup2(g_bogusfd, 1);
   close(2);
   open(kLogFile, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
   extern long __klog_handle;
@@ -797,7 +845,8 @@ int main(int argc, char *argv[]) {
   signal(SIGPIPE, SIG_IGN);
   setenv("TZ", "PST", true);
   gethostname(g_hostname, sizeof(g_hostname));
-  for (int i = 3; i < 16; ++i) close(i);
+  for (int i = 3; i < 16; ++i)
+    close(i);
   errno = 0;
   // poll()'ing /dev/null stdin file descriptor on xnu returns POLLNVAL?!
   if (IsWindows()) {
@@ -806,7 +855,8 @@ int main(int argc, char *argv[]) {
     g_bogusfd = open("/dev/zero", O_RDONLY | O_CLOEXEC);
   }
   mkdir("o", 0700);
-  if (g_daemonize) Daemonize();
+  if (g_daemonize)
+    Daemonize();
   Serve();
   free(g_psk);
 #ifdef MODE_DBG

@@ -18,13 +18,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "ape/sections.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/asancodes.h"
 #include "libc/intrin/atomic.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/str/locale.h"
 #include "libc/str/str.h"
 #include "libc/thread/tls.h"
@@ -41,7 +40,6 @@ static char *_mktls_finish(struct CosmoTib **out_tib, char *mem,
   tib->tib_ftrace = old->tib_ftrace;
   tib->tib_strace = old->tib_strace;
   tib->tib_sigmask = old->tib_sigmask;
-  tib->tib_locale = (intptr_t)&__c_dot_utf8_locale;
   atomic_store_explicit(&tib->tib_tid, -1, memory_order_relaxed);
   if (out_tib) {
     *out_tib = tib;
@@ -54,75 +52,84 @@ static char *_mktls_below(struct CosmoTib **out_tib) {
   char *mem, *tls;
   struct CosmoTib *tib;
 
+  // Here's the TLS memory layout on x86_64
+  //
+  //                           __get_tls()
+  //                               │
+  //                              %fs OpenBSD/NetBSD
+  //            _Thread_local      │
+  //     ┌───┬──────────┬──────────┼───┐
+  //     │pad│  .tdata  │  .tbss   │tib│
+  //     └───┴──────────┴──────────┼───┘
+  //                               │
+  //    Linux/FreeBSD/Windows/Mac %gs
+  //
+
   siz = ROUNDUP(I(_tls_size) + sizeof(*tib), _Alignof(struct CosmoTib));
   siz = ROUNDUP(siz, _Alignof(struct CosmoTib));
   mem = memalign(_Alignof(struct CosmoTib), siz);
-
-  if (IsAsan()) {
-    // poison the space between .tdata and .tbss
-    __asan_poison(mem + I(_tdata_size), I(_tbss_offset) - I(_tdata_size),
-                  kAsanProtected);
-  }
 
   tib = (struct CosmoTib *)(mem + siz - sizeof(*tib));
   tls = mem + siz - sizeof(*tib) - I(_tls_size);
 
   // copy in initialized data section
   if (I(_tdata_size)) {
-    if (IsAsan()) {
-      __asan_memcpy(tls, _tdata_start, I(_tdata_size));
-    } else {
-      memcpy(tls, _tdata_start, I(_tdata_size));
-    }
+    memcpy(tls, _tdata_start, I(_tdata_size));
   }
 
   // clear .tbss
-  bzero(tls + I(_tbss_offset), I(_tbss_size));
+  if (I(_tbss_size))
+    bzero(tls + I(_tbss_offset), I(_tbss_size));
 
   // set up thread information block
   return _mktls_finish(out_tib, mem, tib);
 }
 
 static char *_mktls_above(struct CosmoTib **out_tib) {
-  size_t hiz, siz;
-  struct CosmoTib *tib;
-  char *mem, *dtv, *tls;
 
-  // allocate memory for tdata, tbss, and tib
-  hiz = ROUNDUP(sizeof(*tib) + 2 * sizeof(void *), I(_tls_align));
-  siz = hiz + I(_tls_size);
-  mem = memalign(TLS_ALIGNMENT, siz);
-  if (!mem) return 0;
+  // Here's the TLS memory layout on aarch64
+  //
+  //            x28
+  //         %tpidr_el0
+  //             │
+  //             │    _Thread_local
+  //         ┌───┼───┬──────────┬──────────┐
+  //         │tib│dtv│  .tdata  │  .tbss   │
+  //         ├───┴───┴──────────┴──────────┘
+  //         │
+  //     __get_tls()
+  //
 
-  // poison memory between tdata and tbss
-  if (IsAsan()) {
-    __asan_poison(mem + hiz + I(_tdata_size), I(_tbss_offset) - I(_tdata_size),
-                  kAsanProtected);
-  }
+  size_t size = ROUNDUP(sizeof(struct CosmoTib), I(_tls_align)) +  //
+                ROUNDUP(sizeof(uintptr_t) * 2, I(_tdata_align)) +  //
+                ROUNDUP(I(_tdata_size), I(_tbss_align)) +          //
+                I(_tbss_size);
 
-  tib = (struct CosmoTib *)mem;
-  dtv = mem + sizeof(*tib);
-  tls = mem + hiz;
+  char *mem = memalign(I(_tls_align), size);
+  if (!mem)
+    return 0;
 
-  // set dtv
-  ((uintptr_t *)dtv)[0] = 1;
-  ((void **)dtv)[1] = tls;
+  struct CosmoTib *tib =
+      (struct CosmoTib *)(mem +
+                          ROUNDUP(sizeof(struct CosmoTib), I(_tls_align)) -
+                          sizeof(struct CosmoTib));
 
-  // initialize .tdata
+  uintptr_t *dtv = (uintptr_t *)(tib + 1);
+  size_t dtv_size = sizeof(uintptr_t) * 2;
+
+  char *tdata = (char *)dtv + ROUNDUP(dtv_size, I(_tdata_align));
   if (I(_tdata_size)) {
-    if (IsAsan()) {
-      __asan_memcpy(tls, _tdata_start, I(_tdata_size));
-    } else {
-      memmove(tls, _tdata_start, I(_tdata_size));
-    }
+    memmove(tdata, _tdata_start, I(_tdata_size));
   }
 
-  // clear .tbss
+  char *tbss = tdata + ROUNDUP(I(_tdata_size), I(_tbss_align));
   if (I(_tbss_size)) {
-    bzero(tls + I(_tbss_offset), I(_tbss_size));
+    bzero(tbss, I(_tbss_size));
   }
 
-  // set up thread information block
+  dtv[0] = 1;
+  dtv[1] = (uintptr_t)tdata;
+
   return _mktls_finish(out_tib, mem, tib);
 }
 

@@ -22,8 +22,8 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/describebacktrace.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/check.h"
@@ -42,7 +42,7 @@
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/nr.h"
 #include "libc/temp.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "libc/x/x.h"
 #include "libc/x/xasprintf.h"
 #include "third_party/mbedtls/config.h"
@@ -50,12 +50,7 @@
 #include "third_party/mbedtls/error.h"
 #include "libc/serialize.h"
 #include "third_party/mbedtls/platform.h"
-
-asm(".ident\t\"\\n\\n\
-Mbed TLS (Apache 2.0)\\n\
-Copyright ARM Limited\\n\
-Copyright Mbed TLS Contributors\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("mbedtls_notice");
 
 __static_yoink("zipos");
 

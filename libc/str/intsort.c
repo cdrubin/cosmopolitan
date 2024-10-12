@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/runtime/runtime.h"
 
 static inline void InsertionSort(int *A, long n) {
@@ -39,9 +39,12 @@ static void IntSort(int *A, long n) {
     InsertionSort(A, n);
   } else {
     for (p = A[n >> 1], i = 0, j = n - 1;; i++, j--) {
-      while (A[i] < p) i++;
-      while (A[j] > p) j--;
-      if (i >= j) break;
+      while (A[i] < p)
+        i++;
+      while (A[j] > p)
+        j--;
+      if (i >= j)
+        break;
       t = A[i];
       A[i] = A[j];
       A[j] = t;

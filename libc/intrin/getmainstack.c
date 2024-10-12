@@ -16,14 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/rlimit.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/getauxval.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/macros.internal.h"
+#include "libc/intrin/maps.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
-#include "libc/runtime/stack.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/rlim.h"
 #include "libc/sysv/consts/rlimit.h"
@@ -71,7 +71,8 @@ static char *__get_last(char **list) {
 
 static int __get_length(const char *s) {
   int n = 0;
-  while (*s++) ++n;
+  while (*s++)
+    ++n;
   return n;
 }
 
@@ -82,7 +83,8 @@ static uintptr_t __get_main_top(int pagesz) {
     top = (uintptr_t)s + __get_length(s);
   } else {
     unsigned long *xp = __auxv;
-    while (*xp) xp += 2;
+    while (*xp)
+      xp += 2;
     top = (uintptr_t)xp;
   }
   return ROUNDUP(top, pagesz);
@@ -92,36 +94,29 @@ static size_t __get_stack_size(int pagesz, uintptr_t start, uintptr_t top) {
   size_t size, max = 8 * 1024 * 1024;
   struct rlimit rlim = {RLIM_INFINITY};
   sys_getrlimit(RLIMIT_STACK, &rlim);
-  if ((size = rlim.rlim_cur) > max) size = max;
+  if ((size = rlim.rlim_cur) > max)
+    size = max;
   return MAX(ROUNDUP(size, pagesz), ROUNDUP(top - start, pagesz));
 }
 
 /**
  * Returns approximate boundaries of main thread stack.
+ *
+ * This function works on every OS except Windows.
  */
-void __get_main_stack(void **out_addr, size_t *out_size, int *out_guardsize) {
-  if (IsWindows()) {
-    *out_addr = (void *)GetStaticStackAddr(0);
-    *out_size = GetStaticStackSize();
-    *out_guardsize = GetGuardSize();
-    return;
-  }
-  int pagesz = getauxval(AT_PAGESZ);
+struct AddrSize __get_main_stack(void) {
+  int pagesz = __pagesize;
   uintptr_t start = (uintptr_t)__argv;
   uintptr_t top = __get_main_top(pagesz);
   uintptr_t bot = top - __get_stack_size(pagesz, start, top);
-  uintptr_t vdso = getauxval(AT_SYSINFO_EHDR);
-  if (vdso) {
+  struct AuxiliaryValue avdso = __getauxval(AT_SYSINFO_EHDR);
+  if (avdso.isfound) {
+    uintptr_t vdso = avdso.value;
     if (vdso > start && vdso < top) {
       top = vdso;
     } else if (vdso < start && vdso >= bot) {
       bot += vdso + pagesz * 2;
     }
   }
-  unassert(bot < top);
-  unassert(bot < start);
-  unassert(top > start);
-  *out_addr = (void *)bot;
-  *out_size = top - bot;
-  *out_guardsize = pagesz;
+  return (struct AddrSize){(char *)bot, top - bot};
 }

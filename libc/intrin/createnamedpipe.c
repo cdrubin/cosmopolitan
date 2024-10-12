@@ -18,8 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/sig.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/ipc.h"
 #include "libc/nt/runtime.h"
@@ -49,11 +49,14 @@ TryAgain:
                                    nMaxInstances, nOutBufferSize, nInBufferSize,
                                    nDefaultTimeOutMs, opt_lpSecurityAttributes);
   if (hServer == -1 && __imp_GetLastError() == kNtErrorPipeBusy) {
-    if (micros >= 1024) __imp_Sleep(micros / 1024);
-    if (micros < 1024 * 1024) micros <<= 1;
+    if (micros >= 1024)
+      __imp_Sleep(micros / 1024);
+    if (micros < 1024 * 1024)
+      micros <<= 1;
     goto TryAgain;
   }
-  if (hServer == -1) __winerr();
+  if (hServer == -1)
+    __winerr();
   NTTRACE("CreateNamedPipe(%#hs, %s, %s, %u, %'u, %'u, %'u, %s) → %ld% m",
           lpName, DescribeNtPipeOpenFlags(dwOpenMode),
           DescribeNtPipeModeFlags(dwPipeMode), nMaxInstances, nOutBufferSize,

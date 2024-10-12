@@ -29,15 +29,9 @@
 #include "libc/tinymath/kernel.internal.h"
 #include "libc/tinymath/ldshape.internal.h"
 #if LDBL_MANT_DIG == 64 && LDBL_MAX_EXP == 16384
+__static_yoink("musl_libc_notice");
+__static_yoink("openbsd_libm_notice");
 
-asm(".ident\t\"\\n\\n\
-OpenBSD libm (ISC License)\\n\
-Copyright (c) 2008 Stephen L. Moshier <steve@moshier.net>\"");
-asm(".ident\t\"\\n\\n\
-Musl libc (MIT License)\\n\
-Copyright 2005-2014 Rich Felker, et. al.\"");
-asm(".include \"libc/disclaimer.inc\"");
-// clang-format off
 
 /* origin: OpenBSD /usr/src/lib/libm/src/ld80/e_lgammal.c */
 /*
@@ -253,7 +247,7 @@ static long double sin_pi(long double x)
 }
 
 long double lgammal_r(long double x, int *sg) {
-	long double t, y, z, nadj, p, p1, p2, q, r, w;
+	long double t, y, z, nadj=0, p, p1, p2, q, r, w;
 	union ldshape u = {x};
 	uint32_t ix = (u.i.se & 0x7fffU)<<16 | u.i.m>>48;
 	int sign = u.i.se >> 15;

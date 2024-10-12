@@ -19,14 +19,14 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/fd.internal.h"
+#include "libc/intrin/fds.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/log/log.h"
 #include "libc/nt/console.h"
 #include "libc/nt/enum/consolemodeflags.h"
@@ -36,9 +36,12 @@
 #define FIODGNAME 0x80106678  // freebsd
 
 static textwindows errno_t sys_ttyname_nt(int fd, char *buf, size_t size) {
-  if (fd + 0u >= g_fds.n) return EBADF;
-  if (g_fds.p[fd].kind != kFdConsole) return ENOTTY;
-  if (strlcpy(buf, "/dev/tty", size) >= size) return ERANGE;
+  if (fd + 0u >= g_fds.n)
+    return EBADF;
+  if (g_fds.p[fd].kind != kFdConsole)
+    return ENOTTY;
+  if (strlcpy(buf, "/dev/tty", size) >= size)
+    return ERANGE;
   return 0;
 }
 
@@ -62,14 +65,19 @@ static errno_t ttyname_linux(int fd, char *buf, size_t size) {
   ssize_t got;
   struct stat st1, st2;
   char name[14 + 12 + 1];
-  if (!isatty(fd)) return errno;
+  if (!isatty(fd))
+    return errno;
   FormatInt32(stpcpy(name, "/proc/self/fd/"), fd);
   got = readlink(name, buf, size);
-  if (got == -1) return errno;
-  if (got >= size) return ERANGE;
+  if (got == -1)
+    return errno;
+  if (got >= size)
+    return ERANGE;
   buf[got] = 0;
-  if (stat(buf, &st1) || fstat(fd, &st2)) return errno;
-  if (st1.st_dev != st2.st_dev || st1.st_ino != st2.st_ino) return ENODEV;
+  if (stat(buf, &st1) || fstat(fd, &st2))
+    return errno;
+  if (st1.st_dev != st2.st_dev || st1.st_ino != st2.st_ino)
+    return ENODEV;
   return 0;
 }
 

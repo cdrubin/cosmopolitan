@@ -30,6 +30,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
+#include "libc/ctype.h"
 #include "libc/errno.h"
 #include "libc/log/bsd.h"
 #include "libc/mem/mem.h"
@@ -48,12 +49,9 @@
 #include "third_party/musl/netdb.h"
 // clang-format off
 
-asm(".ident\t\"\\n\\n\
-FreeBSD Whois (BSD-3 License)\\n\
-Copyright (c) 1980, 1993\\n\
-\tThe Regents of the University of California.\\n\
-\tAll rights reserved.\"");
-asm(".include \"libc/disclaimer.inc\"");
+__notice(freebsd_whois_notice, "\
+FreeBSD Whois (BSD-3 License)\n\
+Copyright (c) 1980, 1993 The Regents of the University of California");
 
 #define	ABUSEHOST	"whois.abuse.net"
 #define	ANICHOST	"whois.arin.net"

@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/accounting.h"
 #include "libc/nt/thunk/msabi.h"
 
@@ -30,7 +30,8 @@ __msabi extern typeof(GetExitCodeProcess) *const __imp_GetExitCodeProcess;
 textwindows int32_t GetExitCodeProcess(int64_t hProcess, uint32_t *lpExitCode) {
   int32_t rc;
   rc = __imp_GetExitCodeProcess(hProcess, lpExitCode);
-  if (!rc) __winerr();
+  if (!rc)
+    __winerr();
   NTTRACE("GetExitCodeProcess(%ld, [%u]) → %u% m", hProcess, *lpExitCode, rc);
   return rc;
 }

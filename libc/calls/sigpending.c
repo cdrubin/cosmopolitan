@@ -20,10 +20,9 @@
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/tls.h"
 
@@ -38,7 +37,7 @@
  */
 int sigpending(sigset_t *pending) {
   int rc;
-  if (!pending || (IsAsan() && !__asan_is_valid(pending, sizeof(*pending)))) {
+  if (!pending) {
     rc = efault();
   } else if (IsLinux() || IsNetbsd() || IsOpenbsd() || IsFreebsd() || IsXnu()) {
     // 128 signals on NetBSD and FreeBSD, 64 on Linux, 32 on OpenBSD and XNU
@@ -54,7 +53,7 @@ int sigpending(sigset_t *pending) {
     }
     rc = 0;
   } else if (IsWindows()) {
-    *pending = atomic_load_explicit(&__sig.pending, memory_order_acquire) |
+    *pending = atomic_load_explicit(__sig.process, memory_order_acquire) |
                atomic_load_explicit(&__get_tls()->tib_sigpending,
                                     memory_order_acquire);
     rc = 0;

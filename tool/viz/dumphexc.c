@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/stdio/append.h"
 #include "libc/stdio/hex.internal.h"
@@ -25,7 +25,7 @@
 /**
  * @fileoverview Hex String Literal Converter, e.g.
  *
- *     $ echo hello | o/tool/viz/dumphexc.com
+ *     $ echo hello | o/tool/viz/dumphexc
  *     "\
  *     \x68\x65\x6c\x6c\x6f\x0a"
  */

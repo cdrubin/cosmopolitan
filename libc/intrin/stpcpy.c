@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/str/str.h"
 #ifndef __aarch64__
 
@@ -33,7 +32,7 @@ typedef char xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
  * @return pointer to nul byte
  * @asyncsignalsafe
  */
-char *stpcpy(char *d, const char *s) {
+__vex char *stpcpy(char *d, const char *s) {
   size_t i = 0;
 #if defined(__x86_64__) && !defined(__chibicc__)
   for (; (uintptr_t)(s + i) & 15; ++i) {

@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
 #include "libc/intrin/atomic.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nt/accounting.h"
 #include "libc/str/str.h"
 
@@ -29,7 +29,8 @@ textwindows uint32_t sys_getuid_nt(void) {
   if (!(tmp = atomic_load_explicit(&uid, memory_order_acquire))) {
     GetUserName(&buf, &size);
     tmp = __fnv(buf, size >> 1) & 32767;
-    if (!tmp) ++tmp;
+    if (!tmp)
+      ++tmp;
     atomic_store_explicit(&uid, tmp, memory_order_release);
   }
   return tmp;

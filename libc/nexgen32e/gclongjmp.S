@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 //	Jumps up stack to previous setjmp() invocation.
 //
@@ -35,7 +35,7 @@ gclongjmp:
 #ifdef __x86_64__
 	push	%rbp
 	mov	%rsp,%rbp
-	mov	%fs:0,%r12			// __get_tls()
+	mov	%gs:0x30,%r12			// __get_tls()
 	mov	0x18(%r12),%r12			// Tls::garbages
 	test	%r12,%r12
 	jz	0f

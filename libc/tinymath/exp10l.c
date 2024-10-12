@@ -28,12 +28,7 @@
 #include "libc/math.h"
 #include "libc/tinymath/ldshape.internal.h"
 #if !(LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024)
-
-asm(".ident\t\"\\n\\n\
-Musl libc (MIT License)\\n\
-Copyright 2005-2014 Rich Felker, et. al.\"");
-asm(".include \"libc/disclaimer.inc\"");
-// clang-format off
+__static_yoink("musl_libc_notice");
 
 /**
  * Returns 10ˣ.
@@ -57,6 +52,6 @@ long double exp10l(long double x)
 	return powl(10.0, x);
 }
 
-__weak_reference(exp10l, pow10l);
+__strong_reference(exp10l, pow10l);
 
 #endif /* long double is long */

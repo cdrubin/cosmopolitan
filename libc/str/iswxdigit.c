@@ -16,13 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/str/str.h"
+#include "libc/wctype.h"
 
 /**
  * Returns nonzero if c is ascii hex digit.
  */
 int iswxdigit(wint_t c) {
-  return ('0' <= c && c <= '9') || ('A' <= c && c <= 'F') ||
+  return ('0' <= c && c <= '9') ||  //
+         ('A' <= c && c <= 'F') ||  //
          ('a' <= c && c <= 'f');
 }
 

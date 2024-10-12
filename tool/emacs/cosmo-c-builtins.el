@@ -45,7 +45,12 @@
          '("__builtin_va_list"))
 
         (gcc-builtin-functions
-         '("__builtin_va_start"
+         '("__builtin_strlen"
+           "__builtin_memcpy"
+           "__builtin_memmove"
+           "__builtin_setjmp"
+           "__builtin_longjmp"
+           "__builtin_va_start"
            "__builtin_va_arg"
            "__builtin_va_end"
            "__builtin_add_overflow"
@@ -190,6 +195,16 @@
            "__integer_pack"
            "__is_same"))
 
+        (cuda-builtin-types
+         '("__syncthreads"
+           "__shfl"
+           "__shfl_xor"
+           "__shfl_sync"
+           "__shfl_down"
+           "__shfl_up_sync"
+           "__shfl_down_sync"
+           "__shfl_xor_sync"))
+
         (cosmopolitan-builtin-defines
          '("COSMOPOLITAN_CXX_START_"
            "COSMOPOLITAN_CXX_END_"
@@ -204,6 +219,7 @@
          '("DebugBreak"
            "__veil"
            "__conceal"
+           "__notice"
            "__expropriate"
            "__yoink"
            "__dll_import"
@@ -224,6 +240,7 @@
                                 gcc-builtin-functions-sync
                                 gcc-builtin-functions-ia32
                                 gxx-builtin-type-traits
+                                cuda-builtin-types
                                 cosmopolitan-builtin-defines
                                 cosmopolitan-builtin-functions))
             "\\_>")))

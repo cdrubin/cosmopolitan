@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 	.macro	.e e s
 	.long	\e - kSockOptnames
@@ -47,6 +47,7 @@ kSockOptnames:
 	.e	SO_RCVLOWAT,"RCVLOWAT"			// int
 	.e	SO_SNDLOWAT,"SNDLOWAT"			// int
 	.e	SO_ERROR,"ERROR"			// int
+	.e	SO_OOBINLINE,"OOBINLINE"		// int
 	.long	MAGNUM_TERMINATOR
 	.endobj	kSockOptnames,globl,hidden
 	.overrun

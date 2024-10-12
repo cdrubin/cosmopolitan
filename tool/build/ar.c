@@ -29,41 +29,85 @@
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/libgen.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/serialize.h"
 #include "libc/intrin/bsr.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
+#include "libc/serialize.h"
 #include "libc/stdckdint.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/s.h"
+#include "tool/build/lib/ar.h"
 #include "tool/build/lib/getargs.h"
 
 /**
  * @fileoverview cosmopolitan ar
- *
- * This static archiver is superior:
- *
- * - Isn't "accidentally quadratic" like GNU ar
- * - Goes 2x faster than LLVM ar while using 100x less memory
- * - Can be built as a 52kb APE binary that works well on six OSes
- *
- * This static archiver introduces handy features:
- *
- * - Arguments may be supplied in an `@args.txt` file
- * - Directory arguments are ignored
- *
- * @see https://www.unix.com/man-page/opensolaris/3head/ar.h/
- * @see https://en.wikipedia.org/wiki/Ar_(Unix)
  */
 
-#define VERSION                     \
-  "cosmopolitan ar v2.0\n"          \
-  "copyright 2023 justine tunney\n" \
-  "https://github.com/jart/cosmopolitan\n"
+static wontreturn void ShowUsage(int rc, int fd) {
+  tinyprint(  //
+      fd,
+      "USAGE\n"
+      "\n",
+      "  ", program_invocation_name, " FLAGS ARCHIVE FILE...\n",
+      "\n"
+      "FLAGS\n"
+      "\n"
+      "  rcs        create new archive with index\n"
+      "  rcsD       always deterministic\n"
+      "  --help     show usage\n"
+      "  --version  show program details\n"
+      "\n"
+      "ARGUMENTS\n"
+      "\n"
+      "  ARCHIVE    should be foo.a\n"
+      "  FILE       should be foo.o, lib.a, or @args.txt\n"
+      "\n"
+      "DOCUMENTATION\n"
+      "\n"
+      "  Your Cosmopolitan Archiver is superior:\n"
+      "\n"
+      "  - Isn't accidentally quadratic like GNU ar. Cosmopolitan Libc is\n"
+      "    distributed as libcosmo.a which contains 5000+ object files and\n"
+      "    is tens of megabytes in size. GNU ar isn't capable of making an\n"
+      "    archive that large. So we invented this ar as a replacement.\n"
+      "\n"
+      "  - Goes 2x faster than LLVM ar thanks to modern system calls like\n"
+      "    copy_file_range(). This ar should also use 100x less memory.\n"
+      "\n"
+      "  - Can be built as a 96kb APE binary that works well on six OSes.\n"
+      "    Cosmopolitan uses the same dev tools on all OSes and archsr to\n"
+      "    ensure compilations are simple and deterministic for everyone.\n"
+      "\n"
+      "  This static archiver introduces handy features:\n"
+      "\n"
+      "  - Arguments may be supplied in an `@args.txt` file. This is useful\n"
+      "    for overcoming the `ARG_MAX` limit, which is especially important\n"
+      "    on Windows, where only very few command arguments can be passed.\n"
+      "    GNU Make can be easily configured to generate args files.\n"
+      "\n"
+      "  - You can merge many .a files into one big .a file. Args that end\n"
+      "    with .a will be opened as static archives. The .o files inside it\n"
+      "    will then be added to your new archive. It would be the same as if\n"
+      "    you passed all the .o files as args. This is fast. For example, to\n"
+      "    merge 37 .a files containing 5000 .o files takes ~38 milliseconds.\n"
+      "\n"
+      "  - Directory arguments are ignored. The biggest gotcha with makefiles\n"
+      "    that use wildcard globbing is that it can't detect when files are\n"
+      "    deleted, which means it can't invalidate the artifacts which had\n"
+      "    depended on that file, leading to nondeterminism and surprising\n"
+      "    build failures. The simplest way to solve that is to add the\n"
+      "    directory to the prerequisites list, since the directory modified\n"
+      "    time will be updated by the OS when files inside it are deleted.\n"
+      "    When doing this, it's simple and elegant to not need to filter\n"
+      "    the directory prerequisites before passing `$^` to `ar`.\n"
+      "\n",
+      NULL);
+  exit(rc);
+}
 
 #define HEAP_SIZE (256L * 1024 * 1024)
 
@@ -102,32 +146,10 @@ static wontreturn void Die(const char *path, const char *reason) {
 
 static wontreturn void SysDie(const char *path, const char *func) {
   const char *errstr;
-  if (!(errstr = _strerdoc(errno))) errstr = "Unknown error";
+  if (!(errstr = _strerdoc(errno)))
+    errstr = "Unknown error";
   tinyprint(2, path, ": ", func, ": ", errstr, "\n", NULL);
   exit(1);
-}
-
-static wontreturn void ShowUsage(int rc, int fd) {
-  tinyprint(fd, VERSION,
-            "\n"
-            "USAGE\n"
-            "\n",
-            "  ", program_invocation_name, " FLAGS ARCHIVE FILE...\n",
-            "\n"
-            "FLAGS\n"
-            "\n"
-            "  rcs        create new archive with index\n"
-            "  rcsD       always deterministic\n"
-            "  --help     show usage\n"
-            "  --version  show program details\n"
-            "\n"
-            "ARGUMENTS\n"
-            "\n"
-            "  ARCHIVE    should be foo.a\n"
-            "  FILE       should be foo.o or @args.txt\n"
-            "\n",
-            NULL);
-  exit(rc);
 }
 
 // allocates 𝑛 bytes of memory aligned on 𝑎 from .bss
@@ -158,13 +180,11 @@ static void *balloc(size_t n, size_t a) {
   } else {
     c = 2ull << (__builtin_clzll(n - 1) ^ (sizeof(long long) * CHAR_BIT - 1));
   }
-  if (c < a || c > HEAP_SIZE || p + c > h + HEAP_SIZE) {
+  if (c < a || c > HEAP_SIZE || p + c > h + HEAP_SIZE)
     Die(program_invocation_name, "out of memory");
-  }
   used = p - h + c;
-  if (resizable) {
+  if (resizable)
     memcpy((char *)p - sizeof(c), &c, sizeof(c));
-  }
   return (void *)p;
 }
 
@@ -180,11 +200,14 @@ static void *reballoc(void *p, size_t n, size_t z) {
   size_t c;
   assert(n >= 0);
   assert(z >= 1 && !(z & (z - 1)));
-  if (ckd_mul(&n, n, z)) n = HEAP_SIZE;
-  if (!p) return balloc(~n, z);
+  if (ckd_mul(&n, n, z))
+    n = HEAP_SIZE;
+  if (!p)
+    return balloc(~n, z);
   memcpy(&c, (char *)p - sizeof(c), sizeof(c));
   assert(c >= z && c < HEAP_SIZE && !(c & (c - 1)));
-  if (n <= c) return p;
+  if (n <= c)
+    return p;
   return memcpy(balloc(~n, z), p, c);
 }
 
@@ -254,20 +277,28 @@ static void MakeArHeader(struct ar_hdr *h,  //
 // - uses copy_file_range() if possible
 // - returns number of bytes exchanged
 // - dies if operation fails
-static int64_t CopyFileOrDie(const char *inpath, int infd,  //
-                             const char *outpath, int outfd) {
-  int64_t toto;
+static void CopyFileOrDie(const char *inpath, int infd,    //
+                          const char *outpath, int outfd,  //
+                          size_t offset, size_t size) {
   char buf[512];
   size_t exchanged;
-  ssize_t got, wrote;
   enum { CFR, RW } mode;
-  for (mode = CFR, toto = 0;; toto += exchanged) {
+  ssize_t want, got, wrote;
+  if (offset)
+    if (lseek(infd, offset, SEEK_SET) == -1)
+      SysDie(inpath, "lseek");
+  for (mode = CFR; size; size -= exchanged) {
     if (mode == CFR) {
-      got = copy_file_range(infd, 0, outfd, 0, 4194304, 0);
-      if (!got) break;
+      want = 4194304;
+      if (want > size)
+        want = size;
+      got = copy_file_range(infd, 0, outfd, 0, want, 0);
+      if (!got)
+        Die(inpath, "unexpected eof");
       if (got != -1) {
         exchanged = got;
       } else if (errno == EXDEV ||       // different partitions
+                 errno == EINVAL ||      // possible w/ ecryptfs
                  errno == ENOSYS ||      // not linux or freebsd
                  errno == ENOTSUP ||     // probably a /zip file
                  errno == EOPNOTSUPP) {  // technically the same
@@ -277,16 +308,67 @@ static int64_t CopyFileOrDie(const char *inpath, int infd,  //
         SysDie(inpath, "copy_file_range");
       }
     } else {
-      got = read(infd, buf, sizeof(buf));
-      if (!got) break;
-      if (got == -1) SysDie(inpath, "read");
+      want = sizeof(buf);
+      if (want > size)
+        want = size;
+      got = read(infd, buf, want);
+      if (!got)
+        Die(inpath, "unexpected eof");
+      if (got == -1)
+        SysDie(inpath, "read");
       wrote = write(outfd, buf, got);
-      if (wrote == -1) SysDie(outpath, "write");
-      if (wrote != got) Die(outpath, "posix violated");
+      if (wrote == -1)
+        SysDie(outpath, "write");
+      if (wrote != got)
+        Die(outpath, "posix violated");
       exchanged = wrote;
     }
   }
-  return toto;
+}
+
+static void AppendName(const char *name, struct Args *names,
+                       struct Bytes *filenames) {
+  struct ar_hdr header1;
+  char bnbuf[PATH_MAX + 1];
+  strlcpy(bnbuf, name, sizeof(bnbuf));
+  char *aname = StrCat(basename(bnbuf), "/");
+  if (strlen(aname) <= sizeof(header1.ar_name)) {
+    AppendArg(names, aname);
+  } else {
+    char ibuf[21];
+    FormatUint64(ibuf, filenames->i);
+    AppendArg(names, StrCat("/", ibuf));
+    AppendBytes(filenames, aname, strlen(aname));
+    AppendBytes(filenames, "\n", 1);
+  }
+}
+
+static void AppendSymbols(const char *path, const Elf64_Ehdr *elf,
+                          size_t elfsize, struct Bytes *symbols,
+                          struct Ints *symnames, int objid) {
+  if (!IsElf64Binary(elf, elfsize))
+    Die(path, "not an elf64 binary");
+  char *strs = GetElfStringTable(elf, elfsize, ".strtab");
+  if (!strs)
+    Die(path, "elf .strtab not found");
+  Elf64_Xword symcount;
+  Elf64_Shdr *symsec = GetElfSymbolTable(elf, elfsize, SHT_SYMTAB, &symcount);
+  Elf64_Sym *syms = GetElfSectionAddress(elf, elfsize, symsec);
+  if (!syms)
+    Die(path, "elf symbol table not found");
+  for (Elf64_Xword j = symsec->sh_info; j < symcount; ++j) {
+    if (!syms[j].st_name)
+      continue;
+    if (syms[j].st_shndx == SHN_UNDEF)
+      continue;
+    if (syms[j].st_shndx == SHN_COMMON)
+      continue;
+    const char *symname = GetElfString(elf, elfsize, strs, syms[j].st_name);
+    if (!symname)
+      Die(path, "elf symbol name corrupted");
+    AppendBytes(symbols, symname, strlen(symname) + 1);
+    AppendInt(symnames, objid);
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -300,24 +382,26 @@ int main(int argc, char *argv[]) {
 
   // handle hardcoded flags
   if (argc == 2) {
-    if (IsEqual(argv[1], "-n")) {
+    if (IsEqual(argv[1], "-n"))
       exit(0);
-    }
     if (IsEqual(argv[1], "-h") ||  //
         IsEqual(argv[1], "-?") ||  //
         IsEqual(argv[1], "--help")) {
       ShowUsage(0, 1);
     }
     if (IsEqual(argv[1], "--version")) {
-      tinyprint(1, VERSION, NULL);
+      tinyprint(1,
+                "cosmopolitan ar v3.0\n"
+                "copyright 2024 justine tunney\n"
+                "https://github.com/jart/cosmopolitan\n",
+                NULL);
       exit(0);
     }
   }
 
   // get flags and output path
-  if (argc < 3) {
-    ShowUsage(1, 2);
-  }
+  if (argc < 3)
+    Die(argv[0], "missing argument");
   char *flags = argv[1];
   const char *outpath = argv[2];
 
@@ -326,7 +410,8 @@ int main(int argc, char *argv[]) {
   // on modern systems that it isn't worth supporting the byzantine
   // standard posix ar flags intended to improve cassette tape perf
   SortChars(flags, strlen(flags));
-  if (*flags == 'D') ++flags;
+  if (*flags == 'D')
+    ++flags;
   if (!IsEqual(flags, "cr") &&    //
       !IsEqual(flags, "cru") &&   //
       !IsEqual(flags, "crsu") &&  //
@@ -337,8 +422,8 @@ int main(int argc, char *argv[]) {
 
   struct Args args = {reballoc(0, 4096, sizeof(char *))};
   struct Args names = {reballoc(0, 4096, sizeof(char *))};
-  struct Ints modes = {reballoc(0, 4096, sizeof(int))};
   struct Ints sizes = {reballoc(0, 4096, sizeof(int))};
+  struct Ints foffsets = {reballoc(0, 4096, sizeof(int))};
   struct Ints symnames = {reballoc(0, 16384, sizeof(int))};
   struct Bytes symbols = {reballoc(0, 131072, sizeof(char))};
   struct Bytes filenames = {reballoc(0, 16384, sizeof(char))};
@@ -349,51 +434,48 @@ int main(int argc, char *argv[]) {
   for (objectid = 0;;) {
     struct stat st;
     const char *arg;
-    if (!(arg = getargs_next(&ga))) break;
-    if (endswith(arg, "/")) continue;
-    if (endswith(arg, ".pkg")) continue;
-    if (stat(arg, &st)) SysDie(arg, "stat");
-    if (S_ISDIR(st.st_mode)) continue;
-    if (!st.st_size) Die(arg, "file is empty");
-    if (st.st_size > 0x7ffff000) Die(arg, "file too large");
-    if ((fd = open(arg, O_RDONLY)) == -1) SysDie(arg, "open");
-    AppendArg(&args, StrDup(arg));
-    AppendInt(&sizes, st.st_size);
-    AppendInt(&modes, st.st_mode);
-    char bnbuf[PATH_MAX + 1];
-    strlcpy(bnbuf, arg, sizeof(bnbuf));
-    char *aname = StrCat(basename(bnbuf), "/");
-    if (strlen(aname) <= sizeof(header1.ar_name)) {
-      AppendArg(&names, aname);
+    if (!(arg = getargs_next(&ga)))
+      break;
+    if (endswith(arg, "/"))
+      continue;
+    if (endswith(arg, ".pkg"))
+      continue;
+    if (endswith(arg, ".a")) {
+      struct Ar ar;
+      struct ArFile arf;
+      openar(&ar, arg);
+      while (readar(&ar, &arf)) {
+        AppendArg(&args, StrDup(arg));
+        AppendInt(&sizes, arf.size);
+        AppendInt(&foffsets, arf.offset);
+        AppendName(arf.name, &names, &filenames);
+        AppendSymbols(arg, arf.data, arf.size, &symbols, &symnames, objectid++);
+      }
+      closear(&ar);
     } else {
-      char ibuf[21];
-      FormatUint64(ibuf, filenames.i);
-      AppendArg(&names, StrCat("/", ibuf));
-      AppendBytes(&filenames, aname, strlen(aname));
-      AppendBytes(&filenames, "\n", 1);
+      if (stat(arg, &st))
+        SysDie(arg, "stat");
+      if (S_ISDIR(st.st_mode))
+        continue;
+      if (!st.st_size)
+        Die(arg, "file is empty");
+      if (st.st_size > 0x7ffff000)
+        Die(arg, "file too large");
+      if ((fd = open(arg, O_RDONLY)) == -1)
+        SysDie(arg, "open");
+      AppendArg(&args, StrDup(arg));
+      AppendInt(&sizes, st.st_size);
+      AppendInt(&foffsets, 0);
+      AppendName(arg, &names, &filenames);
+      void *elf = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+      if (elf == MAP_FAILED)
+        SysDie(arg, "mmap");
+      AppendSymbols(arg, elf, st.st_size, &symbols, &symnames, objectid++);
+      if (munmap(elf, st.st_size))
+        SysDie(arg, "munmap");
+      if (close(fd))
+        SysDie(arg, "close");
     }
-    size_t mapsize = st.st_size;
-    void *elf = mmap(0, mapsize, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (elf == MAP_FAILED) SysDie(arg, "mmap");
-    if (!IsElf64Binary(elf, mapsize)) Die(arg, "not an elf64 binary");
-    char *strs = GetElfStringTable(elf, mapsize, ".strtab");
-    if (!strs) Die(arg, "elf .strtab not found");
-    Elf64_Xword symcount;
-    Elf64_Shdr *symsec = GetElfSymbolTable(elf, mapsize, SHT_SYMTAB, &symcount);
-    Elf64_Sym *syms = GetElfSectionAddress(elf, mapsize, symsec);
-    if (!syms) Die(arg, "elf symbol table not found");
-    for (Elf64_Xword j = symsec->sh_info; j < symcount; ++j) {
-      if (!syms[j].st_name) continue;
-      if (syms[j].st_shndx == SHN_UNDEF) continue;
-      if (syms[j].st_shndx == SHN_COMMON) continue;
-      const char *symname = GetElfString(elf, mapsize, strs, syms[j].st_name);
-      if (!symname) Die(arg, "elf symbol name corrupted");
-      AppendBytes(&symbols, symname, strlen(symname) + 1);
-      AppendInt(&symnames, objectid);
-    }
-    if (munmap(elf, mapsize)) SysDie(arg, "munmap");
-    if (close(fd)) SysDie(arg, "close");
-    ++objectid;
   }
   getargs_destroy(&ga);
 
@@ -433,45 +515,37 @@ int main(int argc, char *argv[]) {
   MakeArHeader(&header1, "/", 0, tablebufsize + ROUNDUP(symbols.i, 2));
   MakeArHeader(&header2, "//", 0, ROUNDUP(filenames.i, 2));
   WRITE32BE(tablebuf, symnames.i);
-  for (size_t i = 0; i < symnames.i; ++i) {
+  for (size_t i = 0; i < symnames.i; ++i)
     WRITE32BE(tablebuf + 4 + i * 4, offsets[symnames.p[i]]);
-  }
 
   // write output archive
   int outfd;
-  if ((outfd = creat(outpath, 0644)) == -1) {
+  if ((outfd = creat(outpath, 0644)) == -1)
     SysDie(outpath, "creat");
-  }
-  if (ftruncate(outfd, outsize)) {
+  if (ftruncate(outfd, outsize))
     SysDie(outpath, "ftruncate");
-  }
-  if ((outsize = writev(outfd, iov, ARRAYLEN(iov))) == -1) {
+  if ((outsize = writev(outfd, iov, ARRAYLEN(iov))) == -1)
     SysDie(outpath, "writev[1]");
-  }
   for (size_t i = 0; i < args.i; ++i) {
     const char *inpath = args.p[i];
-    if ((fd = open(inpath, O_RDONLY)) == -1) {
-      SysDie(inpath, "open");
-    }
+    if (!(i && IsEqual(inpath, args.p[i - 1])))
+      if ((fd = open(inpath, O_RDONLY)) == -1)
+        SysDie(inpath, "open");
     iov[0].iov_base = "\n";
     outsize += (iov[0].iov_len = outsize & 1);
     iov[1].iov_base = &header1;
     outsize += (iov[1].iov_len = sizeof(struct ar_hdr));
-    MakeArHeader(&header1, names.p[i], modes.p[i], sizes.p[i]);
-    if (writev(outfd, iov, 2) == -1) {
+    MakeArHeader(&header1, names.p[i], 0100644, sizes.p[i]);
+    if (writev(outfd, iov, 2) == -1)
       SysDie(outpath, "writev[2]");
-    }
     outsize += sizes.p[i];
-    if (CopyFileOrDie(inpath, fd, outpath, outfd) != sizes.p[i]) {
-      Die(inpath, "file size changed");
-    }
-    if (close(fd)) {
-      SysDie(inpath, "close");
-    }
+    CopyFileOrDie(inpath, fd, outpath, outfd, foffsets.p[i], sizes.p[i]);
+    if (!(i + 1 < args.i && IsEqual(inpath, args.p[i + 1])))
+      if (close(fd))
+        SysDie(inpath, "close");
   }
-  if (close(outfd)) {
+  if (close(outfd))
     SysDie(outpath, "close");
-  }
 
   return 0;
 }

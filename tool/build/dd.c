@@ -19,6 +19,8 @@
 #include "libc/calls/calls.h"
 #include "libc/fmt/conv.h"
 #include "libc/limits.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -44,11 +46,12 @@ int main(int argc, char *argv[]) {
   long count = LONG_MAX;
   long blocksize = 1;
   int oflags = O_WRONLY | O_TRUNC | O_CREAT;
-  const char *infile = "/dev/stdin";
-  const char *oufile = "/dev/stdout";
+  char *infile = gc(strdup("/dev/stdin"));
+  char *oufile = gc(strdup("/dev/stdout"));
 
   prog = argv[0];
-  if (!prog) prog = "dd";
+  if (!prog)
+    prog = "dd";
 
   for (i = 1; i < argc; ++i) {
 
@@ -65,14 +68,16 @@ int main(int argc, char *argv[]) {
                argv[i][2] == '=') {
       infile = argv[i] + 3 + (argv[i][3] == '"');
       p = strchr(infile, '"');
-      if (p) *p = 0;
+      if (p)
+        *p = 0;
 
     } else if (argv[i][0] == 'o' &&  //
                argv[i][1] == 'f' &&  //
                argv[i][2] == '=') {
       oufile = argv[i] + 3 + (argv[i][3] == '"');
       p = strchr(infile, '"');
-      if (p) *p = 0;
+      if (p)
+        *p = 0;
 
     } else if (argv[i][0] == 's' &&  //
                argv[i][1] == 'k' &&  //

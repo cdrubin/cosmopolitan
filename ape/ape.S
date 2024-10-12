@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8 nofixeol                        :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -33,12 +33,11 @@
 │ αcτµαlly pδrταblε εxεcµταblε § program header                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "ape/macros.internal.h"
-#include "ape/notice.inc"
 #include "ape/relocations.h"
 #include "libc/calls/metalfile.internal.h"
 #include "libc/dce.h"
 #include "libc/elf/def.h"
-#include "libc/macho.internal.h"
+#include "libc/macho.h"
 #include "libc/nexgen32e/uart.internal.h"
 #include "libc/nt/pedef.internal.h"
 #include "libc/runtime/pc.internal.h"
@@ -197,7 +196,7 @@ ape_mz:
 	.quad	ape_elf_entry			//  18: e_entry
 	.quad	ape_elf_phoff			//  20: e_phoff
 	.quad	ape_elf_shoff			//  28: e_shoff
-	.long	0				//  30: e_flags
+	.long	0x101ca75			//  30: ape e_flags
 	.short	64				//  34: e_ehsize
 	.short	56				//  36: e_phentsize
 	.short	ape_elf_phnum			//  38: e_phnum
@@ -670,7 +669,7 @@ apesh:	.ascii	"\n@\n#'\"\n"			// sixth edition shebang
 	.shstub	    ape_elf_entry,8		//  18: e_entry
 	.shstub	    ape_elf_phoff,8		//  20: e_phoff
 	.shstub	    ape_elf_shoff,8		//  28: e_shoff
-	.ascii	    "\\0\\0\\0\\0"		//  30: e_flags
+	.ascii	    "\\165\\312\\1\\1"		//  30: ape e_flags
 	.ascii	    "\\100\\0"			//  34: e_ehsize
 	.ascii	    "\\070\\0"			//  36: e_phentsize
 	.shstub	    ape_elf_phnum,2		//  38: e_phnum
@@ -762,7 +761,7 @@ ape_phdrs:
 	.quad	0
 	.quad	0
 	.quad	0
-	.stub	ape_stack_align,quad
+	.quad	16
 
 #if SupportsOpenbsd() || SupportsNetbsd()
 	.long	PT_NOTE
@@ -1037,7 +1036,7 @@ ape_pe:	.ascin	"PE",4
 	.quad	ape_pe_base		// ImageBase
 	.long	ape_pe_sectionalignment	// SectionAlignment
 	.long	ape_pe_filealignment	// FileAlignment
-	.short	v_ntversion		// MajorOperatingSystemVersion
+	.short	10			// MajorOperatingSystemVersion
 	.short	0			// MinorOperatingSystemVersion
 	.short	0			// MajorImageVersion
 	.short	0			// MinorImageVersion
@@ -1772,49 +1771,31 @@ kernel:	movabs	$ape_stack_vaddr,%rsp
 	.type	ape_text_nops,@object
 	.type	__test_end,@object
 
-	.section .commentprologue,"a",@progbits
-	.globl	__comment_start
-	.type	__comment_start,@object
-	.hidden	__comment_start
-__comment_start:/*
-	...
-	decentralized content
-	...
-	*/.previous
-	.section .commentepilogue,"a",@progbits
-	.byte	0
-	.previous
-
 	.section .ape.pad.head,"a",@progbits
 	.type	ape_pad_head,@object
 	.hidden	ape_pad_head
 ape_pad_head:
-	.previous
 
 	.section .ape.pad.text,"a",@progbits
 	.type	ape_pad_text,@object
 	.hidden	ape_pad_text
 ape_pad_text:
-	.previous
 
 	.section .ape.pad.privileged,"a",@progbits
 	.type	ape_pad_privileged,@object
 	.hidden	ape_pad_privileged
 ape_pad_privileged:
-	.previous
 
 	.section .ape.pad.data,"a",@progbits
 	.type	ape_pad_data,@object
 	.hidden	ape_pad_data
 ape_pad_data:
-	.previous
 
 #if SupportsWindows()
 	.section .idata.ro,"a",@progbits
 	.type	ape_idata_ro,@object
 	.hidden	ape_idata_ro
 ape_idata_ro:
-	.previous
 #endif /* SupportsWindows() */
 
 	.section .dataprologue,"aw",@progbits
@@ -1822,32 +1803,45 @@ ape_idata_ro:
 	.globl	__data_start
 	.hidden	__data_start
 __data_start:
-	.previous
 
 	.section .dataepilogue,"aw",@progbits
 	.type	__data_end,@object
 	.globl	__data_end
 	.hidden	__data_end
 __data_end:
-	.previous
 
 	.section .bssprologue,"aw",@nobits
 	.type	__bss_start,@object
 	.globl	__bss_start
 	.hidden	__bss_start
 __bss_start:
-	.previous
 
 	.section .bssepilogue,"aw",@nobits
 	.type	__bss_end,@object
 	.globl	__bss_end
 	.hidden	__bss_end
 __bss_end:
-	.previous
 
 	.section .fstls,"awT",@nobits
 	.align	TLS_ALIGNMENT
-	.previous
+
+	.section .notice,"aR",@progbits
+	.asciz	"\n\n\
+Cosmopolitan\n\
+Copyright 2024 Justine Alexandra Roberts Tunney\n\
+\n\
+Permission to use, copy, modify, and/or distribute this software for\n\
+any purpose with or without fee is hereby granted, provided that the\n\
+above copyright notice and this permission notice appear in all copies.\n\
+\n\
+THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL\n\
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED\n\
+WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE\n\
+AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL\n\
+DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR\n\
+PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER\n\
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR\n\
+PERFORMANCE OF THIS SOFTWARE."
 
 .end
 

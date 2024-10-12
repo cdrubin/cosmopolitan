@@ -23,7 +23,7 @@
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/internal.h"
@@ -101,7 +101,7 @@ static void testlib_showerror_(int line,              //
       _weaken(kvprintf)(fmt, va);
       tinyprint(2, "\n", NULL);
     } else {
-      tinyprint(2, "\t[missing kvprintf]\n");
+      tinyprint(2, "\t[missing kvprintf]\n", NULL);
     }
   }
   tinyprint(2, "\t", SUBTLE, strerror(e), RESET, "\n\t", SUBTLE,

@@ -24,7 +24,7 @@
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/asmflag.h"
 #include "libc/intrin/atomic.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/o.h"
@@ -36,7 +36,8 @@ static errno_t pthread_getname_impl(struct PosixThread *pt, char *name,
   int e, fd, rc, tid, len;
 
   tid = _pthread_tid(pt);
-  if (!size) return 0;
+  if (!size)
+    return 0;
   bzero(name, size);
   e = errno;
 

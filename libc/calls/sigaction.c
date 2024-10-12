@@ -30,14 +30,13 @@
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/dll.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/syslib.internal.h"
@@ -58,7 +57,8 @@ static void sigaction_cosmo2native(union metasigaction *sa) {
   void *restorer;
   uint32_t masklo;
   uint32_t maskhi;
-  if (!sa) return;
+  if (!sa)
+    return;
   flags = sa->cosmo.sa_flags;
   handler = sa->cosmo.sa_handler;
   restorer = sa->cosmo.sa_restorer;
@@ -106,7 +106,8 @@ static void sigaction_native2cosmo(union metasigaction *sa) {
   void *restorer = 0;
   uint32_t masklo;
   uint32_t maskhi = 0;
-  if (!sa) return;
+  if (!sa)
+    return;
   if (IsLinux()) {
     flags = sa->linux.sa_flags;
     handler = sa->linux.sa_handler;
@@ -159,13 +160,12 @@ static int __sigaction(int sig, const struct sigaction *act,
   int rc, rva, oldrva;
   sigaction_f sigenter;
   struct sigaction *ap, copy;
-  if (IsMetal()) return enosys(); /* TODO: Signals on Metal */
-  if (!(1 <= sig && sig <= _NSIG)) return einval();
-  if (sig == SIGKILL || sig == SIGSTOP) return einval();
-  if (IsAsan() && ((act && !__asan_is_valid(act, sizeof(*act))) ||
-                   (oldact && !__asan_is_valid(oldact, sizeof(*oldact))))) {
-    return efault();
-  }
+  if (IsMetal())
+    return enosys(); /* TODO: Signals on Metal */
+  if (!(1 <= sig && sig <= _NSIG))
+    return einval();
+  if (sig == SIGKILL || sig == SIGSTOP)
+    return einval();
   if (!act) {
     rva = (int32_t)(intptr_t)SIG_DFL;
   } else if ((intptr_t)act->sa_handler < kSigactionMinRva) {
@@ -247,6 +247,12 @@ static int __sigaction(int sig, const struct sigaction *act,
       rc = sys_sigaction(sig, ap, oldact, arg4, arg5);
     } else {
       rc = _sysret(__syslib->__sigaction(sig, ap, oldact));
+      // xnu silicon claims to support sa_resethand but it does nothing
+      // this can be tested, since it clears the bit from flags as well
+      if (!rc && oldact &&
+          (((struct sigaction_silicon *)oldact)->sa_flags & SA_RESETHAND)) {
+        ((struct sigaction_silicon *)oldact)->sa_flags |= SA_RESETHAND;
+      }
     }
     if (rc != -1) {
       sigaction_native2cosmo((union metasigaction *)oldact);
@@ -410,7 +416,7 @@ static int __sigaction(int sig, const struct sigaction *act,
  *       ctx->uc_mcontext.rip += xedd.length;
  *     }
  *
- *     void OnCrash(int sig, struct siginfo *si, void *vctx) {
+ *     void OnCrash(int sig, siginfo_t *si, void *vctx) {
  *       struct ucontext *ctx = vctx;
  *       SkipOverFaultingInstruction(ctx);
  *       ContinueOnCrash();  // reinstall here in case *rip faults

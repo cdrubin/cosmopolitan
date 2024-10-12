@@ -19,6 +19,7 @@
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "third_party/nsync/atomic.h"
+#include "third_party/nsync/time.h"
 #include "third_party/nsync/atomic.internal.h"
 #include "third_party/nsync/common.internal.h"
 #include "third_party/nsync/counter.h"
@@ -26,11 +27,7 @@
 #include "third_party/nsync/races.internal.h"
 #include "third_party/nsync/wait_s.internal.h"
 #include "third_party/nsync/waiter.h"
-
-asm(".ident\t\"\\n\\n\
-*NSYNC (Apache 2.0)\\n\
-Copyright 2016 Google, Inc.\\n\
-https://github.com/google/nsync\"");
+__static_yoink("nsync_notice");
 
 /* Internal details of nsync_counter. */
 struct nsync_counter_s_ {
@@ -98,13 +95,13 @@ uint32_t nsync_counter_value (nsync_counter c) {
 	return (result);
 }
 
-uint32_t nsync_counter_wait (nsync_counter c, nsync_time abs_deadline) {
+uint32_t nsync_counter_wait (nsync_counter c, int clock, nsync_time abs_deadline) {
 	struct nsync_waitable_s waitable;
 	struct nsync_waitable_s *pwaitable = &waitable;
 	uint32_t result = 0;
 	waitable.v = c;
 	waitable.funcs = &nsync_counter_waitable_funcs;
-	if (nsync_wait_n (NULL, NULL, NULL, abs_deadline, 1, &pwaitable) != 0) {
+	if (nsync_wait_n (NULL, NULL, NULL, clock, abs_deadline, 1, &pwaitable) != 0) {
 		IGNORE_RACES_START ();
 		result = ATM_LOAD_ACQ (&c->value);
 		IGNORE_RACES_END ();

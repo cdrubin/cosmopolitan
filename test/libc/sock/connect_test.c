@@ -34,9 +34,7 @@
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
 
-TEST(connect, nonblocking) {
-  if (IsFreebsd()) return;  // TODO(jart): why did this start flaking?
-  if (IsOpenbsd()) return;  // TODO(jart): why did this start freezing?
+TEST(connect, blocking) {
   char buf[16] = {0};
   atomic_uint *sem = _mapshared(sizeof(unsigned));
   uint32_t addrsize = sizeof(struct sockaddr_in);
@@ -48,29 +46,33 @@ TEST(connect, nonblocking) {
   ASSERT_SYS(0, 0, bind(3, (struct sockaddr *)&addr, sizeof(addr)));
   ASSERT_SYS(0, 0, getsockname(3, (struct sockaddr *)&addr, &addrsize));
   ASSERT_SYS(0, 0, listen(3, SOMAXCONN));
+
   SPAWN(fork);
-  while (!*sem) pthread_yield();
+
+  while (!*sem)
+    pthread_yield();
   ASSERT_SYS(0, 4, accept(3, (struct sockaddr *)&addr, &addrsize));
   ASSERT_SYS(0, 2, read(4, buf, 16));  // hi
   ASSERT_SYS(0, 5, write(4, "hello", 5));
   ASSERT_SYS(0, 3, read(4, buf, 16));  // bye
+
   PARENT();
+
   ASSERT_SYS(0, 0, close(3));
-  ASSERT_SYS(0, 3, socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP));
-  ASSERT_SYS(EINPROGRESS, -1,
-             connect(3, (struct sockaddr *)&addr, sizeof(addr)));
-  if (!(IsLinux() || IsNetbsd())) {
-    // this doens't work on rhel7 and netbsd
-    ASSERT_SYS(EALREADY, -1,
-               connect(3, (struct sockaddr *)&addr, sizeof(addr)));
-  }
-  ASSERT_SYS(EAGAIN, -1, read(3, buf, 16));
+  ASSERT_SYS(0, 3, socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+  ASSERT_SYS(0, 0, connect(3, (struct sockaddr *)&addr, sizeof(addr)));
   *sem = 1;
   {  // wait until connected
     struct pollfd pfd = {3, POLLOUT};
     ASSERT_SYS(0, 1, poll(&pfd, 1, -1));
     ASSERT_TRUE(!!(POLLOUT & pfd.revents));
   }
+  struct sockaddr_in peer;
+  uint32_t sz = sizeof(peer);
+  ASSERT_SYS(0, 0, getsockname(3, (struct sockaddr *)&peer, &sz));
+  ASSERT_EQ(htonl(0x7f000001), peer.sin_addr.s_addr);
+  ASSERT_SYS(0, 0, getpeername(3, (struct sockaddr *)&peer, &sz));
+  ASSERT_EQ(htonl(0x7f000001), peer.sin_addr.s_addr);
   ASSERT_SYS(0, 2, write(3, "hi", 2));
   {  // wait for other process to send us stuff
     struct pollfd pfd = {3, POLLIN};
@@ -81,6 +83,67 @@ TEST(connect, nonblocking) {
   ASSERT_STREQ("hello", buf);
   ASSERT_SYS(0, 3, write(3, "bye", 3));
   ASSERT_SYS(0, 0, close(3));
+
   WAIT(exit, 0);
+
+  munmap(sem, sizeof(unsigned));
+}
+
+TEST(connect, nonblocking) {
+  if (IsFreebsd())
+    return;  // TODO(jart): why did this start flaking?
+  if (IsOpenbsd())
+    return;  // TODO(jart): why did this start freezing?
+  char buf[16] = {0};
+  atomic_uint *sem = _mapshared(sizeof(unsigned));
+  uint32_t addrsize = sizeof(struct sockaddr_in);
+  struct sockaddr_in addr = {
+      .sin_family = AF_INET,
+      .sin_addr.s_addr = htonl(0x7f000001),
+  };
+  ASSERT_SYS(0, 3, socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+  ASSERT_SYS(0, 0, bind(3, (struct sockaddr *)&addr, sizeof(addr)));
+  ASSERT_SYS(0, 0, getsockname(3, (struct sockaddr *)&addr, &addrsize));
+  ASSERT_SYS(0, 0, listen(3, SOMAXCONN));
+
+  SPAWN(fork);
+
+  while (!*sem)
+    pthread_yield();
+  ASSERT_SYS(0, 4, accept(3, (struct sockaddr *)&addr, &addrsize));
+  ASSERT_SYS(0, 2, read(4, buf, 16));  // hi
+  ASSERT_SYS(0, 5, write(4, "hello", 5));
+  ASSERT_SYS(0, 3, read(4, buf, 16));  // bye
+
+  PARENT();
+
+  ASSERT_SYS(0, 0, close(3));
+  ASSERT_SYS(0, 3, socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP));
+  ASSERT_SYS(EINPROGRESS, -1,
+             connect(3, (struct sockaddr *)&addr, sizeof(addr)));
+  ASSERT_SYS(EAGAIN, -1, read(3, buf, 16));
+  *sem = 1;
+  {  // wait until connected
+    struct pollfd pfd = {3, POLLOUT};
+    ASSERT_SYS(0, 1, poll(&pfd, 1, -1));
+    ASSERT_TRUE(!!(POLLOUT & pfd.revents));
+  }
+  struct sockaddr_in peer;
+  uint32_t sz = sizeof(peer);
+  ASSERT_SYS(0, 0, getpeername(3, (struct sockaddr *)&peer, &sz));
+  ASSERT_EQ(htonl(0x7f000001), peer.sin_addr.s_addr);
+  ASSERT_SYS(0, 2, write(3, "hi", 2));
+  {  // wait for other process to send us stuff
+    struct pollfd pfd = {3, POLLIN};
+    ASSERT_SYS(0, 1, poll(&pfd, 1, -1));
+    ASSERT_TRUE(!!(POLLIN & pfd.revents));
+  }
+  ASSERT_SYS(0, 5, read(3, buf, 16));
+  ASSERT_STREQ("hello", buf);
+  ASSERT_SYS(0, 3, write(3, "bye", 3));
+  ASSERT_SYS(0, 0, close(3));
+
+  WAIT(exit, 0);
+
   munmap(sem, sizeof(unsigned));
 }

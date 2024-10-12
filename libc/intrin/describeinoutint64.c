@@ -18,12 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 
-const char *(DescribeInOutInt64)(char buf[23], ssize_t rc, int64_t *x) {
-  if (!x) return "NULL";
+const char *_DescribeInOutInt64(char buf[23], ssize_t rc, int64_t *x) {
+  if (!x)
+    return "NULL";
   char *p = buf;
-  if (rc != -1) *p++ = '[';
+  if (rc != -1)
+    *p++ = '[';
   if (rc == -1 && errno == EFAULT) {
     *p++ = '!';
     *p++ = '!';
@@ -31,7 +33,8 @@ const char *(DescribeInOutInt64)(char buf[23], ssize_t rc, int64_t *x) {
   } else {
     p = FormatInt64(p, *x);
   }
-  if (rc != -1) *p++ = ']';
+  if (rc != -1)
+    *p++ = ']';
   *p = 0;
   return buf;
 }

@@ -138,18 +138,16 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/serialize.h"
 #include "libc/intrin/bsr.h"
-#include "libc/intrin/nomultics.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/nomultics.h"
+#include "libc/intrin/strace.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/alg.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/rdtsc.h"
-#include "libc/nt/version.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
@@ -157,7 +155,7 @@
 #include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/str/unicode.h"
 #include "libc/sysv/consts/fileno.h"
 #include "libc/sysv/consts/map.h"
@@ -170,13 +168,14 @@
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
 #include "net/http/escape.h"
+#include "libc/wctype.h"
 #include "tool/build/lib/case.h"
 
-asm(".ident\t\"\\n\\n\
-Cosmopolitan Linenoise (BSD-2)\\n\
-Copyright 2018-2020 Justine Tunney <jtunney@gmail.com>\\n\
-Copyright 2010-2016 Salvatore Sanfilippo <antirez@gmail.com>\\n\
-Copyright 2010-2013 Pieter Noordhuis <pcnoordhuis@gmail.com>\"");
+__notice(linenoise_notice, "\
+Cosmopolitan Linenoise (BSD-2)\n\
+Copyright 2018-2020 Justine Tunney <jtunney@gmail.com>\n\
+Copyright 2010-2016 Salvatore Sanfilippo <antirez@gmail.com>\n\
+Copyright 2010-2013 Pieter Noordhuis <pcnoordhuis@gmail.com>");
 
 #define LINENOISE_POLL_MS 50
 
@@ -369,7 +368,7 @@ static wint_t Capitalize(wint_t c) {
 static struct rune DecodeUtf8(int c) {
   struct rune r;
   if (c < 252) {
-    r.n = _bsr(255 & ~c);
+    r.n = bsr(255 & ~c);
     r.c = c & (((1 << r.n) - 1) | 3);
     r.n = 6 - r.n;
   } else {
@@ -409,9 +408,7 @@ static int linenoiseIsUnsupportedTerm(void) {
   char *term;
   static char once, res;
   if (!once) {
-    if (IsWindows() && !IsAtLeastWindows10()) {
-      res = 1;
-    } else if ((term = getenv("TERM"))) {
+    if ((term = getenv("TERM"))) {
       for (i = 0; i < sizeof(kUnsupported) / sizeof(*kUnsupported); i++) {
         if (!strcasecmp(term, kUnsupported[i])) {
           res = 1;
@@ -645,7 +642,7 @@ static void abAppendw(struct abuf *a, unsigned long long w) {
   p[5] = (0x0000ff0000000000 & w) >> 050;
   p[6] = (0x00ff000000000000 & w) >> 060;
   p[7] = (0xff00000000000000 & w) >> 070;
-  a->len += w ? (_bsrll(w) >> 3) + 1 : 1;
+  a->len += w ? (bsrll(w) >> 3) + 1 : 1;
   p[8] = 0;
 }
 
@@ -1634,7 +1631,7 @@ static size_t linenoiseEscape(char *d, const char *s, size_t n) {
         break;
     }
     WRITE32LE(p, w);
-    p += (_bsr(w) >> 3) + 1;
+    p += (bsr(w) >> 3) + 1;
     l = w;
   }
   return p - d;
@@ -2644,10 +2641,7 @@ static void linenoiseAtExit(void) {
   linenoiseRingFree();
 }
 
+__attribute__((__constructor__(99)))
 static textstartup void linenoiseInit() {
   atexit(linenoiseAtExit);
 }
-
-const void *const linenoiseCtor[] initarray = {
-    linenoiseInit,
-};

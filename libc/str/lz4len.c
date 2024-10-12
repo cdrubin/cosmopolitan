@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/pushpop.internal.h"
+#include "libc/intrin/pushpop.h"
 #include "libc/nexgen32e/kompressor.h"
 #include "libc/str/str.h"
 
@@ -41,7 +41,8 @@ size_t lz4len(const void *blockdata, size_t blocksize) {
     }
     ip += length;
     unpacklen += length;
-    if (ip >= ipe) break;
+    if (ip >= ipe)
+      break;
     matchlen = token & fifteen;
     ip += 2;
     if (matchlen == fifteen) {

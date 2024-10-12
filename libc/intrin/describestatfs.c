@@ -20,7 +20,6 @@
 #include "libc/calls/struct/statfs.internal.h"
 #include "libc/dce.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/sysv/consts/st.h"
 
@@ -28,15 +27,16 @@
 
 #define append(...) i += ksnprintf(buf + i, N - i, __VA_ARGS__)
 
-const char *(DescribeStatfs)(char buf[N], int rc, const struct statfs *f) {
+const char *_DescribeStatfs(char buf[N], int rc, const struct statfs *f) {
   int i = 0;
   char ibuf[21];
   int64_t flags;
 
-  if (rc == -1) return "n/a";
-  if (!f) return "NULL";
-  if ((!IsAsan() && kisdangerous(f)) ||
-      (IsAsan() && !__asan_is_valid(f, sizeof(*f)))) {
+  if (rc == -1)
+    return "n/a";
+  if (!f)
+    return "NULL";
+  if (kisdangerous(f)) {
     ksnprintf(buf, N, "%p", f);
     return buf;
   }

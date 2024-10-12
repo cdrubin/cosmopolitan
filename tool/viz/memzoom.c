@@ -25,6 +25,7 @@
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/ucontext.h"
+#include "libc/ctype.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
@@ -32,17 +33,18 @@
 #include "libc/intrin/bsf.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/hilbert.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/str/unicode.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/fileno.h"
@@ -52,7 +54,7 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
@@ -190,7 +192,7 @@ static void LeaveScreen(void) {
 }
 
 static unsigned long rounddown2pow(unsigned long x) {
-  return x ? 1ul << _bsrl(x) : 0;
+  return x ? 1ul << bsrl(x) : 0;
 }
 
 static void GetTtySize(void) {
@@ -225,11 +227,11 @@ static void OnExit(void) {
   tcsetattr(out, TCSANOW, &oldterm);
 }
 
-static void OnSigInt(int sig, struct siginfo *sa, void *uc) {
+static void OnSigInt(int sig, siginfo_t *sa, void *uc) {
   action |= INTERRUPTED;
 }
 
-static void OnSigWinch(int sig, struct siginfo *sa, void *uc) {
+static void OnSigWinch(int sig, siginfo_t *sa, void *uc) {
   action |= RESIZED;
 }
 
@@ -281,8 +283,8 @@ static void SetupCanvas(void) {
     munmap(buffer, buffersize);
   }
   displaysize = ROUNDUP(ROUNDUP((tyn * txn) << zoom, 16), 1ul << zoom);
-  canvassize = ROUNDUP(displaysize, FRAMESIZE);
-  buffersize = ROUNDUP(tyn * txn * 16 + 4096, FRAMESIZE);
+  canvassize = ROUNDUP(displaysize, getgransize());
+  buffersize = ROUNDUP(tyn * txn * 16 + 4096, getgransize());
   canvas = Allocate(canvassize);
   buffer = Allocate(buffersize);
 }
@@ -333,17 +335,19 @@ static long Index(long y, long x) {
 static void PreventBufferbloat(void) {
   struct timespec now, rate;
   static struct timespec last;
-  now = timespec_real();
+  now = timespec_mono();
   rate = timespec_frommicros(1. / fps * 1e6);
   if (timespec_cmp(timespec_sub(now, last), rate) < 0) {
-    timespec_sleep(timespec_sub(rate, timespec_sub(now, last)));
+    timespec_sleep(CLOCK_MONOTONIC,
+                   timespec_sub(rate, timespec_sub(now, last)));
   }
   last = now;
 }
 
 static bool HasPendingInput(void) {
   struct pollfd fds[1];
-  if (IsWindows()) return true; /* XXX */
+  if (IsWindows())
+    return true; /* XXX */
   fds[0].fd = 0;
   fds[0].events = POLLIN;
   fds[0].revents = 0;
@@ -355,8 +359,10 @@ static int GetCurrentRange(void) {
   int i;
   if (ranges.i) {
     for (i = 0; i < ranges.i; ++i) {
-      if (offset < ranges.p[i].a) return MAX(0, i - 1);
-      if (offset < ranges.p[i].b) return i;
+      if (offset < ranges.p[i].a)
+        return MAX(0, i - 1);
+      if (offset < ranges.p[i].b)
+        return i;
     }
     return ranges.i - 1;
   } else {
@@ -472,9 +478,11 @@ static void OnPrevEnd(void) {
 static void OnMouse(char *p) {
   int e, x, y;
   e = strtol(p, &p, 10);
-  if (*p == ';') ++p;
+  if (*p == ';')
+    ++p;
   x = min(txn, max(1, strtol(p, &p, 10))) - 1;
-  if (*p == ';') ++p;
+  if (*p == ';')
+    ++p;
   y = min(tyn, max(1, strtol(p, &p, 10))) - 1;
   e |= (*p == 'm') << 2;
   switch (e) {
@@ -523,7 +531,8 @@ static void ReadKeyboard(void) {
   char buf[32], *p = buf;
   bzero(buf, sizeof(buf));
   if (readansi(0, buf, sizeof(buf)) == -1) {
-    if (errno == EINTR) return;
+    if (errno == EINTR)
+      return;
     exit(errno);
   }
   switch (*p++) {
@@ -698,8 +707,10 @@ static void LoadRanges(void) {
   range.b = 0;
   ranges.i = 0;
   for (;;) {
-    if ((n = read(fd, b, sizeof(b))) == -1) exit(1);
-    if (!n) break;
+    if ((n = read(fd, b, sizeof(b))) == -1)
+      exit(1);
+    if (!n)
+      break;
     for (i = 0; i < n; ++i) {
       switch (t) {
         case 0:
@@ -807,7 +818,8 @@ static void Render(void) {
   for (i = 0, n = p - buffer; i < n; i += got) {
     got = 0;
     if ((rc = write(out, buffer + i, n - i)) == -1) {
-      if (errno == EINTR) continue;
+      if (errno == EINTR)
+        continue;
       exit(errno);
     }
     got = rc;
@@ -828,7 +840,8 @@ static void Zoom(long have) {
     n = have >> zoom;
     i = n / txn;
     r = n % txn;
-    if (r) ++i;
+    if (r)
+      ++i;
     if (order == LINEAR) {
       for (; i < tyn; ++i) {
         canvas[txn * i] = '~';
@@ -877,7 +890,8 @@ static void MemZoom(void) {
     }
     if (ok && HasPendingInput()) {
       ReadKeyboard();
-      if (!IsWindows()) continue; /* XXX */
+      if (!IsWindows())
+        continue; /* XXX */
     }
     ok = true;
     if (pid) {
@@ -953,7 +967,8 @@ static void GetOpts(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-  if (!NoDebug()) ShowCrashReports();
+  if (!NoDebug())
+    ShowCrashReports();
   out = 1;
   GetOpts(argc, argv);
   Open();

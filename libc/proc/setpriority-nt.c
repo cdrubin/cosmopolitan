@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/enum/processcreationflags.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/process.h"
@@ -53,7 +53,8 @@ textwindows int sys_setpriority_nt(int which, unsigned pid, int nice) {
     tier = kNtIdlePriorityClass;
   }
 
-  if (SetPriorityClass(handle, tier)) return 0;
+  if (SetPriorityClass(handle, tier))
+    return 0;
   STRACE("SetPriorityClass() failed with %d", GetLastError());
   switch (GetLastError()) {
     case kNtErrorInvalidHandle:

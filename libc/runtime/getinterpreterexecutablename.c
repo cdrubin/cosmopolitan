@@ -20,7 +20,7 @@
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
@@ -68,6 +68,7 @@ char *GetInterpreterExecutableName(char *p, size_t n) {
     p[rc] = 0;
     return p;
   } else if (IsFreebsd() || IsNetbsd()) {
+    // clang-format off
     cmd[0] = 1;         // CTL_KERN
     cmd[1] = 14;        // KERN_PROC
     if (IsFreebsd()) {  //
@@ -76,7 +77,8 @@ char *GetInterpreterExecutableName(char *p, size_t n) {
       cmd[2] = 5;       // KERN_PROC_PATHNAME
     }                   //
     cmd[3] = -1;        // current process
-    if (sys_sysctl(cmd, ARRAYLEN(cmd), p, &n, 0, 0) != -1) {
+    // clang-format on
+    if (sysctl(cmd, ARRAYLEN(cmd), p, &n, 0, 0) != -1) {
       errno = e;
       return p;
     }

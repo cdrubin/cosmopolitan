@@ -63,6 +63,7 @@ imp	'ConnectNamedPipe'					ConnectNamedPipe					kernel32	2
 imp	'ContinueDebugEvent'					ContinueDebugEvent					kernel32	3
 imp	'CopyFile'						CopyFileW						kernel32	3
 imp	'CreateEvent'						CreateEventW						kernel32	4
+imp	'CreateEventA'						CreateEventA						kernel32	4
 imp	'CreateEventEx'						CreateEventExW						kernel32	4
 imp	'CreateHardLink'					CreateHardLinkW						kernel32	3
 imp	'CreateIoCompletionPort'				CreateIoCompletionPort					kernel32	4
@@ -109,8 +110,10 @@ imp	'GetConsoleTitle'					GetConsoleTitleW					kernel32	2
 imp	'GetConsoleWindow'					GetConsoleWindow					kernel32	0
 imp	'GetCurrentDirectory'					GetCurrentDirectoryW					kernel32	2
 imp	'GetCurrentProcessId'					GetCurrentProcessId					kernel32	0
+imp	'GetCurrentProcessorNumberEx'				GetCurrentProcessorNumberEx				kernel32	1
 imp	'GetCurrentThread'					GetCurrentThread					kernel32	0
 imp	'GetCurrentThreadId'					GetCurrentThreadId					kernel32	0
+imp	'GetDynamicTimeZoneInformation'				GetDynamicTimeZoneInformation				kernel32	1
 imp	'GetEnvironmentStrings'					GetEnvironmentStringsW					kernel32	1
 imp	'GetEnvironmentVariable'				GetEnvironmentVariableW					kernel32	3
 imp	'GetExitCodeThread'					GetExitCodeThread					kernel32	2
@@ -133,6 +136,7 @@ imp	'GetModuleHandle'					GetModuleHandleA					kernel32	1
 imp	'GetModuleHandleEx'					GetModuleHandleExW					kernel32	3
 imp	'GetModuleHandleW'					GetModuleHandleW					kernel32	1
 imp	'GetNamedPipeInfo'					GetNamedPipeInfo					kernel32	5
+imp	'GetNumaProcessorNodeEx'				GetNumaProcessorNodeEx					kernel32	2
 imp	'GetNumberOfConsoleInputEvents'				GetNumberOfConsoleInputEvents				kernel32	2
 imp	'GetNumberOfConsoleMouseButtons'			GetNumberOfConsoleMouseButtons				kernel32	1
 imp	'GetOverlappedResult'					GetOverlappedResult					kernel32	4
@@ -173,6 +177,7 @@ imp	'GetThreadPriority'					GetThreadPriority					kernel32	1
 imp	'GetThreadPriorityBoost'				GetThreadPriorityBoost					kernel32	2
 imp	'GetThreadTimes'					GetThreadTimes						kernel32	5
 imp	'GetTickCount64'					GetTickCount64						kernel32	0
+imp	'GetTimeZoneInformation'				GetTimeZoneInformation					kernel32	1
 imp	'GetVersionEx'						GetVersionExW						kernel32	1
 imp	'GetVolumeInformationByHandle'				GetVolumeInformationByHandleW				kernel32	8
 imp	'GetVolumePathName'					GetVolumePathNameW					kernel32	3
@@ -192,8 +197,10 @@ imp	'InitializeCriticalSection'				InitializeCriticalSection				kernel32	1
 imp	'InitializeCriticalSectionAndSpinCount'			InitializeCriticalSectionAndSpinCount			kernel32	2
 imp	'InitializeProcThreadAttributeList'			InitializeProcThreadAttributeList			kernel32	4
 imp	'InitializeSRWLock'					InitializeSRWLock					kernel32	1
+imp	'IsWow64Process2'					IsWow64Process2						kernel32	3
 imp	'LeaveCriticalSection'					LeaveCriticalSection					kernel32	1
 imp	'LoadLibrary'						LoadLibraryW						kernel32	1
+imp	'LoadLibraryA'						LoadLibraryA						kernel32	1
 imp	'LoadLibraryEx'						LoadLibraryExW						kernel32	3
 imp	'LoadResource'						LoadResource						kernel32	2
 imp	'LocalFree'						LocalFree						kernel32	1
@@ -211,8 +218,9 @@ imp	'Process32First'					Process32FirstW						kernel32	2
 imp	'Process32Next'						Process32NextW						kernel32	2
 imp	'PulseEvent'						PulseEvent						kernel32	1
 imp	'PurgeComm'						PurgeComm						kernel32	2
-imp	'QueryPerformanceCounter'				QueryPerformanceCounter					kernel32	1
+imp	'QueryPerformanceCounter'				QueryPerformanceCounter					kernel32	1	# Windows 7+
 imp	'QueryPerformanceFrequency'				QueryPerformanceFrequency				kernel32	1
+imp	'QueryUnbiasedInterruptTime'				QueryUnbiasedInterruptTime				kernel32	1	# Windows 7+
 imp	'ReadConsole'						ReadConsoleW						kernel32	5
 imp	'ReadConsoleInput'					ReadConsoleInputW					kernel32	4
 imp	'ReadConsoleOutput'					ReadConsoleOutputW					kernel32	5
@@ -251,6 +259,7 @@ imp	'SetEvent'						SetEvent						kernel32	1
 imp	'SetFileAttributes'					SetFileAttributesW					kernel32	2
 imp	'SetFileCompletionNotificationModes'			SetFileCompletionNotificationModes			kernel32	2
 imp	'SetFileInformationByHandle'				SetFileInformationByHandle				kernel32	4
+imp	'SetFilePointer'					SetFilePointer						kernel32	4
 imp	'SetFileTime'						SetFileTime						kernel32	4
 imp	'SetFileValidData'					SetFileValidData					kernel32	2
 imp	'SetHandleCount'					SetHandleCount						kernel32	1
@@ -361,7 +370,6 @@ imp	'RegisterEventSource'					RegisterEventSourceW					advapi32	2
 imp	'ReportEvent'						ReportEventW						advapi32	9
 imp	'ReportEventA'						ReportEventA						advapi32	9
 imp	'RevertToSelf'						RevertToSelf						advapi32	0
-imp	'RtlGenRandom'						SystemFunction036					advapi32	2
 imp	'TraceSetInformation'					TraceSetInformation					advapi32 # Windows 7+
 
 # USER32.DLL
@@ -610,12 +618,30 @@ imp	'GetModuleBaseName'					GetModuleBaseNameW					psapi		4
 imp	'GetProcessImageFileName'				GetProcessImageFileNameW				psapi		3
 imp	'GetProcessMemoryInfo'					GetProcessMemoryInfo					psapi		3
 
+# BCryptPrimitives.dll
+#
+#	Name							Actual							DLL			Arity
+imp	'ProcessPrng'						ProcessPrng						BCryptPrimitives	2
+
 # API-MS-Win-Core-Synch-l1-2-0.dll (Windows 8+)
 #
 #	Name							Actual							DLL					Arity
 imp	'WaitOnAddress'						WaitOnAddress						API-MS-Win-Core-Synch-l1-2-0		4
 imp	'WakeByAddressAll'					WakeByAddressAll					API-MS-Win-Core-Synch-l1-2-0		1
 imp	'WakeByAddressSingle'					WakeByAddressSingle					API-MS-Win-Core-Synch-l1-2-0		1
+
+# API-MS-Win-Core-Memory-l1-1-6.dll (Windows 10+)
+#
+#	Name							Actual							DLL					Arity
+imp	'MapViewOfFile3'					MapViewOfFile3						API-MS-Win-Core-Memory-l1-1-6		9
+imp	'VirtualAlloc2'						VirtualAlloc2						API-MS-Win-Core-Memory-l1-1-6		7
+
+# API-MS-Win-Core-Realtime-l1-1-1.dll (Windows 10+)
+#
+#	Name							Actual							DLL					Arity
+imp	'QueryInterruptTime'					QueryInterruptTime					API-MS-Win-Core-Realtime-l1-1-1		1
+imp	'QueryInterruptTimePrecise'				QueryInterruptTimePrecise				API-MS-Win-Core-Realtime-l1-1-1		1
+imp	'QueryUnbiasedInterruptTimePrecise'			QueryUnbiasedInterruptTimePrecise			API-MS-Win-Core-Realtime-l1-1-1		1
 
 # NTDLL.DLL
 # BEYOND THE PALE

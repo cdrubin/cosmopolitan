@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
@@ -49,9 +49,11 @@
 const char *commandvenv(const char *var, const char *cmd) {
   const char *exepath;
   static char pathbuf[PATH_MAX];
-  if (*cmd == '/' || *cmd == '\\') return cmd;
+  if (*cmd == '/' || *cmd == '\\')
+    return cmd;
   if ((exepath = getenv(var))) {
-    if (isempty(exepath)) return NULL;
+    if (isempty(exepath))
+      return NULL;
     if (access(exepath, X_OK) != -1) {
       return exepath;
     } else {

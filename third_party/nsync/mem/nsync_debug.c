@@ -21,11 +21,7 @@
 #include "third_party/nsync/mu_semaphore.h"
 #include "third_party/nsync/races.internal.h"
 #include "third_party/nsync/wait_s.internal.h"
-
-asm(".ident\t\"\\n\\n\
-*NSYNC (Apache 2.0)\\n\
-Copyright 2016 Google, Inc.\\n\
-https://github.com/google/nsync\"");
+__static_yoink("nsync_notice");
 
 /* Routines for debugging. */
 
@@ -201,7 +197,7 @@ static char *emit_mu_state (struct emit_buf *b, nsync_mu *mu,
         word = ATM_LOAD (&mu->word);
         if ((word & MU_WAITING) != 0 && print_waiters &&  /* can benefit from lock */
 	    (blocking || (word & MU_SPINLOCK) == 0)) {  /* willing, or no need to wait */
-                word = nsync_spin_test_and_set_ (&mu->word, MU_SPINLOCK, MU_SPINLOCK, 0);
+                word = nsync_spin_test_and_set_ (&mu->word, MU_SPINLOCK, MU_SPINLOCK, 0, mu);
                 acquired = 1;
         }
         readers = word / MU_RLOCK;
@@ -238,7 +234,7 @@ static char *emit_cv_state (struct emit_buf *b, nsync_cv *cv,
         word = ATM_LOAD (&cv->word);
         if ((word & CV_NON_EMPTY) != 0 && print_waiters &&  /* can benefit from lock */
 	    (blocking || (word & CV_SPINLOCK) == 0)) {  /* willing, or no need to wait */
-                word = nsync_spin_test_and_set_ (&cv->word, CV_SPINLOCK, CV_SPINLOCK, 0);
+                word = nsync_spin_test_and_set_ (&cv->word, CV_SPINLOCK, CV_SPINLOCK, 0, cv);
                 acquired = 1;
         }
         emit_print (b, "cv 0x%i -> 0x%i = {", (uintptr_t) cv, word);

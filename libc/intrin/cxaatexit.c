@@ -17,10 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/bsr.h"
-#include "libc/intrin/cxaatexit.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/cxaatexit.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/errfuns.h"
@@ -47,7 +47,8 @@ int __cxa_atexit(void *fp, void *arg, void *pred) {
   struct CxaAtexitBlock *b, *b2;
   __cxa_lock();
   b = __cxa_blocks.p;
-  if (!b) b = __cxa_blocks.p = &__cxa_blocks.root;
+  if (!b)
+    b = __cxa_blocks.p = &__cxa_blocks.root;
   if (!~b->mask) {
     if (_weaken(calloc) &&
         (b2 = _weaken(calloc)(1, sizeof(struct CxaAtexitBlock)))) {
@@ -58,7 +59,7 @@ int __cxa_atexit(void *fp, void *arg, void *pred) {
       return enomem();
     }
   }
-  i = _bsr(~b->mask);
+  i = bsr(~b->mask);
   b->mask |= 1u << i;
   b->p[i].fp = fp;
   b->p[i].arg = arg;

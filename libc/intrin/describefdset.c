@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/sock/select.h"
@@ -27,12 +26,14 @@
 
 #define append(...) o += ksnprintf(buf + o, N - o, __VA_ARGS__)
 
-const char *(DescribeFdSet)(char buf[N], ssize_t rc, int nfds, fd_set *fds) {
+const char *_DescribeFdSet(char buf[N], ssize_t rc, int nfds, fd_set *fds) {
   int o = 0;
 
-  if (!fds) return "NULL";
-  if ((!IsAsan() && kisdangerous(fds)) ||
-      (IsAsan() && !__asan_is_valid(fds, sizeof(*fds) * nfds))) {
+  if (!fds)
+    return "NULL";
+  if (rc == -1)
+    return "n/a";
+  if (kisdangerous(fds)) {
     ksnprintf(buf, N, "%p", fds);
     return buf;
   }
@@ -43,7 +44,7 @@ const char *(DescribeFdSet)(char buf[N], ssize_t rc, int nfds, fd_set *fds) {
   for (int fd = 0; fd < nfds; fd += 64) {
     uint64_t w = fds->fds_bits[fd >> 6];
     while (w) {
-      unsigned m = _bsr(w);
+      unsigned m = bsr(w);
       w &= ~((uint64_t)1 << m);
       if (fd + m < nfds) {
         if (!gotsome) {

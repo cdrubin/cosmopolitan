@@ -21,8 +21,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
-#include "libc/mem/gc.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -53,7 +52,8 @@ TEST(writev, negative_einvalOrEfault) {
 }
 
 TEST(writev, exceedsIovMax_einval) {
-  if (IsWindows()) return;  // it's complicated
+  if (IsWindows())
+    return;  // it's complicated
   int i, n = IOV_MAX + 1;
   struct iovec *v = gc(malloc(sizeof(struct iovec) * n));
   for (i = 0; i < n; ++i) {
@@ -96,29 +96,6 @@ TEST(writev, big_fullCompletion) {
   EXPECT_NE(-1, close(fd));
 }
 
-TEST(writev, asanError_efaults) {
-  if (!IsAsan()) return;
-  void *malloc_(size_t) asm("malloc");
-  void free_(void *) asm("free");
-  void *p;
-  int fd;
-  p = malloc_(32);
-  EXPECT_NE(-1, (fd = open("asan", O_RDWR | O_CREAT | O_TRUNC, 0644)));
-  EXPECT_EQ(32, write(fd, p, 32));
-  EXPECT_NE(-1, lseek(fd, 0, SEEK_SET));
-  EXPECT_EQ(32, read(fd, p, 32));
-  EXPECT_EQ(-1, write(fd, p, 33));
-  EXPECT_EQ(EFAULT, errno);
-  EXPECT_EQ(-1, write(fd, p, -1));
-  EXPECT_EQ(EFAULT, errno);
-  free_(p);
-  EXPECT_EQ(-1, write(fd, p, 32));
-  EXPECT_EQ(EFAULT, errno);
-  EXPECT_EQ(-1, read(fd, p, 32));
-  EXPECT_EQ(EFAULT, errno);
-  close(fd);
-}
-
 TEST(writev, empty_stillPerformsIoOperation) {
   int fd;
   struct iovec iov[] = {{"", 0}, {NULL, 0}};
@@ -126,7 +103,7 @@ TEST(writev, empty_stillPerformsIoOperation) {
   ASSERT_NE(-1, (fd = open("file", O_RDONLY)));
   errno = 0;
   EXPECT_SYS(EBADF, -1, writev(fd, iov, ARRAYLEN(iov)));
-  if (!(IsAarch64() && IsQemu())) {
+  if (!(IsAarch64() && IsQemuUser())) {
     EXPECT_EQ(-1, writev(fd, NULL, 0));
   }
   EXPECT_NE(-1, close(fd));

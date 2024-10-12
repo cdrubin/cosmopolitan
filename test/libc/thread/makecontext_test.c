@@ -19,7 +19,9 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
+#include "libc/math.h"
 #include "libc/mem/gc.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
@@ -35,7 +37,6 @@
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
 #include "libc/x/x.h"
-#include "third_party/libcxx/math.h"
 
 bool gotsome;
 ucontext_t uc, goback;
@@ -75,7 +76,7 @@ TEST(makecontext, args) {
   EXPECT_TRUE(gotsome);
 }
 
-dontasan dontubsan void itsatrap(int x, int y) {
+dontubsan void itsatrap(int x, int y) {
   *(int *)(intptr_t)x = scalbn(x, y);
 }
 
@@ -91,7 +92,8 @@ TEST(makecontext, crash) {
 }
 
 TEST(makecontext, backtrace) {
-  if (IsTiny()) return;  // doesn't print full crash report
+  if (IsTiny())
+    return;  // doesn't print full crash report
   SPAWN(fork);
   if (IsWindows()) {
     __klog_handle =
@@ -108,7 +110,8 @@ TEST(makecontext, backtrace) {
   makecontext(&uc, itsatrap, 2, 123, 456);
   setcontext(&uc);
   TERMS(SIGSEGV);
-  if (!GetSymbolTable()) return;
+  if (!GetSymbolTable())
+    return;
   char *log = gc(xslurp("log", 0));
   EXPECT_NE(0, strstr(log, "itsatrap"));
   EXPECT_NE(0, strstr(log, "runcontext"));

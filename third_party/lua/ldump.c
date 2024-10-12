@@ -3,7 +3,7 @@
 ╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
 │  Lua                                                                         │
-│  Copyright © 2004-2021 Lua.org, PUC-Rio.                                     │
+│  Copyright © 2004-2023 Lua.org, PUC-Rio.                                     │
 │                                                                              │
 │  Permission is hereby granted, free of charge, to any person obtaining       │
 │  a copy of this software and associated documentation files (the             │
@@ -27,16 +27,13 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define ldump_c
 #define LUA_CORE
+
 #include "third_party/lua/lobject.h"
 #include "third_party/lua/lprefix.h"
 #include "third_party/lua/lstate.h"
 #include "third_party/lua/lua.h"
 #include "third_party/lua/lundump.h"
-
-asm(".ident\t\"\\n\\n\
-Lua 5.4.3 (MIT License)\\n\
-Copyright 1994–2021 Lua.org, PUC-Rio.\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("lua_notice");
 
 
 typedef struct {
@@ -75,8 +72,11 @@ static void dumpByte (DumpState *D, int y) {
 }
 
 
-/* dumpInt Buff Size */
-#define DIBS    ((sizeof(size_t) * 8 / 7) + 1)
+/*
+** 'dumpSize' buffer size: each byte can store up to 7 bits. (The "+6"
+** rounds up the division.)
+*/
+#define DIBS    ((sizeof(size_t) * CHAR_BIT + 6) / 7)
 
 static void dumpSize (DumpState *D, size_t x) {
   lu_byte buff[DIBS];

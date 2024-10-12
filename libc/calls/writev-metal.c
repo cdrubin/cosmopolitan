@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/struct/fd.internal.h"
+#include "libc/intrin/fds.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
 #include "libc/intrin/weaken.h"
@@ -28,7 +28,8 @@
 ssize_t sys_writev_metal(struct Fd *fd, const struct iovec *iov, int iovlen) {
   switch (fd->kind) {
     case kFdConsole:
-      if (_weaken(sys_writev_vga)) _weaken(sys_writev_vga)(fd, iov, iovlen);
+      if (_weaken(sys_writev_vga))
+        _weaken(sys_writev_vga)(fd, iov, iovlen);
       /* fallthrough */
     case kFdSerial:
       return sys_writev_serial(fd, iov, iovlen);

@@ -25,14 +25,10 @@
 #include "third_party/nsync/races.internal.h"
 #include "third_party/nsync/wait_s.internal.h"
 #include "third_party/nsync/waiter.h"
-
-asm(".ident\t\"\\n\\n\
-*NSYNC (Apache 2.0)\\n\
-Copyright 2016 Google, Inc.\\n\
-https://github.com/google/nsync\"");
+__static_yoink("nsync_notice");
 
 int nsync_wait_n (void *mu, void (*lock) (void *), void (*unlock) (void *),
-		  nsync_time abs_deadline,
+		  int clock, nsync_time abs_deadline,
 		  int count, struct nsync_waitable_s *waitable[]) {
 	int ready;
 	IGNORE_RACES_START ();
@@ -81,7 +77,7 @@ int nsync_wait_n (void *mu, void (*lock) (void *), void (*unlock) (void *),
 				}
 			} while (nsync_time_cmp (min_ntime, nsync_time_zero) > 0 &&
 				 nsync_mu_semaphore_p_with_deadline (&w->sem,
-					min_ntime) == 0);
+					clock, min_ntime) == 0);
 		}
 
 		/* An attempt was made above to enqueue waitable[0..i-1].

@@ -20,11 +20,12 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/syslib.internal.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/sockaddr.h"
+#include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/ipproto.h"
@@ -36,8 +37,6 @@
 #include "libc/thread/thread.h"
 
 TEST(O_NONBLOCK, canBeSetBySocket_toMakeListenNonBlocking) {
-  // TODO(jart): this doesn't make any sense on windows
-  if (IsWindows()) return;
   char buf[16] = {0};
   uint32_t addrsize = sizeof(struct sockaddr_in);
   struct sockaddr_in addr = {
@@ -106,7 +105,7 @@ TEST(O_NONBLOCK, canBeTunedWithFcntl_toMakeReadNonBlocking) {
   PARENT();
   EXPECT_SYS(0, 0, close(3));
   ASSERT_SYS(0, 3, socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
-  ASSERT_SYS(0, O_RDWR, fcntl(3, F_GETFL));
+  ASSERT_SYS(0, O_RDWR, fcntl(3, F_GETFL) & O_ACCMODE);  // QEMU O_LARGEFILE :(
   ASSERT_SYS(0, 0, connect(3, (struct sockaddr *)&addr, sizeof(addr)));
   ASSERT_SYS(0, 0, fcntl(3, F_SETFL, O_RDWR | O_NONBLOCK));
   ASSERT_SYS(EAGAIN, -1, read(3, buf, 16));

@@ -17,17 +17,24 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/sysv/consts/ipproto.h"
 
-const char *(DescribeSocketProtocol)(char buf[12], int family) {
-  if (family == IPPROTO_IP) return "IPPROTO_IP";
-  if (family == IPPROTO_ICMP) return "IPPROTO_ICMP";
-  if (family == IPPROTO_TCP) return "IPPROTO_TCP";
-  if (family == IPPROTO_UDP) return "IPPROTO_UDP";
-  if (family == IPPROTO_RAW) return "IPPROTO_RAW";
-  if (family == IPPROTO_IPV6) return "IPPROTO_IPv6";
-  if (family == IPPROTO_ICMPV6) return "IPPROTO_ICMPV6";
+const char *_DescribeSocketProtocol(char buf[12], int family) {
+  if (family == IPPROTO_IP)
+    return "IPPROTO_IP";
+  if (family == IPPROTO_ICMP)
+    return "IPPROTO_ICMP";
+  if (family == IPPROTO_TCP)
+    return "IPPROTO_TCP";
+  if (family == IPPROTO_UDP)
+    return "IPPROTO_UDP";
+  if (family == IPPROTO_RAW)
+    return "IPPROTO_RAW";
+  if (family == IPPROTO_IPV6)
+    return "IPPROTO_IPv6";
+  if (family == IPPROTO_ICMPV6)
+    return "IPPROTO_ICMPV6";
   FormatInt32(buf, family);
   return buf;
 }

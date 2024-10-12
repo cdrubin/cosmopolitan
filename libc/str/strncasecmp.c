@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 
 /**
  * Compares NUL-terminated strings case-insensitively w/ limit.
@@ -30,7 +30,8 @@
 int strncasecmp(const char *a, const char *b, size_t n) {
   int x, y;
   size_t i = 0;
-  if (!n-- || a == b) return 0;
+  if (!n-- || a == b)
+    return 0;
   while ((x = kToLower[a[i] & 0xff]) == (y = kToLower[b[i] & 0xff]) && b[i] &&
          i < n) {
     ++i;

@@ -22,9 +22,9 @@
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/strace.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
+#include "libc/macros.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/sockaddr.h"
@@ -52,7 +52,7 @@
  *     EPIPE (if MSG_NOSIGNAL), EMSGSIZE, ENOTSOCK, EFAULT, etc.
  * @cancelationpoint
  * @asyncsignalsafe
- * @restartable (unless SO_RCVTIMEO)
+ * @restartable (unless SO_SNDTIMEO on Linux or Windows)
  */
 ssize_t sendto(int fd, const void *buf, size_t size, int flags,
                const struct sockaddr *opt_addr, uint32_t addrsize) {
@@ -61,10 +61,7 @@ ssize_t sendto(int fd, const void *buf, size_t size, int flags,
   union sockaddr_storage_bsd bsd;
   BEGIN_CANCELATION_POINT;
 
-  if (IsAsan() && (!__asan_is_valid(buf, size) ||
-                   (opt_addr && !__asan_is_valid(opt_addr, addrsize)))) {
-    rc = efault();
-  } else if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
     rc = enotsock();
   } else if (!IsWindows()) {
     if (!IsBsd() || !opt_addr) {
@@ -92,8 +89,8 @@ ssize_t sendto(int fd, const void *buf, size_t size, int flags,
   }
 
   END_CANCELATION_POINT;
-  DATATRACE("sendto(%d, %#.*hhs%s, %'zu, %#x, %p, %u) → %'ld% lm", fd,
-            MAX(0, MIN(40, rc)), buf, rc > 40 ? "..." : "", size, flags,
-            opt_addr, addrsize, rc);
+  DATATRACE("sendto(%d, %#.*hhs%s, %'zu, %s, %s) → %'ld% lm", fd,
+            MAX(0, MIN(40, rc)), buf, rc > 40 ? "..." : "", size,
+            DescribeMsg(flags), DescribeSockaddr(opt_addr, addrsize), rc);
   return rc;
 }

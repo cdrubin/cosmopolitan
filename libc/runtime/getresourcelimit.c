@@ -18,12 +18,14 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/rlimit.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/sysv/consts/rlim.h"
 
 long __get_rlimit(int resource) {
   struct rlimit rl;
-  if (getrlimit(resource, &rl) == -1) return -1;
-  if (rl.rlim_cur == RLIM_INFINITY) return -1;
+  if (getrlimit(resource, &rl) == -1)
+    return -1;
+  if (rl.rlim_cur == RLIM_INFINITY)
+    return -1;
   return MIN(rl.rlim_cur, LONG_MAX);
 }

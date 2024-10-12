@@ -32,8 +32,8 @@ COSMOPOLITAN_C_START_
 /**
  * Declares benchmark function.
  *
- * These only run if (1) the -b flag is passed to the FOO_test.com; and
- * (2) the unit tests passed. It's just an ordinary function, that gets
+ * These only run if (1) the -b flag is passed to the FOO_test; and (2)
+ * the unit tests passed. It's just an ordinary function, that gets
  * registered with the linker. It should print things to stdout.
  *
  * @see EZBENCH()
@@ -167,22 +167,22 @@ void TearDownOnce(void);
 #define ASSERT_IN(NEEDLE, GOT) \
   assertContains(FILIFU sizeof(*(NEEDLE)), NEEDLE, GOT, #GOT, true)
 
-#define ASSERT_BINEQ(WANT, GOT)              \
-  _Generic((WANT)[0], char                   \
-           : assertBinaryEquals_hex, default \
-           : assertBinaryEquals_cp437)(FILIFU WANT, GOT, -1, #GOT, true)
-#define ASSERT_BINNE(NOPE, GOT)                 \
-  _Generic((NOPE)[0], char                      \
-           : assertBinaryNotEquals_hex, default \
-           : assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, true)
-#define ASSERT_BINEQN(WANT, GOT, N)          \
-  _Generic((WANT)[0], char                   \
-           : assertBinaryEquals_hex, default \
-           : assertBinaryEquals_cp437)(FILIFU WANT, GOT, N, #GOT, true)
-#define ASSERT_BINNEN(NOPE, GOT, N)             \
-  _Generic((NOPE)[0], char                      \
-           : assertBinaryNotEquals_hex, default \
-           : assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, true)
+#define ASSERT_BINEQ(WANT, GOT)     \
+  _Generic((WANT)[0],               \
+      char: assertBinaryEquals_hex, \
+      default: assertBinaryEquals_cp437)(FILIFU WANT, GOT, -1, #GOT, true)
+#define ASSERT_BINNE(NOPE, GOT)        \
+  _Generic((NOPE)[0],                  \
+      char: assertBinaryNotEquals_hex, \
+      default: assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, true)
+#define ASSERT_BINEQN(WANT, GOT, N) \
+  _Generic((WANT)[0],               \
+      char: assertBinaryEquals_hex, \
+      default: assertBinaryEquals_cp437)(FILIFU WANT, GOT, N, #GOT, true)
+#define ASSERT_BINNEN(NOPE, GOT, N)    \
+  _Generic((NOPE)[0],                  \
+      char: assertBinaryNotEquals_hex, \
+      default: assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, true)
 
 #define ASSERT_FLOAT_EQ(WANT, GOT) \
   assertLongDoubleEquals(FILIFU WANT, GOT, #GOT, true)
@@ -194,6 +194,13 @@ void TearDownOnce(void);
   assertLongDoubleGreaterThan(VAL, GOT, #VAL " > " #GOT, true)
 #define ASSERT_LDBL_LT(VAL, GOT) \
   assertLongDoubleLessThan(VAL, GOT, #VAL " < " #GOT, true)
+
+#define ASSERT_FLOAT_EXACTLY_EQ(WANT, GOT) \
+  assertLongDoubleExactlyEquals(FILIFU WANT, GOT, #GOT, true)
+#define ASSERT_DOUBLE_EXACTLY_EQ(WANT, GOT) \
+  assertLongDoubleExactlyEquals(FILIFU WANT, GOT, #GOT, true)
+#define ASSERT_LDBL_EXACTLY_EQ(WANT, GOT) \
+  assertLongDoubleExactlyEquals(FILIFU WANT, GOT, #GOT, true)
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § testing library » assert or log                           ─╬─│┼
@@ -243,22 +250,22 @@ void TearDownOnce(void);
 #define EXPECT_IN(NEEDLE, GOT) \
   assertContains(FILIFU sizeof(*(NEEDLE)), NEEDLE, GOT, #GOT, false)
 
-#define EXPECT_BINEQ(WANT, GOT)              \
-  _Generic((WANT)[0], char                   \
-           : assertBinaryEquals_hex, default \
-           : assertBinaryEquals_cp437)(FILIFU WANT, GOT, -1, #GOT, false)
-#define EXPECT_BINNE(NOPE, GOT)                 \
-  _Generic((NOPE)[0], char                      \
-           : assertBinaryNotEquals_hex, default \
-           : assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, false)
-#define EXPECT_BINEQN(WANT, GOT, N)          \
-  _Generic((WANT)[0], char                   \
-           : assertBinaryEquals_hex, default \
-           : assertBinaryEquals_cp437)(FILIFU WANT, GOT, N, #GOT, false)
-#define EXPECT_BINNEN(NOPE, GOT, N)             \
-  _Generic((NOPE)[0], char                      \
-           : assertBinaryNotEquals_hex, default \
-           : assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, false)
+#define EXPECT_BINEQ(WANT, GOT)     \
+  _Generic((WANT)[0],               \
+      char: assertBinaryEquals_hex, \
+      default: assertBinaryEquals_cp437)(FILIFU WANT, GOT, -1, #GOT, false)
+#define EXPECT_BINNE(NOPE, GOT)        \
+  _Generic((NOPE)[0],                  \
+      char: assertBinaryNotEquals_hex, \
+      default: assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, false)
+#define EXPECT_BINEQN(WANT, GOT, N) \
+  _Generic((WANT)[0],               \
+      char: assertBinaryEquals_hex, \
+      default: assertBinaryEquals_cp437)(FILIFU WANT, GOT, N, #GOT, false)
+#define EXPECT_BINNEN(NOPE, GOT, N)    \
+  _Generic((NOPE)[0],                  \
+      char: assertBinaryNotEquals_hex, \
+      default: assertBinaryNotEquals_cp437)(FILIFU NOPE, GOT, -1, #GOT, false)
 
 #define EXPECT_FLOAT_EQ(WANT, GOT) \
   assertLongDoubleEquals(FILIFU WANT, GOT, #GOT, false)
@@ -270,6 +277,13 @@ void TearDownOnce(void);
   expectLongDoubleGreaterThan(VAL, GOT, #VAL " > " #GOT, false)
 #define EXPECT_LGBL_LT(VAL, GOT) \
   expectLongDoubleLessThan(VAL, GOT, #VAL " < " #GOT, false)
+
+#define EXPECT_FLOAT_EXACTLY_EQ(WANT, GOT) \
+  assertLongDoubleExactlyEquals(FILIFU WANT, GOT, #GOT, false)
+#define EXPECT_DOUBLE_EXACTLY_EQ(WANT, GOT) \
+  assertLongDoubleExactlyEquals(FILIFU WANT, GOT, #GOT, false)
+#define EXPECT_LDBL_EXACTLY_EQ(WANT, GOT) \
+  assertLongDoubleExactlyEquals(FILIFU WANT, GOT, #GOT, false)
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
 │ cosmopolitan § testing library » implementation details                  ─╬─│┼
@@ -372,6 +386,7 @@ void testlib_seterrno(int);
 void testlib_runalltests(void);
 const char *testlib_strerror(void);
 void testlib_runallbenchmarks(void);
+bool testlib_pokememory(const void *);
 bool testlib_memoryexists(const void *);
 void testlib_runtestcases(const testfn_t *, const testfn_t *, testfn_t);
 void testlib_runfixtures(const testfn_t *, const testfn_t *,
@@ -403,6 +418,7 @@ void testlib_formatbinaryashex(const char *, const void *, size_t, char **,
 void testlib_formatbinaryasglyphs(const char16_t *, const void *, size_t,
                                   char **, char **);
 bool testlib_almostequallongdouble(long double, long double);
+bool testlib_exactlyequallongdouble(long double, long double);
 void testlib_incrementfailed(void);
 void testlib_clearxmmregisters(void);
 
@@ -420,8 +436,10 @@ forceinline void testlib_onfail2(bool isfatal) {
 forceinline void assertNotEquals(FILIFU_ARGS intptr_t donotwant, intptr_t got,
                                  const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
-  if (got != donotwant) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (got != donotwant)
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertNotEquals", "=", gotcode,
                     testlib_formatint(got), testlib_formatint(donotwant));
   testlib_onfail2(isfatal);
@@ -455,8 +473,10 @@ forceinline void assertBetween(FILIFU_ARGS intptr_t beg, intptr_t end,
                                intptr_t got, const char *gotcode,
                                bool isfatal) {
   ++g_testlib_ran;
-  if (beg <= got && got <= end) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (beg <= got && got <= end)
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertBetween", "∉", gotcode,
                     testlib_formatint(got), testlib_formatrange(beg, end));
   testlib_onfail2(isfatal);
@@ -466,8 +486,10 @@ forceinline void assertStringEquals(FILIFU_ARGS size_t cw, const void *want,
                                     const void *got, const char *gotcode,
                                     bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_strequals(cw, want, got)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_strequals(cw, want, got))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStringEquals", "≠", gotcode,
                     testlib_formatstr(cw, want, -1),
                     testlib_formatstr(cw, got, -1));
@@ -478,8 +500,10 @@ forceinline void assertStringNotEquals(FILIFU_ARGS size_t cw, const void *want,
                                        const void *got, const char *gotcode,
                                        bool isfatal) {
   ++g_testlib_ran;
-  if (!testlib_strequals(cw, want, got)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (!testlib_strequals(cw, want, got))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStringNotEquals", "=", gotcode,
                     testlib_formatstr(cw, want, -1),
                     testlib_formatstr(cw, got, -1));
@@ -490,8 +514,10 @@ forceinline void assertStrnEquals(FILIFU_ARGS size_t cw, const void *want,
                                   const void *got, size_t n,
                                   const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_strnequals(cw, want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_strnequals(cw, want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStrnEquals", "≠", gotcode,
                     testlib_formatstr(cw, got, n),
                     testlib_formatstr(cw, want, n));
@@ -502,8 +528,10 @@ forceinline void assertStrnNotEquals(FILIFU_ARGS size_t cw, const void *want,
                                      const void *got, size_t n,
                                      const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
-  if (!testlib_strnequals(cw, want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (!testlib_strnequals(cw, want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStrnNotEquals", "=", gotcode,
                     testlib_formatstr(cw, got, n),
                     testlib_formatstr(cw, want, n));
@@ -514,8 +542,10 @@ forceinline void assertStringCaseEquals(FILIFU_ARGS size_t cw, const void *want,
                                         const void *got, const char *gotcode,
                                         bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_strcaseequals(cw, want, got)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_strcaseequals(cw, want, got))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStringCaseEquals", "≠", gotcode,
                     testlib_formatstr(cw, got, -1),
                     testlib_formatstr(cw, want, -1));
@@ -526,8 +556,10 @@ forceinline void assertStringCaseNotEquals(FILIFU_ARGS size_t cw,
                                            const void *want, const void *got,
                                            const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
-  if (!testlib_strcaseequals(cw, want, got)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (!testlib_strcaseequals(cw, want, got))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStringCaseNotEquals", "=", gotcode,
                     testlib_formatstr(cw, got, -1),
                     testlib_formatstr(cw, want, -1));
@@ -538,8 +570,10 @@ forceinline void assertStrnCaseEquals(FILIFU_ARGS size_t cw, const void *want,
                                       const void *got, size_t n,
                                       const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_strncaseequals(cw, want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_strncaseequals(cw, want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStrnCaseEquals", "≠", gotcode,
                     testlib_formatstr(cw, got, n),
                     testlib_formatstr(cw, want, n));
@@ -551,8 +585,10 @@ forceinline void assertStrnCaseNotEquals(FILIFU_ARGS size_t cw,
                                          size_t n, const char *gotcode,
                                          bool isfatal) {
   ++g_testlib_ran;
-  if (!testlib_strncaseequals(cw, want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (!testlib_strncaseequals(cw, want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStrnCaseNotEquals", "=", gotcode,
                     testlib_formatstr(cw, got, n),
                     testlib_formatstr(cw, want, n));
@@ -563,8 +599,10 @@ forceinline void assertStartsWith(FILIFU_ARGS size_t cw, const char *prefix,
                                   const char *s, const char *gotcode,
                                   bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_startswith(cw, s, prefix)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_startswith(cw, s, prefix))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertStartsWith", "≠", gotcode,
                     testlib_formatstr(1, prefix, -1),
                     testlib_formatstr(1, s, -1));
@@ -575,8 +613,10 @@ forceinline void assertEndsWith(FILIFU_ARGS size_t cw, const char *suffix,
                                 const char *s, const char *gotcode,
                                 bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_endswith(cw, s, suffix)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_endswith(cw, s, suffix))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertEndsWith", "≠", gotcode,
                     testlib_formatstr(1, s, -1),
                     testlib_formatstr(1, suffix, -1));
@@ -587,8 +627,10 @@ forceinline void assertContains(FILIFU_ARGS size_t cw, const char *needle,
                                 const char *s, const char *gotcode,
                                 bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_contains(cw, s, needle)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_contains(cw, s, needle))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertContains", "∉", gotcode,
                     testlib_formatstr(1, s, -1),
                     testlib_formatstr(1, needle, -1));
@@ -600,8 +642,10 @@ forceinline void assertBinaryEquals_cp437(FILIFU_ARGS const char16_t *want,
                                           const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
   char *v1, *v2;
-  if (testlib_binequals(want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_binequals(want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_formatbinaryasglyphs(want, got, n, &v1, &v2);
   testlib_showerror(file, line, func, "assertBinaryEquals", "≠", gotcode, v1,
                     v2);
@@ -613,8 +657,10 @@ forceinline void assertBinaryEquals_hex(FILIFU_ARGS const char *want,
                                         const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
   char *v1, *v2;
-  if (testlib_hexequals(want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_hexequals(want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_formatbinaryashex(want, got, n, &v1, &v2);
   testlib_showerror(file, line, func, "assertBinaryEquals", "≠", gotcode, v1,
                     v2);
@@ -627,8 +673,10 @@ forceinline void assertBinaryNotEquals_cp437(FILIFU_ARGS const char16_t *want,
                                              bool isfatal) {
   ++g_testlib_ran;
   char *v1, *v2;
-  if (!testlib_binequals(want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (!testlib_binequals(want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_formatbinaryasglyphs(want, got, n, &v1, &v2);
   testlib_showerror(file, line, func, "assertBinaryNotEquals", "=", gotcode, v1,
                     v2);
@@ -640,8 +688,10 @@ forceinline void assertBinaryNotEquals_hex(FILIFU_ARGS const char *want,
                                            const char *gotcode, bool isfatal) {
   ++g_testlib_ran;
   char *v1, *v2;
-  if (!testlib_hexequals(want, got, n)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (!testlib_hexequals(want, got, n))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_formatbinaryashex(want, got, n, &v1, &v2);
   testlib_showerror(file, line, func, "assertBinaryNotEquals", "=", gotcode, v1,
                     v2);
@@ -652,10 +702,27 @@ forceinline void assertLongDoubleEquals(FILIFU_ARGS long double want,
                                         long double got, const char *gotcode,
                                         bool isfatal) {
   ++g_testlib_ran;
-  if (testlib_almostequallongdouble(want, got)) return;
-  if (g_testlib_shoulddebugbreak) DebugBreak();
+  if (testlib_almostequallongdouble(want, got))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
   testlib_showerror(file, line, func, "assertLongDoubleEquals", "≠", gotcode,
                     testlib_formatfloat(want), testlib_formatfloat(got));
+  testlib_onfail2(isfatal);
+}
+
+forceinline void assertLongDoubleExactlyEquals(FILIFU_ARGS long double want,
+                                               long double got,
+                                               const char *gotcode,
+                                               bool isfatal) {
+  ++g_testlib_ran;
+  if (testlib_exactlyequallongdouble(want, got))
+    return;
+  if (g_testlib_shoulddebugbreak)
+    DebugBreak();
+  testlib_showerror(file, line, func, "assertLongDoubleExactlyEquals", "≠",
+                    gotcode, testlib_formatfloat(want),
+                    testlib_formatfloat(got));
   testlib_onfail2(isfatal);
 }
 

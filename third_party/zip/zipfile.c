@@ -19,6 +19,7 @@
 #include "libc/assert.h"
 #include "third_party/zip/crc32.h"
 #endif
+#include "libc/ctype.h"
 #include "third_party/zip/crc32.h"
 
 /* for realloc 2/6/2005 EG */
@@ -412,6 +413,10 @@ char *ziptyp(s)
   if ((t = malloc(strlen(s) + 5)) == NULL)
     return NULL;
   strcpy(t, s);
+
+  // [jart] don't magically append .zip extension to filename argument
+  if (1) return t;
+
 #  ifdef __human68k__
   _toslash(t);
 #  endif

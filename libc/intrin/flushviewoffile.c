@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/memory.h"
 
 __msabi extern typeof(FlushViewOfFile) *const __imp_FlushViewOfFile;
@@ -36,7 +36,8 @@ textwindows bool32 FlushViewOfFile(const void *lpBaseAddress,
                                    size_t dwNumberOfBytesToFlush) {
   bool32 ok;
   ok = __imp_FlushViewOfFile(lpBaseAddress, dwNumberOfBytesToFlush);
-  if (!ok) __winerr();
+  if (!ok)
+    __winerr();
   NTTRACE("FlushViewOfFile(%p, %'zu) → %hhhd% m", lpBaseAddress,
           dwNumberOfBytesToFlush, ok);
   return ok;

@@ -18,13 +18,13 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/fd.internal.h"
+#include "libc/intrin/fds.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/termios.h"
 #include "libc/dce.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/files.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
@@ -33,7 +33,8 @@
 #define TIOCDRAIN 0x2000745e  // xnu, freebsd, openbsd, netbsd
 
 static dontinline textwindows int sys_tcdrain_nt(int fd) {
-  if (!sys_isatty(fd)) return -1;  // ebadf, enotty
+  if (!sys_isatty(fd))
+    return -1;  // ebadf, enotty
   // Tried FlushFileBuffers but it made Emacs hang when run in cmd.exe
   // "Console output is not buffered." -Quoth MSDN on FlushFileBuffers
   return 0;

@@ -17,15 +17,21 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/atomic.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/sig.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/nomultics.internal.h"
+#include "libc/intrin/dll.h"
+#include "libc/intrin/maps.h"
+#include "libc/intrin/nomultics.h"
 #include "libc/intrin/weaken.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nexgen32e/rdtsc.h"
+#include "libc/nt/accounting.h"
 #include "libc/nt/console.h"
 #include "libc/nt/enum/consolemodeflags.h"
+#include "libc/nt/enum/creationdisposition.h"
 #include "libc/nt/enum/filemapflags.h"
 #include "libc/nt/enum/pageflags.h"
 #include "libc/nt/files.h"
@@ -33,7 +39,9 @@
 #include "libc/nt/pedef.internal.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
-#include "libc/nt/struct/teb.h"
+#include "libc/nt/signals.h"
+#include "libc/nt/struct/systeminfo.h"
+#include "libc/nt/systeminfo.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
@@ -49,9 +57,11 @@
 #define abi __msabi textwindows dontinstrument
 
 // clang-format off
+__msabi extern typeof(AddVectoredExceptionHandler) *const __imp_AddVectoredExceptionHandler;
 __msabi extern typeof(CreateFileMapping) *const __imp_CreateFileMappingW;
 __msabi extern typeof(DuplicateHandle) *const __imp_DuplicateHandle;
 __msabi extern typeof(FreeEnvironmentStrings) *const __imp_FreeEnvironmentStringsW;
+__msabi extern typeof(GetCommandLine) *const __imp_GetCommandLineW;
 __msabi extern typeof(GetConsoleMode) *const __imp_GetConsoleMode;
 __msabi extern typeof(GetCurrentDirectory) *const __imp_GetCurrentDirectoryW;
 __msabi extern typeof(GetCurrentProcessId) *const __imp_GetCurrentProcessId;
@@ -59,6 +69,9 @@ __msabi extern typeof(GetEnvironmentStrings) *const __imp_GetEnvironmentStringsW
 __msabi extern typeof(GetEnvironmentVariable) *const __imp_GetEnvironmentVariableW;
 __msabi extern typeof(GetFileAttributes) *const __imp_GetFileAttributesW;
 __msabi extern typeof(GetStdHandle) *const __imp_GetStdHandle;
+__msabi extern typeof(GetSystemInfo) *const __imp_GetSystemInfo;
+__msabi extern typeof(GetSystemInfo) *const __imp_GetSystemInfo;
+__msabi extern typeof(GetUserName) *const __imp_GetUserNameW;
 __msabi extern typeof(MapViewOfFileEx) *const __imp_MapViewOfFileEx;
 __msabi extern typeof(SetConsoleCP) *const __imp_SetConsoleCP;
 __msabi extern typeof(SetConsoleMode) *const __imp_SetConsoleMode;
@@ -78,25 +91,19 @@ __funline int IsAlpha(int c) {
   return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
 }
 
-// https://nullprogram.com/blog/2022/02/18/
-__funline char16_t *MyCommandLine(void) {
-  void *cmd;
-  asm("mov\t%%gs:(0x60),%0\n"
-      "mov\t0x20(%0),%0\n"
-      "mov\t0x78(%0),%0\n"
-      : "=r"(cmd));
-  return cmd;
-}
-
 static abi char16_t *StrStr(const char16_t *haystack, const char16_t *needle) {
   size_t i;
   for (;;) {
     for (i = 0;; ++i) {
-      if (!needle[i]) return (/*unconst*/ char16_t *)haystack;
-      if (!haystack[i]) break;
-      if (needle[i] != haystack[i]) break;
+      if (!needle[i])
+        return (/*unconst*/ char16_t *)haystack;
+      if (!haystack[i])
+        break;
+      if (needle[i] != haystack[i])
+        break;
     }
-    if (!*haystack++) break;
+    if (!*haystack++)
+      break;
   }
   return 0;
 }
@@ -122,7 +129,8 @@ static abi bool32 WinFileExists(const char *path) {
   uint16_t path16[PATH_MAX];
   size_t z = ARRAYLEN(path16);
   size_t n = tprecode8to16(path16, z, path).ax;
-  if (n >= z - 1) return false;
+  if (n >= z - 1)
+    return false;
   return __imp_GetFileAttributesW(path16) != -1u;
 }
 
@@ -142,14 +150,25 @@ static abi void DeduplicateStdioHandles(void) {
   }
 }
 
+static bool32 HasEnvironmentVariable(const char16_t *name) {
+  char16_t buf[4];
+  return __imp_GetEnvironmentVariableW(name, buf, ARRAYLEN(buf));
+}
+
+static abi unsigned OnWinCrash(struct NtExceptionPointers *ep) {
+  int code, sig = __sig_crash_sig(ep->ExceptionRecord->ExceptionCode, &code);
+  TerminateThisProcess(sig);
+}
+
 // main function of windows init process
 // i.e. first process spawned that isn't forked
 static abi wontreturn void WinInit(const char16_t *cmdline) {
   __oldstack = (intptr_t)__builtin_frame_address(0);
 
+  __imp_SetConsoleOutputCP(kNtCpUtf8);
+
   // make console into utf-8 ansi/xterm style tty
-  if (NtGetPeb()->OSMajorVersion >= 10 &&
-      (intptr_t)v_ntsubsystem == kNtImageSubsystemWindowsCui) {
+  if ((intptr_t)v_ntsubsystem == kNtImageSubsystemWindowsCui) {
     __imp_SetConsoleCP(kNtCpUtf8);
     __imp_SetConsoleOutputCP(kNtCpUtf8);
     for (int i = 0; i <= 2; ++i) {
@@ -168,37 +187,61 @@ static abi wontreturn void WinInit(const char16_t *cmdline) {
     }
   }
 
-  // avoid programs like emacs nagging the user to define this
-  char16_t var[8];
-  if (!__imp_GetEnvironmentVariableW(u"TERM", var, 8)) {
+  // so crash signals can be reported to cosmopolitan bash
+  __imp_AddVectoredExceptionHandler(true, (void *)OnWinCrash);
+
+  // allocate memory for stack and argument block
+  intptr_t stackhand;
+  char *stackaddr = (char *)GetStaticStackAddr(0);
+  size_t stacksize = GetStaticStackSize();
+  __imp_MapViewOfFileEx(
+      (stackhand = __imp_CreateFileMappingW(-1, 0, kNtPageExecuteReadwrite,
+                                            stacksize >> 32, stacksize, NULL)),
+      kNtFileMapWrite | kNtFileMapExecute, 0, 0, stacksize, stackaddr);
+  int stackprot = (intptr_t)ape_stack_prot;
+  if (~stackprot & PROT_EXEC) {
+    uint32_t old;
+    __imp_VirtualProtect(stackaddr, stacksize, kNtPageReadwrite, &old);
+  }
+  uint32_t oldattr;
+  __imp_VirtualProtect(stackaddr, GetGuardSize(),
+                       kNtPageReadwrite | kNtPageGuard, &oldattr);
+  if (_weaken(__maps_stack)) {
+    struct NtSystemInfo si;
+    __imp_GetSystemInfo(&si);
+    _weaken(__maps_stack)(stackaddr, si.dwPageSize, GetGuardSize(), stacksize,
+                          stackprot, stackhand);
+  }
+  struct WinArgs *wa =
+      (struct WinArgs *)(stackaddr + (stacksize - sizeof(struct WinArgs)));
+
+  // define $TERM if it's not already present
+  // programs like emacs will stop the world and nag if it's not set
+  if (!HasEnvironmentVariable(u"TERM")) {
     __imp_SetEnvironmentVariableW(u"TERM", u"xterm-256color");
   }
 
-  // allocate memory for stack and argument block
-  _mmi.p = _mmi.s;
-  _mmi.n = ARRAYLEN(_mmi.s);
-  uintptr_t stackaddr = GetStaticStackAddr(0);
-  size_t stacksize = GetStaticStackSize();
-  __imp_MapViewOfFileEx(
-      (_mmi.p[0].h = __imp_CreateFileMappingW(
-           -1, 0, kNtPageExecuteReadwrite, stacksize >> 32, stacksize, NULL)),
-      kNtFileMapWrite | kNtFileMapExecute, 0, 0, stacksize, (void *)stackaddr);
-  int prot = (intptr_t)ape_stack_prot;
-  if (~prot & PROT_EXEC) {
-    uint32_t old;
-    __imp_VirtualProtect((void *)stackaddr, stacksize, kNtPageReadwrite, &old);
+  // define $USER as GetUserName() if not set
+  // Windows doesn't define this environment variable by default
+  uint32_t vsize = ARRAYLEN(wa->tmp16);
+  if (!HasEnvironmentVariable(u"USER") &&
+      __imp_GetUserNameW(&wa->tmp16, &vsize)) {
+    __imp_SetEnvironmentVariableW(u"USER", wa->tmp16);
   }
-  uint32_t oldattr;
-  __imp_VirtualProtect((void *)stackaddr, GetGuardSize(),
-                       kNtPageReadwrite | kNtPageGuard, &oldattr);
-  _mmi.p[0].x = stackaddr >> 16;
-  _mmi.p[0].y = (stackaddr >> 16) + ((stacksize - 1) >> 16);
-  _mmi.p[0].prot = prot;
-  _mmi.p[0].flags = 0x00000026;  // stack+anonymous
-  _mmi.p[0].size = stacksize;
-  _mmi.i = 1;
-  struct WinArgs *wa =
-      (struct WinArgs *)(stackaddr + (stacksize - sizeof(struct WinArgs)));
+
+  // define $HOME as $HOMEDRIVE$HOMEPATH if not set
+  // Windows doesn't define this environment variable by default
+  uint32_t vlen;
+  if (!HasEnvironmentVariable(u"HOME") &&
+      (vlen = __imp_GetEnvironmentVariableW(u"HOMEDRIVE", wa->tmp16,
+                                            ARRAYLEN(wa->tmp16))) <
+          ARRAYLEN(wa->tmp16) &&
+      (vlen += __imp_GetEnvironmentVariableW(u"HOMEPATH", wa->tmp16 + vlen,
+                                             ARRAYLEN(wa->tmp16) - vlen)) <
+          ARRAYLEN(wa->tmp16) &&
+      vlen) {
+    __imp_SetEnvironmentVariableW(u"HOME", wa->tmp16);
+  }
 
   // parse utf-16 command into utf-8 argv array in argument block
   int count = GetDosArgv(cmdline, wa->argblock, ARRAYLEN(wa->argblock),
@@ -207,7 +250,8 @@ static abi wontreturn void WinInit(const char16_t *cmdline) {
   // normalize executable path
   if (wa->argv[0] && !WinFileExists(wa->argv[0])) {
     unsigned i, n = 0;
-    while (wa->argv[0][n]) ++n;
+    while (wa->argv[0][n])
+      ++n;
     if (n + 4 < sizeof(wa->argv0buf)) {
       for (i = 0; i < n; ++i) {
         wa->argv0buf[i] = wa->argv[0][i];
@@ -251,14 +295,14 @@ static abi wontreturn void WinInit(const char16_t *cmdline) {
                 ARRAYLEN(wa->envp) - 1);
   __imp_FreeEnvironmentStringsW(env16);
   __envp = &wa->envp[0];
-
   // handover control to cosmopolitan runtime
   __stack_call(count, wa->argv, wa->envp, wa->auxv, cosmo,
-               stackaddr + (stacksize - sizeof(struct WinArgs)));
+               (uintptr_t)(stackaddr + (stacksize - sizeof(struct WinArgs))));
 }
 
 abi int64_t WinMain(int64_t hInstance, int64_t hPrevInstance,
                     const char *lpCmdLine, int64_t nCmdShow) {
+  static atomic_ulong fake_process_signals;
   const char16_t *cmdline;
   extern char os asm("__hostos");
   os = _HOSTWINDOWS;  // madness https://news.ycombinator.com/item?id=21019722
@@ -268,20 +312,25 @@ abi int64_t WinMain(int64_t hInstance, int64_t hPrevInstance,
                "sudo sh -c 'echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop'\n");
     return 77 << 8;  // exit(77)
   }
-  __umask = 077;
+  struct NtSystemInfo si;
+  __imp_GetSystemInfo(&si);
+  __pagesize = si.dwPageSize;
+  __gransize = si.dwAllocationGranularity;
   __pid = __imp_GetCurrentProcessId();
-  cmdline = MyCommandLine();
+  if (!(__sig.process = __sig_map_process(__pid, kNtOpenAlways)))
+    __sig.process = &fake_process_signals;
+  atomic_store_explicit(__sig.process, 0, memory_order_release);
+  cmdline = __imp_GetCommandLineW();
 #if SYSDEBUG
   // sloppy flag-only check for early initialization
-  if (StrStr(cmdline, u"--strace")) ++__strace;
+  if (StrStr(cmdline, u"--strace"))
+    ++__strace;
 #endif
-  if (_weaken(WinSockInit)) {
+  if (_weaken(WinSockInit))
     _weaken(WinSockInit)();
-  }
   DeduplicateStdioHandles();
-  if (_weaken(WinMainForked)) {
+  if (_weaken(WinMainForked))
     _weaken(WinMainForked)();
-  }
   WinInit(cmdline);
 }
 

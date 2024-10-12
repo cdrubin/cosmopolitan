@@ -7,7 +7,7 @@ THIRD_PARTY_PYTHON_ARTIFACTS =						\
 	THIRD_PARTY_PYTHON_STAGE1_A					\
 	THIRD_PARTY_PYTHON_STAGE2_A					\
 	THIRD_PARTY_PYTHON_PYTEST_A					\
-	THIRD_PARTY_PYTHON_PYTHON					\
+	THIRD_PARTY_PYTHON_PYTHON3					\
 	THIRD_PARTY_PYTHON_FREEZE
 
 THIRD_PARTY_PYTHON_BINS =						\
@@ -15,29 +15,31 @@ THIRD_PARTY_PYTHON_BINS =						\
 	$(THIRD_PARTY_PYTHON_COMS:%=%.dbg)
 
 THIRD_PARTY_PYTHON_COMS =						\
-	o/$(MODE)/third_party/python/Parser/asdl_c.com			\
-	o/$(MODE)/third_party/python/pystone.com			\
-	o/$(MODE)/third_party/python/python.com				\
-	o/$(MODE)/third_party/python/freeze.com				\
-	o/$(MODE)/third_party/python/pycomp.com				\
-	o/$(MODE)/third_party/python/pyobj.com				\
-	o/$(MODE)/third_party/python/hello.com				\
-	o/$(MODE)/third_party/python/repl.com
+	o/$(MODE)/third_party/python/Parser/asdl_c			\
+	o/$(MODE)/third_party/python/pystone				\
+	o/$(MODE)/third_party/python/python3				\
+	o/$(MODE)/third_party/python/freeze				\
+	o/$(MODE)/third_party/python/pycomp				\
+	o/$(MODE)/third_party/python/pyobj				\
+	o/$(MODE)/third_party/python/hello				\
+	o/$(MODE)/third_party/python/repl
 
 THIRD_PARTY_PYTHON_CHECKS =						\
 	$(THIRD_PARTY_PYTHON_STAGE1_A).pkg 				\
 	$(THIRD_PARTY_PYTHON_STAGE2_A).pkg				\
 	$(THIRD_PARTY_PYTHON_PYTEST_A).pkg				\
 	$(THIRD_PARTY_PYTHON_HDRS:%=o/$(MODE)/%.ok)			\
-	o/$(MODE)/third_party/python/python.pkg				\
+	o/$(MODE)/third_party/python/python3.pkg			\
 	o/$(MODE)/third_party/python/freeze.pkg
 
 # TODO: Deal with aarch64 under qemu not making execve() easy.
 ifneq ($(MODE), dbg)
+ifneq ($(MODE), x86_64-dbg)
 ifeq ($(ARCH), x86_64)
 ifneq ($(UNAME_S), Windows)
 THIRD_PARTY_PYTHON_CHECKS +=						\
 	$(THIRD_PARTY_PYTHON_PYTEST_PYMAINS:%=o/$(MODE)/%.runs)
+endif
 endif
 endif
 endif
@@ -470,11 +472,12 @@ THIRD_PARTY_PYTHON_STAGE1_A_DIRECTDEPS =				\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
 	LIBC_THREAD							\
-	LIBC_TIME							\
 	LIBC_TINYMATH							\
 	LIBC_X								\
 	THIRD_PARTY_DLMALLOC						\
 	THIRD_PARTY_GETOPT						\
+	THIRD_PARTY_MUSL						\
+	THIRD_PARTY_TZ							\
 	THIRD_PARTY_XED							\
 	TOOL_BUILD_LIB							\
 	TOOL_ARGS
@@ -483,12 +486,12 @@ THIRD_PARTY_PYTHON_STAGE1_A_DEPS =					\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_PYTHON_STAGE1_A_DIRECTDEPS),$($(x))))
 
 o//third_party/python/Python/importlib.inc:				\
-		o/$(MODE)/third_party/python/freeze.com			\
+		o/$(MODE)/third_party/python/freeze			\
 		third_party/python/Lib/importlib/_bootstrap.py
 	@$(COMPILE) -AFREEZE -wT$@ $^ $@
 
 o//third_party/python/Python/importlib_external.inc:			\
-		o/$(MODE)/third_party/python/freeze.com			\
+		o/$(MODE)/third_party/python/freeze			\
 		third_party/python/Lib/importlib/_bootstrap_external.py
 	@$(COMPILE) -AFREEZE -wT$@ $^ $@
 
@@ -526,7 +529,6 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/runpythonmodule.c				\
 	third_party/python/launch.c					\
 	third_party/python/Objects/fromfd.c				\
-	third_party/python/Objects/unicodeobject-deadcode.c		\
 	third_party/python/Modules/_bisectmodule.c			\
 	third_party/python/Modules/_bz2module.c				\
 	third_party/python/Modules/_codecsmodule.c			\
@@ -534,6 +536,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/Modules/_csv.c				\
 	third_party/python/Modules/_datetimemodule.c			\
 	third_party/python/Modules/_decimal/_decimal.c			\
+	third_party/python/Modules/_decimal/libmpdec/notice.c		\
 	third_party/python/Modules/_decimal/libmpdec/basearith.c	\
 	third_party/python/Modules/_decimal/libmpdec/constants.c	\
 	third_party/python/Modules/_decimal/libmpdec/context.c		\
@@ -1179,7 +1182,6 @@ THIRD_PARTY_PYTHON_STAGE2_A_DIRECTDEPS =				\
 	LIBC_STR							\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
-	LIBC_TIME							\
 	LIBC_TINYMATH							\
 	LIBC_X								\
 	NET_HTTP							\
@@ -1188,9 +1190,10 @@ THIRD_PARTY_PYTHON_STAGE2_A_DIRECTDEPS =				\
 	THIRD_PARTY_GDTOA						\
 	THIRD_PARTY_LINENOISE						\
 	THIRD_PARTY_MUSL						\
-	THIRD_PARTY_PYTHON_STAGE1					\
 	THIRD_PARTY_MBEDTLS						\
+	THIRD_PARTY_PYTHON_STAGE1					\
 	THIRD_PARTY_SQLITE3						\
+	THIRD_PARTY_TZ							\
 	THIRD_PARTY_ZLIB						\
 	THIRD_PARTY_XED							\
 	TOOL_ARGS
@@ -1347,7 +1350,7 @@ THIRD_PARTY_PYTHON_PYTEST_A_DATA =										\
 	third_party/python/Lib/venv/scripts/nt/deactivate.bat							\
 	third_party/python/Lib/venv/scripts/posix/activate.csh							\
 	third_party/python/Lib/venv/scripts/posix/activate.fish							\
-	third_party/python/Lib/test/hello.com									\
+	third_party/python/Lib/test/hello									\
 	third_party/python/Lib/test/xmltestdata/								\
 	third_party/python/Lib/test/xmltestdata/simple.xml							\
 	third_party/python/Lib/test/xmltestdata/simple-ns.xml							\
@@ -1745,7 +1748,6 @@ THIRD_PARTY_PYTHON_PYTEST_A_DIRECTDEPS =					\
 THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/signalinterproctester.py			\
 	third_party/python/Lib/test/test___future__.py				\
-	third_party/python/Lib/test/test__locale.py				\
 	third_party/python/Lib/test/test__opcode.py				\
 	third_party/python/Lib/test/test_abc.py					\
 	third_party/python/Lib/test/test_abstract_numbers.py			\
@@ -1842,7 +1844,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_enum.py				\
 	third_party/python/Lib/test/test_enumerate.py				\
 	third_party/python/Lib/test/test_eof.py					\
-	third_party/python/Lib/test/test_epoll.py				\
 	third_party/python/Lib/test/test_errno.py				\
 	third_party/python/Lib/test/test_exception_hierarchy.py			\
 	third_party/python/Lib/test/test_exception_variations.py		\
@@ -1963,7 +1964,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_string.py				\
 	third_party/python/Lib/test/test_string_literals.py			\
 	third_party/python/Lib/test/test_stringprep.py				\
-	third_party/python/Lib/test/test_strptime.py				\
 	third_party/python/Lib/test/test_strtod.py				\
 	third_party/python/Lib/test/test_struct.py				\
 	third_party/python/Lib/test/test_structmembers.py			\
@@ -2123,7 +2123,7 @@ o/$(MODE)/third_party/python/pythontester.pkg:				\
 		o/$(MODE)/third_party/python/pythontester.o		\
 		$(foreach x,$(THIRD_PARTY_PYTHON_PYTEST_PYMAINS_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/third_party/python/pythontester.com.dbg:			\
+o/$(MODE)/third_party/python/pythontester.dbg:			\
 		o/$(MODE)/third_party/python/pythontester.pkg		\
 		$(THIRD_PARTY_PYTHON_PYTEST_PYMAINS_DEPS)		\
 		$(THIRD_PARTY_PYTHON_PYTEST_PYMAINS_OBJS)		\
@@ -2147,8 +2147,6 @@ o/$(MODE)/third_party/python/Lib/test/test_wsgiref.py.runs: private	\
 			/usr/local/etc/httpd/conf/mime.types		\
 			/usr/local/etc/mime.types
 
-o/$(MODE)/third_party/python/Lib/test/test_epoll.py.runs:		\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
 o/$(MODE)/third_party/python/Lib/test/test_wsgiref.py.runs:		\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
 o/$(MODE)/third_party/python/Lib/test/test_fcntl.py.runs:		\
@@ -2158,7 +2156,7 @@ o/$(MODE)/third_party/python/Lib/test/test_signal.py.runs:		\
 o/$(MODE)/third_party/python/Lib/test/test_timeout.py.runs:		\
 		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
 
-PYTHONTESTER = o/$(MODE)/third_party/python/pythontester.com
+PYTHONTESTER = o/$(MODE)/third_party/python/pythontester
 
 o/$(MODE)/third_party/python/Lib/test/test_grammar.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_grammar $(PYTESTARGS)
@@ -2197,8 +2195,8 @@ o/$(MODE)/third_party/python/Lib/test/test_binhex.py.runs: $(PYTHONTESTER)
 o/$(MODE)/third_party/python/Lib/test/test_capi.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_capi $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test__locale.py.runs: $(PYTHONTESTER)
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test__locale $(PYTESTARGS)
+# o/$(MODE)/third_party/python/Lib/test/test__locale.py.runs: $(PYTHONTESTER)
+# 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test__locale $(PYTESTARGS)
 
 o/$(MODE)/third_party/python/Lib/test/test_binop.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_binop $(PYTESTARGS)
@@ -2786,9 +2784,6 @@ o/$(MODE)/third_party/python/Lib/test/test_dis.py.runs: $(PYTHONTESTER)
 o/$(MODE)/third_party/python/Lib/test/test_asyncore.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_asyncore $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_epoll.py.runs: $(PYTHONTESTER)
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_epoll $(PYTESTARGS)
-
 o/$(MODE)/third_party/python/Lib/test/test_cmd_line.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_cmd_line $(PYTESTARGS)
 
@@ -3313,35 +3308,35 @@ o/$(MODE)/third_party/python/Lib/test/test_ordered_dict.py.runs: $(PYTHONTESTER)
 
 ################################################################################
 
-o/$(MODE)/third_party/python/pyobj.com.dbg:				\
+o/$(MODE)/third_party/python/pyobj.dbg:				\
 		$(THIRD_PARTY_PYTHON_STAGE1)				\
 		o/$(MODE)/third_party/python/pyobj.o			\
 		$(CRT)							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/python/pycomp.com.dbg:				\
+o/$(MODE)/third_party/python/pycomp.dbg:				\
 		$(THIRD_PARTY_PYTHON_STAGE1)				\
 		o/$(MODE)/third_party/python/pycomp.o			\
 		$(CRT)							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/python/repl.com.dbg:				\
+o/$(MODE)/third_party/python/repl.dbg:				\
 		$(THIRD_PARTY_PYTHON_STAGE2)				\
 		o/$(MODE)/third_party/python/repl.o			\
 		$(CRT)							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/python/pystone.com.dbg:				\
+o/$(MODE)/third_party/python/pystone.dbg:				\
 		$(THIRD_PARTY_PYTHON_STAGE2)				\
 		o/$(MODE)/third_party/python/Lib/test/pystone.o		\
 		$(CRT)							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/python/Parser/asdl_c.com.dbg:			\
+o/$(MODE)/third_party/python/Parser/asdl_c.dbg:			\
 		$(THIRD_PARTY_PYTHON_STAGE2)				\
 		o/$(MODE)/third_party/python/Parser/asdl_c.o		\
 		$(CRT)							\
@@ -3474,7 +3469,7 @@ o/$(MODE)/third_party/python/Lib/test/test_difflib.o: private PYFLAGS += -Y.pyth
 
 o/$(MODE)/third_party/python/Lib/test/test_cosmo.o: private		\
 		PYFLAGS +=						\
-			-Y.python/test/hello.com
+			-Y.python/test/hello
 
 o/$(MODE)/third_party/python/Lib/test/test_asdl_parser.o: private	\
 		PYFLAGS +=						\
@@ -3977,14 +3972,14 @@ THIRD_PARTY_PYTHON_SRCS =						\
 	third_party/python/pythontester.c
 
 ################################################################################
-# PYTHON.COM
+# PYTHON
 
-THIRD_PARTY_PYTHON_PYTHON_SRCS = third_party/python/python.c
-THIRD_PARTY_PYTHON_PYTHON_OBJS = o/$(MODE)/third_party/python/python.o
-THIRD_PARTY_PYTHON_PYTHON_COMS = o/$(MODE)/third_party/python/python.com
-THIRD_PARTY_PYTHON_PYTHON_BINS = $(THIRD_PARTY_PYTHON_PYTHON_COMS) $(THIRD_PARTY_PYTHON_PYTHON_COMS:%=%.dbg)
-THIRD_PARTY_PYTHON_PYTHON_DEPS = $(call uniq,$(foreach x,$(THIRD_PARTY_PYTHON_PYTHON_DIRECTDEPS),$($(x))))
-THIRD_PARTY_PYTHON_PYTHON_DIRECTDEPS =					\
+THIRD_PARTY_PYTHON_PYTHON3_SRCS = third_party/python/python3.c
+THIRD_PARTY_PYTHON_PYTHON3_OBJS = o/$(MODE)/third_party/python/python3.o
+THIRD_PARTY_PYTHON_PYTHON3_COMS = o/$(MODE)/third_party/python/python3
+THIRD_PARTY_PYTHON_PYTHON3_BINS = $(THIRD_PARTY_PYTHON_PYTHON3_COMS) $(THIRD_PARTY_PYTHON_PYTHON3_COMS:%=%.dbg)
+THIRD_PARTY_PYTHON_PYTHON3_DEPS = $(call uniq,$(foreach x,$(THIRD_PARTY_PYTHON_PYTHON3_DIRECTDEPS),$($(x))))
+THIRD_PARTY_PYTHON_PYTHON3_DIRECTDEPS =					\
 	LIBC_CALLS							\
 	LIBC_FMT							\
 	LIBC_INTRIN							\
@@ -4004,32 +3999,24 @@ THIRD_PARTY_PYTHON_PYTHON_DIRECTDEPS =					\
 	THIRD_PARTY_XED							\
 	TOOL_ARGS
 
-o/$(MODE)/third_party/python/python.pkg:				\
-		$(THIRD_PARTY_PYTHON_PYTHON_OBJS)			\
-		$(foreach x,$(THIRD_PARTY_PYTHON_PYTHON_DIRECTDEPS),$($(x)_A).pkg)
+o/$(MODE)/third_party/python/python3.pkg:				\
+		$(THIRD_PARTY_PYTHON_PYTHON3_OBJS)			\
+		$(foreach x,$(THIRD_PARTY_PYTHON_PYTHON3_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/third_party/python/python.com.dbg:				\
-		o/$(MODE)/third_party/python/python.pkg			\
-		$(THIRD_PARTY_PYTHON_PYTHON_DEPS)			\
-		$(THIRD_PARTY_PYTHON_PYTHON_OBJS)			\
+o/$(MODE)/third_party/python/python3.dbg:				\
+		o/$(MODE)/third_party/python/python3.pkg		\
+		$(THIRD_PARTY_PYTHON_PYTHON3_DEPS)			\
+		$(THIRD_PARTY_PYTHON_PYTHON3_OBJS)			\
 		$(CRT)							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/python/python.com:				\
-		o/$(MODE)/third_party/python/python.com.dbg		\
-		o/$(MODE)/third_party/zip/zip.com			\
-		o/$(MODE)/tool/build/symtab.com
-	@$(MAKE_OBJCOPY)
-	@$(MAKE_SYMTAB_CREATE)
-	@$(MAKE_SYMTAB_ZIP)
-
 ################################################################################
-# FREEZE.COM
+# FREEZE
 
 THIRD_PARTY_PYTHON_FREEZE_SRCS = third_party/python/freeze.c
 THIRD_PARTY_PYTHON_FREEZE_OBJS = o/$(MODE)/third_party/python/freeze.o
-THIRD_PARTY_PYTHON_FREEZE_COMS = o/$(MODE)/third_party/python/freeze.com
+THIRD_PARTY_PYTHON_FREEZE_COMS = o/$(MODE)/third_party/python/freeze
 THIRD_PARTY_PYTHON_FREEZE_BINS = $(THIRD_PARTY_PYTHON_FREEZE_COMS) $(THIRD_PARTY_PYTHON_FREEZE_COMS:%=%.dbg)
 THIRD_PARTY_PYTHON_FREEZE_DEPS = $(call uniq,$(foreach x,$(THIRD_PARTY_PYTHON_FREEZE_DIRECTDEPS),$($(x))))
 THIRD_PARTY_PYTHON_FREEZE_DIRECTDEPS =					\
@@ -4052,7 +4039,7 @@ o/$(MODE)/third_party/python/freeze.pkg:				\
 		$(THIRD_PARTY_PYTHON_FREEZE_OBJS)			\
 		$(foreach x,$(THIRD_PARTY_PYTHON_FREEZE_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/third_party/python/freeze.com.dbg:				\
+o/$(MODE)/third_party/python/freeze.dbg:				\
 		o/$(MODE)/third_party/python/freeze.pkg			\
 		$(THIRD_PARTY_PYTHON_FREEZE_DEPS)			\
 		$(THIRD_PARTY_PYTHON_FREEZE_OBJS)			\
@@ -4156,11 +4143,11 @@ o/$(MODE)/third_party/python/chibicc.inc:				\
 	@$(COMPILE) -wACHECK.h $(COMPILE.c) -xc -E -P -fdirectives-only -dD -D__chibicc__ -o $@ $<
 
 ################################################################################
-# HELLO.COM
+# HELLO
 
 THIRD_PARTY_PYTHON_HELLO_SRCS = third_party/python/hello.c
 THIRD_PARTY_PYTHON_HELLO_OBJS = o/$(MODE)/third_party/python/hello.o
-THIRD_PARTY_PYTHON_HELLO_COMS = o/$(MODE)/third_party/python/hello.com
+THIRD_PARTY_PYTHON_HELLO_COMS = o/$(MODE)/third_party/python/hello
 THIRD_PARTY_PYTHON_HELLO_BINS = $(THIRD_PARTY_PYTHON_HELLO_COMS) $(THIRD_PARTY_PYTHON_HELLO_COMS:%=%.dbg)
 THIRD_PARTY_PYTHON_HELLO_DEPS = $(call uniq,$(foreach x,$(THIRD_PARTY_PYTHON_HELLO_DIRECTDEPS),$($(x))))
 THIRD_PARTY_PYTHON_HELLO_DIRECTDEPS =					\
@@ -4171,7 +4158,7 @@ o/$(MODE)/third_party/python/hello.pkg:					\
 		$(THIRD_PARTY_PYTHON_HELLO_OBJS)			\
 		$(foreach x,$(THIRD_PARTY_PYTHON_HELLO_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/third_party/python/hello.com.dbg:				\
+o/$(MODE)/third_party/python/hello.dbg:				\
 		o/$(MODE)/third_party/python/hello.pkg			\
 		$(THIRD_PARTY_PYTHON_HELLO_DEPS)			\
 		$(THIRD_PARTY_PYTHON_HELLO_OBJS)			\

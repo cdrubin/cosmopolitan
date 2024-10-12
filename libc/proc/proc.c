@@ -23,14 +23,15 @@
 #include "libc/calls/struct/rusage.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/sigset.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/cosmo.h"
 #include "libc/errno.h"
 #include "libc/fmt/wintime.internal.h"
 #include "libc/intrin/dll.h"
-#include "libc/intrin/leaky.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/maps.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
-#include "libc/mem/mem.h"
+#include "libc/mem/leaks.h"
 #include "libc/nt/accounting.h"
 #include "libc/nt/enum/processaccess.h"
 #include "libc/nt/enum/processcreationflags.h"
@@ -45,17 +46,23 @@
 #include "libc/nt/synchronization.h"
 #include "libc/nt/thread.h"
 #include "libc/proc/proc.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/map.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/tls.h"
+#include "third_party/nsync/mu.h"
 #ifdef __x86_64__
 
 /**
  * @fileoverview Windows Subprocess Management.
  */
+
+#define STACK_SIZE 65536
 
 struct Procs __proc;
 
@@ -84,7 +91,8 @@ textwindows int __proc_harvest(struct Proc *pr, bool iswait4) {
   uint32_t status;
   struct rusage ru;
   GetExitCodeProcess(pr->handle, &status);
-  if (status == kNtStillActive) return 0;
+  if (status == kNtStillActive)
+    return 0;
   __proc_stats(pr->handle, &ru);
   rusage_add(&pr->ru, &ru);
   rusage_add(&__proc.ruchlds, &ru);
@@ -94,14 +102,14 @@ textwindows int __proc_harvest(struct Proc *pr, bool iswait4) {
     pr->handle = status & 0x00FFFFFF;
   } else {
     // handle child _Exit()
-    if (status == 0xc9af3d51u) {
+    if (status == 0xc9af3d51u)
       status = kNtStillActive;
-    }
     pr->wstatus = status;
     if (!iswait4 && !pr->waiters && !__proc.waiters &&
         (__sighandrvas[SIGCHLD] == (uintptr_t)SIG_IGN ||
          (__sighandflags[SIGCHLD] & SA_NOCLDWAIT))) {
       // perform automatic zombie reaping
+      STRACE("automatically reaping zombie");
       dll_remove(&__proc.list, &pr->elem);
       dll_make_first(&__proc.free, &pr->elem);
       CloseHandle(pr->handle);
@@ -126,7 +134,11 @@ textwindows int __proc_harvest(struct Proc *pr, bool iswait4) {
 
 static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
   struct CosmoTib tls;
+  char *sp = __builtin_frame_address(0);
   __bootstrap_tls(&tls, __builtin_frame_address(0));
+  __maps_track(
+      (char *)(((uintptr_t)sp + __pagesize - 1) & -__pagesize) - STACK_SIZE,
+      STACK_SIZE);
   for (;;) {
 
     // assemble a group of processes to wait on. if more than 64
@@ -158,7 +170,7 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
 
     // wait for something to happen
     if (n == 64) {
-      millis = 5;
+      millis = POLL_INTERVAL_MS;
     } else {
       millis = -1u;
       handles[n++] = __proc.onbirth;
@@ -176,11 +188,12 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
 
     // release our waiter status
     for (int j = 0; j < n; ++j) {
-      if (handles[j] == __proc.onbirth) continue;
-      if (j == i) continue;
-      if (!--objects[j]->waiters && objects[j]->status == PROC_UNDEAD) {
+      if (handles[j] == __proc.onbirth)
+        continue;
+      if (j == i)
+        continue;
+      if (!--objects[j]->waiters && objects[j]->status == PROC_UNDEAD)
         __proc_free(objects[j]);
-      }
     }
 
     // check if we need to churn due to >64 processes
@@ -205,9 +218,8 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
       case PROC_ZOMBIE:
         break;
       case PROC_UNDEAD:
-        if (!objects[i]->waiters) {
+        if (!objects[i]->waiters)
           __proc_free(objects[i]);
-        }
         break;
       default:
         __builtin_unreachable();
@@ -219,9 +231,8 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
     // 1. wait4() is being used
     // 2. SIGCHLD has SIG_IGN handler
     // 3. SIGCHLD has SA_NOCLDWAIT flag
-    if (sic) {
+    if (sic)
       __sig_generate(SIGCHLD, sic);
-    }
   }
   return 0;
 }
@@ -232,7 +243,7 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
 static textwindows void __proc_setup(void) {
   __proc.onbirth = CreateEvent(0, 0, 0, 0);     // auto reset
   __proc.haszombies = CreateEvent(0, 1, 0, 0);  // manual reset
-  __proc.thread = CreateThread(0, 65536, __proc_worker, 0,
+  __proc.thread = CreateThread(0, STACK_SIZE, __proc_worker, 0,
                                kNtStackSizeParamIsAReservation, 0);
 }
 
@@ -269,31 +280,23 @@ textwindows void __proc_wipe(void) {
 textwindows struct Proc *__proc_new(void) {
   struct Dll *e;
   struct Proc *proc = 0;
-  // fork() + wait() don't depend on malloc() so neither shall we
-  if (__proc.allocated < ARRAYLEN(__proc.pool)) {
-    proc = __proc.pool + __proc.allocated++;
-  } else {
-    if ((e = dll_first(__proc.free))) {
-      proc = PROC_CONTAINER(e);
-      dll_remove(&__proc.free, &proc->elem);
-    }
-    if (!proc) {
-      if (_weaken(malloc)) {
-        proc = _weaken(malloc)(sizeof(struct Proc));
-      } else {
-        enomem();
-        return 0;
-      }
-    }
+  if ((e = dll_first(__proc.free))) {
+    proc = PROC_CONTAINER(e);
+    dll_remove(&__proc.free, &proc->elem);
   }
   if (proc) {
     bzero(proc, sizeof(*proc));
-    dll_init(&proc->elem);
+  } else {
+    proc = mmap(0, sizeof(struct Proc), PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (proc == MAP_FAILED) {
+      enomem();
+      return 0;
+    }
   }
+  dll_init(&proc->elem);
   return proc;
 }
-
-IGNORE_LEAKS(__proc_new)
 
 /**
  * Adds process to active list.
@@ -318,6 +321,7 @@ textwindows int64_t __proc_search(int pid) {
   int64_t handle = 0;
   BLOCK_SIGNALS;
   __proc_lock();
+  // TODO(jart): we should increment a reference count when returning
   for (e = dll_first(__proc.list); e; e = dll_next(__proc.list, e)) {
     if (pid == PROC_CONTAINER(e)->pid) {
       handle = PROC_CONTAINER(e)->handle;

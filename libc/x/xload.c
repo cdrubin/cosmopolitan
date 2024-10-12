@@ -40,11 +40,15 @@
  * @param m is byte length of inflated data
  * @return pointer to inflated data
  */
-void *xload(_Atomic(void *) *a, const void *p, size_t n, size_t m) {
+void *xload(void *a_, const void *p, size_t n, size_t m) {
+  _Atomic(void *) *a = (_Atomic(void *) *)a_;
   void *r, *z;
-  if ((r = atomic_load_explicit(a, memory_order_acquire))) return r;
-  if (!(r = malloc(m))) return 0;
-  if (__inflate(r, m, p, n)) return 0;
+  if ((r = atomic_load_explicit(a, memory_order_acquire)))
+    return r;
+  if (!(r = malloc(m)))
+    return 0;
+  if (__inflate(r, m, p, n))
+    return 0;
   z = 0;
   if (!atomic_compare_exchange_strong_explicit(a, &z, r, memory_order_release,
                                                memory_order_relaxed)) {

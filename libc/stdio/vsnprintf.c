@@ -20,14 +20,14 @@
 #include "libc/dce.h"
 #include "libc/fmt/internal.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 
 struct SprintfStr {
   char *p;
-  size_t i;
-  size_t n;
+  int i;
+  int n;
 };
 
 static int vsnprintfputchar(const char *s, struct SprintfStr *t, size_t n) {
@@ -58,8 +58,10 @@ static int vsnprintfputchar(const char *s, struct SprintfStr *t, size_t n) {
  */
 int vsnprintf(char *buf, size_t size, const char *fmt, va_list va) {
   struct SprintfStr str = {buf, 0, size};
-  int rc = __fmt(vsnprintfputchar, &str, fmt, va);
-  if (rc < 0) return rc;
-  if (str.n) str.p[MIN(str.i, str.n - 1)] = '\0';
+  int rc = __fmt(vsnprintfputchar, &str, fmt, va, &str.i);
+  if (rc < 0)
+    return rc;
+  if (str.n)
+    str.p[MIN(str.i, str.n - 1)] = '\0';
   return str.i;
 }

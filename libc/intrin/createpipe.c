@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/ipc.h"
 #include "libc/nt/struct/securityattributes.h"
 #include "libc/nt/thunk/msabi.h"
@@ -35,7 +35,8 @@ textwindows bool32 CreatePipe(
   bool32 ok;
   ok = __imp_CreatePipe(out_hReadPipe, out_hWritePipe, opt_lpPipeAttributes,
                         nSize);
-  if (!ok) __winerr();
+  if (!ok)
+    __winerr();
   NTTRACE("CreatePipe([%ld], [%ld], %s, %'zu) → %hhhd% m", *out_hReadPipe,
           *out_hWritePipe, DescribeNtSecurityAttributes(opt_lpPipeAttributes),
           nSize, ok);

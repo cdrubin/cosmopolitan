@@ -11,7 +11,7 @@ TOOL_DECODE_OBJS =					\
 	$(TOOL_DECODE_SRCS:%.c=o/$(MODE)/%.o)
 
 TOOL_DECODE_COMS =					\
-	$(TOOL_DECODE_SRCS:%.c=o/$(MODE)/%.com)
+	$(TOOL_DECODE_SRCS:%.c=o/$(MODE)/%)
 
 TOOL_DECODE_BINS =					\
 	$(TOOL_DECODE_COMS)				\
@@ -33,12 +33,14 @@ TOOL_DECODE_DIRECTDEPS =				\
 	LIBC_STR					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
-	LIBC_TIME					\
 	LIBC_TINYMATH					\
 	LIBC_X						\
 	THIRD_PARTY_GDTOA				\
 	THIRD_PARTY_GETOPT				\
+	THIRD_PARTY_MUSL				\
+	THIRD_PARTY_TZ					\
 	THIRD_PARTY_XED					\
+	TOOL_BUILD_LIB					\
 	TOOL_DECODE_LIB
 
 TOOL_DECODE_DEPS :=					\
@@ -48,7 +50,7 @@ o/$(MODE)/tool/decode/decode.pkg:			\
 		$(TOOL_DECODE_OBJS)			\
 		$(foreach x,$(TOOL_DECODE_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/tool/decode/%.com.dbg:			\
+o/$(MODE)/tool/decode/%.dbg:				\
 		$(TOOL_DECODE_DEPS)			\
 		o/$(MODE)/tool/decode/%.o		\
 		o/$(MODE)/tool/decode/decode.pkg	\

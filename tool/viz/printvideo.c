@@ -16,10 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "dsp/audio/cosmoaudio/cosmoaudio.h"
 #include "dsp/core/core.h"
 #include "dsp/core/half.h"
 #include "dsp/core/illumination.h"
-#include "dsp/mpeg/mpeg.h"
+#include "dsp/mpeg/pl_mpeg.h"
 #include "dsp/scale/scale.h"
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
@@ -37,16 +38,18 @@
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/ucontext.h"
+#include "libc/ctype.h"
 #include "libc/cxxabi.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/safemacros.internal.h"
-#include "libc/intrin/xchg.internal.h"
+#include "libc/intrin/safemacros.h"
+#include "libc/intrin/xchg.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/alg.h"
 #include "libc/mem/arraylist.internal.h"
@@ -54,7 +57,9 @@
 #include "libc/nexgen32e/bench.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nt/console.h"
+#include "libc/nt/enum/threadpriority.h"
 #include "libc/nt/runtime.h"
+#include "libc/nt/thread.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
@@ -89,7 +94,7 @@
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/thread.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "libc/x/xsigaction.h"
 #include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_image_resize.h"
@@ -141,8 +146,6 @@ Effects Shortcuts:\n\
   CTRL-G     {Unsharp,Sharp}\n\
 \n\
 Environment Variables:\n\
-  SOX        overrides location of SoX executable\n\
-  FFPLAY     overrides location of FFmpeg ffplay executable\n\
   ROWS=𝑦     sets height [inarticulate mode]\n\
   COLUMNS=𝑥  sets width  [inarticulate mode]\n\
   TERM=dumb  inarticulate mode\n\
@@ -157,11 +160,6 @@ in a different format, then it's fast and easy to convert them:\n\
 The terminal fonts we recommend are PragmataPro, Bitstream Vera Sans\n\
 Mono (known as DejaVu Sans Mono in the open source community), Menlo,\n\
 and Lucida Console.\n\
-\n\
-On Linux, playing audio requires either `sox` or `ffplay` being on\n\
-the $PATH. Kitty is the fastest terminal. Alacritty also has a fast\n\
-display. GNOME Terminal and xterm both work well in 256-color or ANSI\n\
-mode.\n\
 \n"
 
 #define CTRL(C)   ((C) ^ 0100)
@@ -177,9 +175,9 @@ mode.\n\
 
 #define TIMEIT(OUT_NANOS, FORM)                                           \
   do {                                                                    \
-    struct timespec Start = timespec_real();                              \
+    struct timespec Start = timespec_mono();                              \
     FORM;                                                                 \
-    (OUT_NANOS) = timespec_tonanos(timespec_sub(timespec_real(), Start)); \
+    (OUT_NANOS) = timespec_tonanos(timespec_sub(timespec_mono(), Start)); \
   } while (0)
 
 typedef bool (*openspeaker_f)(void);
@@ -225,16 +223,6 @@ struct FrameBuffer {
   struct FrameBufferVirtualScreenInfo vscreen;
 };
 
-static const struct itimerval kTimerDisarm = {
-    {0, 0},
-    {0, 0},
-};
-
-static const struct itimerval kTimerHalfSecondSingleShot = {
-    {0, 0},
-    {0, 500000},
-};
-
 static const struct NamedVector kPrimaries[] = {
     {"BT.601", &kBt601Primaries},
     {"BT.709", &kBt709Primaries},
@@ -254,7 +242,8 @@ static const struct NamedVector kLightings[] = {
 
 static plm_t *plm_;
 static float gamma_;
-static int volscale_;
+static float volscale_;
+struct CosmoAudio *ca_;
 static enum Blur blur_;
 static enum Sharp sharp_;
 static jmp_buf jb_, jbi_;
@@ -262,32 +251,27 @@ static double pary_, parx_;
 static struct TtyIdent ti_;
 static struct YCbCr *ycbcr_;
 static bool emboss_, sobel_;
-static volatile int playpid_;
+static const char *patharg_;
 static struct winsize wsize_;
 static float hue_, sat_, lit_;
+static volatile bool resized_;
 static void *xtcodes_, *audio_;
 static struct FrameBuffer fb0_;
 static unsigned chans_, srate_;
 static volatile bool ignoresigs_;
 static size_t dh_, dw_, framecount_;
 static struct FrameCountRing fcring_;
-static volatile bool resized_, piped_;
 static int lumakernel_, chromakernel_;
-static openspeaker_f tryspeakerfns_[4];
 static int primaries_, lighting_, swing_;
 static uint64_t t1, t2, t3, t4, t5, t6, t8;
-static const char *sox_, *ffplay_, *patharg_;
+static int homerow_, lastrow_, infd_, outfd_;
 static struct VtFrame vtframe_[2], *f1_, *f2_;
 static struct Graphic graphic_[2], *g1_, *g2_;
 static struct timespec deadline_, dura_, starttime_;
 static bool yes_, stats_, dither_, ttymode_, istango_;
 static struct timespec decode_start_, f1_start_, f2_start_;
-static int16_t pcm_[PLM_AUDIO_SAMPLES_PER_FRAME * 2 / 8][8];
-static int16_t pcmscale_[PLM_AUDIO_SAMPLES_PER_FRAME * 2 / 8][8];
 static bool fullclear_, historyclear_, tuned_, yonly_, gotvideo_;
-static int homerow_, lastrow_, playfd_, infd_, outfd_, speakerfails_;
-static char status_[7][200], logpath_[PATH_MAX], fifopath_[PATH_MAX],
-    chansstr_[32], sratestr_[32];
+static char status_[7][200], logpath_[PATH_MAX], chansstr_[32], sratestr_[32];
 
 static void OnCtrlC(void) {
   longjmp(jb_, 1);
@@ -297,29 +281,15 @@ static void OnResize(void) {
   resized_ = true;
 }
 
-static void OnSigPipe(void) {
-  piped_ = true;
-}
-
-static void OnSigChld(void) {
-  playpid_ = 0, piped_ = true;
-}
-
-static void StrikeDownCrapware(int sig) {
-  kill(playpid_, SIGKILL);
-}
-
 static struct timespec GetGraceTime(void) {
-  return timespec_sub(deadline_, timespec_real());
+  return timespec_sub(deadline_, timespec_mono());
 }
 
 static char *strntoupper(char *s, size_t n) {
   size_t i;
-  for (i = 0; s[i] && i < n; ++i) {
-    if ('a' <= s[i] && s[i] <= 'z') {
+  for (i = 0; s[i] && i < n; ++i)
+    if ('a' <= s[i] && s[i] <= 'z')
       s[i] -= 'a' - 'A';
-    }
-  }
   return s;
 }
 
@@ -332,11 +302,9 @@ static int GetNamedVector(const struct NamedVector *choices, size_t n,
   strncpy(name, s, sizeof(name));
 #pragma GCC pop_options
   strntoupper(name, sizeof(name));
-  for (i = 0; i < n; ++i) {
-    if (memcmp(choices[i].name, name, sizeof(name)) == 0) {
+  for (i = 0; i < n; ++i)
+    if (memcmp(choices[i].name, name, sizeof(name)) == 0)
       return i;
-    }
-  }
   return -1;
 }
 
@@ -348,32 +316,9 @@ static int GetLighting(const char *s) {
   return GetNamedVector(kLightings, ARRAYLEN(kLightings), s);
 }
 
-static bool CloseSpeaker(void) {
-  int rc, wstatus;
-  rc = 0;
-  pthread_yield();
-  if (playfd_) {
-    rc |= close(playfd_);
-    playfd_ = -1;
-  }
-  if (playpid_) {
-    kill(playpid_, SIGTERM);
-    xsigaction(SIGALRM, StrikeDownCrapware, SA_RESETHAND, 0, 0);
-    setitimer(ITIMER_REAL, &kTimerHalfSecondSingleShot, NULL);
-    while (playpid_) {
-      if (waitpid(playpid_, &wstatus, 0) != -1) {
-        rc |= WEXITSTATUS(wstatus);
-      } else if (errno == EINTR) {
-        continue;
-      } else {
-        rc = -1;
-      }
-      break;
-    }
-    playpid_ = 0;
-    setitimer(ITIMER_REAL, &kTimerDisarm, NULL);
-  }
-  return !!rc;
+static void CloseSpeaker(void) {
+  cosmoaudio_close(ca_);
+  ca_ = 0;
 }
 
 static void ResizeVtFrame(struct VtFrame *f, size_t yn, size_t xn) {
@@ -387,7 +332,7 @@ static float timespec_tofloat(struct timespec ts) {
 
 static void RecordFactThatFrameWasFullyRendered(void) {
   fcring_.p[fcring_.i] =
-      timespec_tofloat(timespec_sub(timespec_real(), starttime_));
+      timespec_tofloat(timespec_sub(timespec_mono(), starttime_));
   fcring_.n += 1;
   fcring_.i += 1;
   fcring_.i &= ARRAYLEN(fcring_.p) - 1;
@@ -437,9 +382,8 @@ static void DimensionDisplay(void) {
       wsize_.ws_row = 25;
       wsize_.ws_col = 80;
       wsize_ = (struct winsize){.ws_row = 40, .ws_col = 80};
-      if (tcgetwinsize(outfd_, &wsize_) == -1) {
+      if (tcgetwinsize(outfd_, &wsize_) == -1)
         tcgetwinsize(0, &wsize_);
-      }
       dh_ = wsize_.ws_row * 2;
       dw_ = wsize_.ws_col * 2;
     }
@@ -463,122 +407,37 @@ static void DimensionDisplay(void) {
     ResizeVtFrame(&vtframe_[1], (g2_->yn), g2_->xn);
     f1_ = &vtframe_[0];
     f2_ = &vtframe_[1];
-    if (ttymode_) {
+    if (ttymode_)
       homerow_ = MIN(wsize_.ws_row - HALF(g2_->yn),
                      HALF(wsize_.ws_row - HALF(g2_->yn)));
-    }
     lastrow_ = homerow_ + HALF(g2_->yn);
     ComputeColoringSolution();
   } while (resized_);
 }
 
-static int WriteAudio(int fd, const void *data, size_t size, int deadlinems) {
-  ssize_t rc;
-  const char *p;
-  size_t wrote, n;
-  p = data;
-  n = size;
-  do {
-  TryAgain:
-    if ((rc = write(fd, p, n)) != -1) {
-      wrote = rc;
-      p += wrote;
-      n -= wrote;
-    } else if (errno == EINTR) {
-      goto TryAgain;
-    } else if (errno == EAGAIN) {
-      if (poll((struct pollfd[]){{fd, POLLOUT}}, 1, deadlinems) == 0) {
-        return etimedout();
-      }
-    } else {
-      return -1;
-    }
-  } while (n);
-  return 0;
-}
-
-static bool TrySpeaker(const char *prog, char *const *args) {
-  int pipefds[2];
-  CHECK_NE(-1, pipe2(pipefds, O_CLOEXEC));
-  if (!(playpid_ = fork())) {
-    dup2(pipefds[0], 0);
-    dup2(fileno(__log_file), 1);
-    dup2(fileno(__log_file), 2);
-    close(fileno(__log_file));
-    execv(prog, args);
-    abort();
-  }
-  playfd_ = pipefds[1];
-  return true;
-}
-
-static bool TrySox(void) {
-  return TrySpeaker(sox_, ARGZ("play", "-q", "-c", chansstr_, "-traw",
-                               "-esigned", "-b16", "-r", sratestr_, "-"));
-}
-
-static bool TryFfplay(void) {
-  return TrySpeaker(ffplay_, ARGZ("ffplay", "-nodisp", "-loglevel", "quiet",
-                                  "-fflags", "nobuffer", "-ac", chansstr_,
-                                  "-ar", sratestr_, "-f", "s16le", "pipe:"));
-}
-
 static bool OpenSpeaker(void) {
-  size_t i;
-  static bool once, count;
-  if (!once) {
-    once = true;
-    i = 0;
-    if (ffplay_) tryspeakerfns_[i++] = TryFfplay;
-    if (sox_) tryspeakerfns_[i++] = TrySox;
-  }
-  snprintf(fifopath_, sizeof(fifopath_), "%s%s.%d.%d.wav", __get_tmpdir(),
-           firstnonnull(program_invocation_short_name, "unknown"), getpid(),
-           count);
-  for (i = 0; i < ARRAYLEN(tryspeakerfns_); ++i) {
-    if (tryspeakerfns_[i]) {
-      if (++speakerfails_ <= 2 && tryspeakerfns_[i]()) {
-        return true;
-      } else {
-        speakerfails_ = 0;
-        tryspeakerfns_[i] = NULL;
-      }
-    }
-  }
-  return false;
+  struct CosmoAudioOpenOptions cao = {};
+  cao.sizeofThis = sizeof(struct CosmoAudioOpenOptions);
+  cao.deviceType = kCosmoAudioDeviceTypePlayback;
+  cao.sampleRate = srate_;
+  cao.channels = chans_;
+  return cosmoaudio_open(&ca_, &cao) == COSMOAUDIO_SUCCESS;
 }
 
 static void OnAudio(plm_t *mpeg, plm_samples_t *samples, void *user) {
-  if (playfd_ != -1) {
-    DEBUGF("OnAudio() [grace=%,ldns]", timespec_tonanos(GetGraceTime()));
-    CHECK_EQ(2, chans_);
-    CHECK_EQ(ARRAYLEN(pcm_) * 8, samples->count * chans_);
-    float2short(ARRAYLEN(pcm_), pcm_, (void *)samples->interleaved);
-    scalevolume(ARRAYLEN(pcm_), pcm_, volscale_);
-    sad16x8n(ARRAYLEN(pcm_), pcm_, pcmscale_);
-    DEBUGF("transcoded audio");
-  TryAgain:
-    if (WriteAudio(playfd_, pcm_, sizeof(pcm_), 1000) != -1) {
-      DEBUGF("WriteAudio(%d, %zu) ok [grace=%,ldns]", playfd_,
-             samples->count * 2, timespec_tonanos(GetGraceTime()));
-    } else {
-      WARNF("WriteAudio(%d, %zu) failed: %s", playfd_, samples->count * 2,
-            strerror(errno));
-      CloseSpeaker();
-      if (OpenSpeaker()) {
-        goto TryAgain;
-      }
-    }
-  }
+  if (!ca_)
+    return;
+  if (volscale_ != 1.f)
+    for (unsigned i = 0; i < samples->count * chans_; ++i)
+      samples->interleaved[i] *= volscale_;
+  cosmoaudio_write(ca_, samples->interleaved, samples->count);
 }
 
 static void DescribeAlgorithms(char *p) {
-  if (dither_ && TTYQUANT()->alg != kTtyQuantTrue) {
+  if (dither_ && TTYQUANT()->alg != kTtyQuantTrue)
     p = stpcpy(p, " ℍithered");
-  }
-  if (yonly_) {
+  if (yonly_)
     p = stpcpy(p, " grayscaled");
-  }
   p += sprintf(p, " magikarp:%d:%d", lumakernel_, chromakernel_);
   switch (TTYQUANT()->alg) {
     case kTtyQuantTrue:
@@ -589,7 +448,8 @@ static void DescribeAlgorithms(char *p) {
       break;
     case kTtyQuantAnsi:
       p = stpcpy(p, " aixterm ansi");
-      if (istango_) p = stpcpy(p, " tango");
+      if (istango_)
+        p = stpcpy(p, " tango");
       break;
     default:
       break;
@@ -609,7 +469,8 @@ static void DescribeAlgorithms(char *p) {
 }
 
 static char *StartRender(char *vt) {
-  if (!ttymode_) vt += sprintf(vt, "\r\n\r\n");
+  if (!ttymode_)
+    vt += sprintf(vt, "\r\n\r\n");
   if (fullclear_) {
     vt += sprintf(vt, "\e[0m\e[H\e[J");
     fullclear_ = false;
@@ -640,8 +501,10 @@ static bool HasAdjustments(void) {
 }
 
 static char *DescribeAdjustments(char *p) {
-  if (emboss_) p = stpcpy(p, " emboss");
-  if (sobel_) p = stpcpy(p, " sobel");
+  if (emboss_)
+    p = stpcpy(p, " emboss");
+  if (sobel_)
+    p = stpcpy(p, " sobel");
   switch (sharp_) {
     case kSharpSharp:
       p = stpcpy(p, " sharp");
@@ -662,21 +525,36 @@ static char *DescribeAdjustments(char *p) {
     default:
       break;
   }
-  if (IsNonZeroFloat(hue_)) p += sprintf(p, " hue%+.2f", hue_);
-  if (IsNonZeroFloat(sat_)) p += sprintf(p, " sat%+.2f", sat_);
-  if (IsNonZeroFloat(lit_)) p += sprintf(p, " lit%+.2f", lit_);
-  if (pf1_) p = stpcpy(p, " PF1");
-  if (pf2_) p = stpcpy(p, " PF2");
-  if (pf3_) p = stpcpy(p, " PF3");
-  if (pf4_) p = stpcpy(p, " PF4");
-  if (pf5_) p = stpcpy(p, " PF5");
-  if (pf6_) p = stpcpy(p, " PF6");
-  if (pf7_) p = stpcpy(p, " PF7");
-  if (pf8_) p = stpcpy(p, " PF8");
-  if (pf9_) p = stpcpy(p, " PF9");
-  if (pf10_) p = stpcpy(p, " PF10");
-  if (pf11_) p = stpcpy(p, " PF11");
-  if (pf12_) p = stpcpy(p, " PF12");
+  if (IsNonZeroFloat(hue_))
+    p += sprintf(p, " hue%+.2f", hue_);
+  if (IsNonZeroFloat(sat_))
+    p += sprintf(p, " sat%+.2f", sat_);
+  if (IsNonZeroFloat(lit_))
+    p += sprintf(p, " lit%+.2f", lit_);
+  if (pf1_)
+    p = stpcpy(p, " PF1");
+  if (pf2_)
+    p = stpcpy(p, " PF2");
+  if (pf3_)
+    p = stpcpy(p, " PF3");
+  if (pf4_)
+    p = stpcpy(p, " PF4");
+  if (pf5_)
+    p = stpcpy(p, " PF5");
+  if (pf6_)
+    p = stpcpy(p, " PF6");
+  if (pf7_)
+    p = stpcpy(p, " PF7");
+  if (pf8_)
+    p = stpcpy(p, " PF8");
+  if (pf9_)
+    p = stpcpy(p, " PF9");
+  if (pf10_)
+    p = stpcpy(p, " PF10");
+  if (pf11_)
+    p = stpcpy(p, " PF11");
+  if (pf12_)
+    p = stpcpy(p, " PF12");
   *p++ = ' ';
   *p++ = '\0';
   return p;
@@ -764,7 +642,7 @@ static void RasterIt(void) {
   static bool once;
   static void *buf;
   if (!once) {
-    buf = _mapanon(ROUNDUP(fb0_.size, FRAMESIZE));
+    buf = _mapanon(ROUNDUP(fb0_.size, getgransize()));
     once = true;
   }
   WriteToFrameBuffer(fb0_.vscreen.yres_virtual, fb0_.vscreen.xres_virtual, buf,
@@ -782,8 +660,10 @@ static void TranscodeVideo(plm_frame_t *pf) {
 
   TIMEIT(t1, {
     pary_ = 2;
-    if (pf1_) pary_ = 1.;
-    if (pf2_) pary_ = (266 / 64.) * (900 / 1600.);
+    if (pf1_)
+      pary_ = 1.;
+    if (pf2_)
+      pary_ = (266 / 64.) * (900 / 1600.);
     pary_ *= plm_get_pixel_aspect_ratio(plm_);
     YCbCr2RgbScale(g2_->yn, g2_->xn, g2_->b, pf->y.height, pf->y.width,
                    (void *)pf->y.data, pf->cr.height, pf->cr.width,
@@ -805,8 +685,10 @@ static void TranscodeVideo(plm_frame_t *pf) {
       default:
         break;
     }
-    if (sobel_) sobel(g2_);
-    if (emboss_) emboss(g2_);
+    if (sobel_)
+      sobel(g2_);
+    if (emboss_)
+      emboss(g2_);
     switch (sharp_) {
       case kSharpSharp:
         sharpen(3, g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
@@ -817,9 +699,8 @@ static void TranscodeVideo(plm_frame_t *pf) {
       default:
         break;
     }
-    if (dither_ && TTYQUANT()->alg != kTtyQuantTrue) {
+    if (dither_ && TTYQUANT()->alg != kTtyQuantTrue)
       dither(g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
-    }
   });
 
   if (ShouldUseFrameBuffer()) {
@@ -859,7 +740,6 @@ static void OnVideo(plm_t *mpeg, plm_frame_t *pf, void *user) {
 
 static void OpenVideo(void) {
   size_t yn, xn;
-  playfd_ = -1;
   INFOF("%s(%`'s)", "OpenVideo", patharg_);
   CHECK_NOTNULL((plm_ = plm_create_with_filename(patharg_)));
   swing_ = 219;
@@ -874,9 +754,9 @@ static void OpenVideo(void) {
   FormatInt64(chansstr_, (chans_ = 2));
   FormatInt64(sratestr_, (srate_ = plm_get_samplerate(plm_)));
   if (plm_get_num_audio_streams(plm_) && OpenSpeaker()) {
-    plm_set_audio_enabled(plm_, true, 0);
+    plm_set_audio_enabled(plm_, true);
   } else {
-    plm_set_audio_enabled(plm_, false, 0);
+    plm_set_audio_enabled(plm_, false);
   }
   g2_ = g1_ = resizegraphic(&graphic_[0], yn, xn);
 }
@@ -887,13 +767,12 @@ static ssize_t WriteVideoCall(void) {
   amt = min(4096 * 4, f1_->n - f1_->i);
   if ((rc = write(outfd_, f1_->bytes + f1_->i, amt)) != -1) {
     if ((f1_->i += rc) == f1_->n) {
-      if (plm_get_audio_enabled(plm_)) {
+      if (plm_get_audio_enabled(plm_))
         plm_set_audio_lead_time(
             plm_,
             max(0,
-                min(timespec_tofloat(timespec_sub(timespec_real(), f1_start_)),
+                min(timespec_tofloat(timespec_sub(timespec_mono(), f1_start_)),
                     plm_get_samplerate(plm_) / PLM_AUDIO_SAMPLES_PER_FRAME)));
-      }
       f1_start_ = f2_start_;
       f1_->i = f1_->n = 0;
       struct VtFrame *t = f1_;
@@ -909,9 +788,8 @@ static void DrainVideo(void) {
     ttywrite(outfd_, f1_->bytes + f1_->i, f1_->n - f1_->i);
     f1_->i = f1_->n = 0;
   }
-  if (f2_ && f2_->n) {
+  if (f2_ && f2_->n)
     f2_->i = f2_->n = 0;
-  }
 }
 
 static void WriteVideo(void) {
@@ -932,7 +810,8 @@ static void WriteVideo(void) {
 }
 
 static void RefreshDisplay(void) {
-  if (f1_ && f1_->n) f1_->i = 0;
+  if (f1_ && f1_->n)
+    f1_->i = 0;
   DimensionDisplay();
   resized_ = false;
   historyclear_ = true;
@@ -1063,10 +942,10 @@ static optimizesize void ReadKeyboard(void) {
               case '[':
                 switch (b[i++]) {
                   case 'A': /* "\e[A" is up arrow */
-                    ++volscale_;
+                    volscale_ *= 1.05f;
                     break;
                   case 'B': /* "\e[B" is down arrow */
-                    --volscale_;
+                    volscale_ *= 0.95f;
                     break;
                   case 'C': /* "\e[C" is right arrow */
                     break;
@@ -1287,8 +1166,10 @@ static void PerformBestEffortIo(void) {
     DEBUGF("poll() toto=%d [grace=%,ldns]", toto,
            timespec_tonanos(GetGraceTime()));
     if (toto) {
-      if (fds[0].revents & (POLLIN | POLLERR)) ReadKeyboard();
-      if (fds[1].revents & (POLLOUT | POLLERR)) WriteVideo();
+      if (fds[0].revents & (POLLIN | POLLHUP | POLLERR))
+        ReadKeyboard();
+      if (fds[1].revents & (POLLOUT | POLLHUP | POLLERR))
+        WriteVideo();
     }
   } else if (errno == EINTR) {
     DEBUGF("poll() → EINTR");
@@ -1300,20 +1181,15 @@ static void PerformBestEffortIo(void) {
 
 static void RestoreTty(void) {
   DrainVideo();
-  if (ttymode_) ttysend(outfd_, "\r\n\e[J");
+  if (ttymode_)
+    ttysend(outfd_, "\r\n\e[J");
   ttymode_ = false;
   ttyraw(-1);
 }
 
 static void HandleSignals(void) {
-  if (piped_) {
-    WARNF("SIGPIPE");
-    CloseSpeaker();
-    piped_ = false;
-  }
-  if (resized_) {
+  if (resized_)
     RefreshDisplay();
-  }
 }
 
 static void PrintVideo(void) {
@@ -1321,20 +1197,19 @@ static void PrintVideo(void) {
   dura_ = timespec_frommicros(min(MAX_FRAMERATE, 1 / plm_get_framerate(plm_)) *
                               1e6);
   INFOF("framerate=%f dura=%f", plm_get_framerate(plm_), dura_);
-  next_tick = deadline_ = decode_last = timespec_real();
+  next_tick = deadline_ = decode_last = timespec_mono();
   next_tick = timespec_add(next_tick, dura_);
   deadline_ = timespec_add(deadline_, dura_);
   do {
     DEBUGF("plm_decode [grace=%,ldns]", timespec_tonanos(GetGraceTime()));
-    decode_start_ = timespec_real();
+    decode_start_ = timespec_mono();
     plm_decode(plm_,
                timespec_tofloat(timespec_sub(decode_start_, decode_last)));
     decode_last = decode_start_;
-    decode_end = timespec_real();
+    decode_end = timespec_mono();
     lag = timespec_sub(decode_end, decode_start_);
-    while (timespec_cmp(timespec_add(decode_end, lag), next_tick) > 0) {
+    while (timespec_cmp(timespec_add(decode_end, lag), next_tick) > 0)
       next_tick = timespec_add(next_tick, dura_);
-    }
     deadline_ = timespec_sub(next_tick, lag);
     if (gotvideo_ || !plm_get_video_enabled(plm_)) {
       gotvideo_ = false;
@@ -1342,9 +1217,8 @@ static void PrintVideo(void) {
             timespec_tonanos(lag), timespec_tonanos(GetGraceTime()));
     }
     do {
-      if (!setjmp(jbi_)) {
+      if (!setjmp(jbi_))
         PerformBestEffortIo();
-      }
       HandleSignals();
     } while (timespec_tomillis(GetGraceTime()) > 0);
   } while (plm_ && !plm_has_ended(plm_));
@@ -1352,7 +1226,8 @@ static void PrintVideo(void) {
 
 static bool AskUserYesOrNoQuestion(const char *prompt) {
   char c;
-  if (yes_ || !ttymode_) return true;
+  if (yes_ || !ttymode_)
+    return true;
   ttysend(outfd_, "\r\e[K");
   ttysend(outfd_, prompt);
   ttysend(outfd_, " [yn] ");
@@ -1360,17 +1235,6 @@ static bool AskUserYesOrNoQuestion(const char *prompt) {
   c = 0, read(infd_, &c, 1);
   ttysend(infd_, "\r\e[K");
   return c == 'y' || c == 'Y';
-}
-
-static bool CanPlayAudio(void) {
-  if (ffplay_ || sox_) {
-    return true;
-  } else if (AskUserYesOrNoQuestion(
-                 "ffplay not found; continue without audio?")) {
-    return false;
-  } else {
-    longjmp(jb_, 1);
-  }
 }
 
 static void PrintUsage(int rc, int fd) {
@@ -1411,8 +1275,8 @@ static void GetOpts(int argc, char *argv[]) {
 }
 
 static void OnExit(void) {
-  if (playpid_) kill(playpid_, SIGTERM), sched_yield();
-  if (plm_) plm_destroy(plm_), plm_ = NULL;
+  if (plm_)
+    plm_destroy(plm_), plm_ = NULL;
   YCbCrFree(&ycbcr_);
   RestoreTty();
   ttyidentclear(&ti_);
@@ -1427,11 +1291,6 @@ static void OnExit(void) {
   CloseSpeaker();
 }
 
-static void MakeLatencyLittleLessBad(void) {
-  LOGIFNEG1(sys_mlockall(MCL_CURRENT));
-  LOGIFNEG1(nice(-5));
-}
-
 static void PickDefaults(void) {
   /*
    * Direct color ain't true color -- it just means xterm does the
@@ -1440,16 +1299,8 @@ static void PickDefaults(void) {
    *
    * strcmp(nulltoempty(getenv("TERM")), "xterm-direct") == 0
    */
-  if (strcmp(nulltoempty(getenv("TERM")), "xterm-kitty") == 0) {
+  if (IsWindows() || !strcmp(nulltoempty(getenv("TERM")), "xterm-kitty"))
     ttyquantsetup(kTtyQuantTrue, TTYQUANT()->chans, kTtyBlocksUnicode);
-  }
-}
-
-static void RenounceSpecialPrivileges(void) {
-  if (issetugid()) {
-    setegid(getgid());
-    seteuid(getuid());
-  }
 }
 
 #define FBIOGET_VSCREENINFO 0x4600
@@ -1549,10 +1400,13 @@ static void TryToOpenFrameBuffer(void) {
 
 int main(int argc, char *argv[]) {
   sigset_t wut;
-  const char *s;
   ShowCrashReports();
+#ifdef __x86_64__
+  if (IsWindows())
+    SetThreadPriority(GetCurrentThread(), kNtThreadPriorityHighest);
+#endif
   gamma_ = 2.4;
-  volscale_ -= 2;
+  volscale_ = 1.f;
   dither_ = true;
   sigemptyset(&wut);
   sigaddset(&wut, SIGCHLD);
@@ -1561,20 +1415,11 @@ int main(int argc, char *argv[]) {
   ShowCrashReports();
   fullclear_ = true;
   GetOpts(argc, argv);
-  if (!tuned_) PickDefaults();
-  if (optind == argc) PrintUsage(EX_USAGE, STDERR_FILENO);
+  if (!tuned_)
+    PickDefaults();
+  if (optind == argc)
+    PrintUsage(EX_USAGE, STDERR_FILENO);
   patharg_ = argv[optind];
-  s = commandvenv("SOX", "sox");
-  sox_ = s ? strdup(s) : 0;
-  s = commandvenv("FFPLAY", "ffplay");
-  ffplay_ = s ? strdup(s) : 0;
-  if (!sox_ && !ffplay_) {
-    fprintf(stderr, "please install either the "
-                    "`play` (sox) or "
-                    "`ffplay` (ffmpeg) "
-                    "commands, so printvideo.com can play audio\n");
-    usleep(10000);
-  }
   infd_ = STDIN_FILENO;
   outfd_ = STDOUT_FILENO;
   if (!setjmp(jb_)) {
@@ -1582,24 +1427,22 @@ int main(int argc, char *argv[]) {
     xsigaction(SIGHUP, OnCtrlC, 0, 0, NULL);
     xsigaction(SIGTERM, OnCtrlC, 0, 0, NULL);
     xsigaction(SIGWINCH, OnResize, 0, 0, NULL);
-    xsigaction(SIGCHLD, OnSigChld, 0, 0, NULL);
-    xsigaction(SIGPIPE, OnSigPipe, 0, 0, NULL);
-    if (ttyraw(kTtyLfToCrLf) != -1) ttymode_ = true;
+    if (ttyraw(kTtyLfToCrLf) != -1)
+      ttymode_ = true;
     __cxa_atexit((void *)OnExit, NULL, NULL);
     __log_file = fopen(logpath_, "a");
     if (ischardev(infd_) && ischardev(outfd_)) {
-      /* CHECK_NE(-1, fcntl(infd_, F_SETFL, O_NONBLOCK)); */
+      /* CHECK_NE(-1, fcntl(outfd_, F_SETFL, O_NONBLOCK)); */
     } else if (infd_ != outfd_) {
       infd_ = -1;
     }
     /* CHECK_NE(-1, fcntl(outfd_, F_SETFL, O_NONBLOCK)); */
-    if (CanPlayAudio()) MakeLatencyLittleLessBad();
     TryToOpenFrameBuffer();
-    RenounceSpecialPrivileges();
-    if (t2 > t1) longjmp(jb_, 1);
+    if (t2 > t1)
+      longjmp(jb_, 1);
     OpenVideo();
     DimensionDisplay();
-    starttime_ = timespec_real();
+    starttime_ = timespec_mono();
     PrintVideo();
   }
   INFOF("jb_ triggered");

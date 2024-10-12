@@ -1,6 +1,6 @@
+#ifdef _COSMO_SOURCE
 #ifndef COSMOPOLITAN_LIBC_DCE_H_
 #define COSMOPOLITAN_LIBC_DCE_H_
-#ifdef _COSMO_SOURCE
 /*─────────────────────────────────────────────────────────────────────────────╗
 │ cosmopolitan § autotune » dead code elimination                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
@@ -53,12 +53,6 @@
 #define IsOptimized() 1
 #else
 #define IsOptimized() 0
-#endif
-
-#ifdef __SANITIZE_ADDRESS__
-#define IsAsan() 1
-#else
-#define IsAsan() 0
 #endif
 
 #ifdef __aarch64__
@@ -121,9 +115,9 @@ COSMOPOLITAN_C_START_
 
 extern const int __hostos;
 
-int IsQemu(void);
+int IsQemuUser(void);
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
-#endif /* _COSMO_SOURCE */
 #endif /* COSMOPOLITAN_LIBC_DCE_H_ */
+#endif /* _COSMO_SOURCE */

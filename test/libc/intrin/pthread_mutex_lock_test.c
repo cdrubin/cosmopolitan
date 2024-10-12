@@ -21,9 +21,9 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/state.internal.h"
 #include "libc/errno.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/log/check.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
@@ -94,7 +94,6 @@ TEST(pthread_mutex_lock, recursive) {
     ASSERT_EQ(0, pthread_mutex_unlock(&lock));
   }
   ASSERT_EQ(0, pthread_mutex_lock(&lock));
-  ASSERT_EQ(0, pthread_mutex_unlock(&lock));
   ASSERT_EQ(0, pthread_mutex_unlock(&lock));
   ASSERT_EQ(0, pthread_mutex_destroy(&lock));
 }

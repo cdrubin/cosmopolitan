@@ -21,19 +21,18 @@
 #include "libc/serialize.h"
 #include "libc/intrin/bsr.h"
 #include "libc/log/libfatal.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "third_party/xed/avx512.h"
 #include "third_party/xed/private.h"
 #include "third_party/xed/x86.h"
 
-asm(".ident\t\"\\n\\n\
-Xed (Apache 2.0)\\n\
-Copyright 2018 Intel Corporation\\n\
-Copyright 2019 Justine Alexandra Roberts Tunney\\n\
-Modifications: Trimmed down to 3kb [2019-03-22 jart]\"");
-asm(".include \"libc/disclaimer.inc\"");
+__notice(xed_notice, "\
+Xed (Apache 2.0)\n\
+Copyright 2018 Intel Corporation\n\
+Copyright 2019 Justine Alexandra Roberts Tunney\n\
+Changes: Trimmed Intel's assembler down to 3kb [2019-03-22 jart]");
 
 #define XED_ILD_HASMODRM_IGNORE_MOD 2
 
@@ -879,7 +878,7 @@ privileged static void xed_evex_scanner(struct XedDecodedInst *d) {
 }
 
 privileged static uint64_t xed_read_number(uint8_t *p, size_t n, bool s) {
-  switch (s << 2 | _bsr(n)) {
+  switch (s << 2 | bsr(n)) {
     case 0b000:
       return *p;
     case 0b100:

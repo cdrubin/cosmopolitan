@@ -17,11 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/thread/thread.h"
 #include "third_party/nsync/common.internal.h"
 
 void nsync_yield_ (void) {
-	pthread_yield ();
+	pthread_yield_np ();
 	STRACE ("nsync_yield_()");
 }

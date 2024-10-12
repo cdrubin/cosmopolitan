@@ -23,7 +23,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/o.h"
@@ -48,7 +48,8 @@ _Thread_local const char *kind;
 bool SupportsOfdLocks(void) {
   int e;
   bool r;
-  if (!IsLinux()) return false;
+  if (!IsLinux())
+    return false;
   // F_OFD_* was introduced in linux 3.15
   // getrandom() was introduced in linux 3.17
   // testing for getrandom() should be a sure thing w/o creating an fd

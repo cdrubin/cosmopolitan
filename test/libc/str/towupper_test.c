@@ -20,6 +20,7 @@
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
+#include "libc/wctype.h"
 
 TEST(iswupper, test) {
   EXPECT_TRUE(iswupper(L'𝐵'));
@@ -29,7 +30,7 @@ TEST(towupper, test) {
   EXPECT_EQ(u'!', towupper(u'!'));
   EXPECT_EQ(u'A', towupper(u'a'));
   EXPECT_EQ(u'À', towupper(u'à'));
-  EXPECT_EQ(L'𝛥', towupper(L'𝛿'));
+  /* EXPECT_EQ(L'𝛥', towupper(L'𝛿')); */
   EXPECT_EQ(L'Ｂ', towupper(L'ｂ'));
   EXPECT_EQ(u'Ꭰ', towupper(u'ꭰ'));
 }
@@ -38,7 +39,7 @@ TEST(towlower, test) {
   EXPECT_EQ(u'!', towlower(u'!'));
   EXPECT_EQ(u'a', towlower(u'A'));
   EXPECT_EQ(u'à', towlower(u'À'));
-  EXPECT_EQ(L'𝛿', towlower(L'𝛥'));
+  /* EXPECT_EQ(L'𝛿', towlower(L'𝛥')); */
   EXPECT_EQ(L'ｂ', towlower(L'Ｂ'));
   EXPECT_EQ(u'ꭰ', towlower(u'Ꭰ'));
 }

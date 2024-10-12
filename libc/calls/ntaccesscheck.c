@@ -24,7 +24,7 @@
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/createfile.h"
@@ -69,7 +69,8 @@ textwindows int ntaccesscheck(const char16_t *pathname, uint32_t flags) {
   int64_t hToken, hImpersonatedToken, hFile;
   intptr_t buffer[1024 / sizeof(intptr_t)];
   BLOCK_SIGNALS;
-  if (flags & X_OK) flags |= R_OK;
+  if (flags & X_OK)
+    flags |= R_OK;
   granted = 0;
   result = false;
   flagmask = flags;

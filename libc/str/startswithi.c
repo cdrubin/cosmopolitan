@@ -17,15 +17,18 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 
 /**
  * Checks if string starts with prefix, case insensitively.
  */
 bool32 startswithi(const char *s, const char *prefix) {
   for (;;) {
-    if (!*prefix) return true;
-    if (!*s) return false;
-    if (kToLower[*s++ & 255] != kToLower[*prefix++ & 255]) return false;
+    if (!*prefix)
+      return true;
+    if (!*s)
+      return false;
+    if (kToLower[*s++ & 255] != kToLower[*prefix++ & 255])
+      return false;
   }
 }

@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/bing.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 static const int kCp437i[] = {
     0x000a << 8 | 10,   // \n NEWLINE
@@ -216,7 +216,8 @@ static const int kCp437i[] = {
  */
 int unbing(int c) {
   int m, l, r;
-  if (32 <= c && c < 127) return c;
+  if (32 <= c && c < 127)
+    return c;
   l = 0;
   r = ARRAYLEN(kCp437i) - 1;
   while (l <= r) {

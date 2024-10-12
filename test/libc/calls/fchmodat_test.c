@@ -20,7 +20,7 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/o.h"
@@ -34,7 +34,8 @@ void SetUpOnce(void) {
 }
 
 TEST(fchmodat, testFchmodat) {
-  if (IsWindows()) return;  // not advanced enough yet
+  if (IsWindows())
+    return;  // not advanced enough yet
   struct stat st;
   umask(022);
   ASSERT_SYS(0, 3,

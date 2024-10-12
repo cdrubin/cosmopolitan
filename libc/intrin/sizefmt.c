@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/itoa.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 /**
  * Represents size as readable string.
@@ -47,7 +47,8 @@ char *sizefmt(char *p, uint64_t x, uint64_t b) {
     }
   }
   p = FormatUint64(p, x);
-  if (suffix) *p++ = suffix;
+  if (suffix)
+    *p++ = suffix;
   *p = 0;
   return p;
 }

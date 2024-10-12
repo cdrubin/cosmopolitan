@@ -17,12 +17,94 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/weaken.h"
 #include "libc/runtime/internal.h"
+#include "libc/thread/lock.h"
 #include "libc/thread/thread.h"
+#include "third_party/nsync/futex.internal.h"
 #include "third_party/nsync/mu.h"
+
+static errno_t pthread_mutex_trylock_spin(atomic_int *word) {
+  if (!atomic_exchange_explicit(word, 1, memory_order_acquire))
+    return 0;
+  return EBUSY;
+}
+
+static errno_t pthread_mutex_trylock_drepper(atomic_int *futex) {
+  int word = 0;
+  if (atomic_compare_exchange_strong_explicit(
+          futex, &word, 1, memory_order_acquire, memory_order_acquire))
+    return 0;
+  return EBUSY;
+}
+
+static errno_t pthread_mutex_trylock_recursive(pthread_mutex_t *mutex,
+                                               uint64_t word) {
+  uint64_t lock;
+  int me = gettid();
+  for (;;) {
+    if (MUTEX_OWNER(word) == me) {
+      if (MUTEX_TYPE(word) != PTHREAD_MUTEX_ERRORCHECK) {
+        if (MUTEX_DEPTH(word) < MUTEX_DEPTH_MAX) {
+          if (atomic_compare_exchange_weak_explicit(
+                  &mutex->_word, &word, MUTEX_INC_DEPTH(word),
+                  memory_order_relaxed, memory_order_relaxed))
+            return 0;
+          continue;
+        } else {
+          return EAGAIN;
+        }
+      } else {
+        return EDEADLK;
+      }
+    }
+    word = MUTEX_UNLOCK(word);
+    lock = MUTEX_LOCK(word);
+    lock = MUTEX_SET_OWNER(lock, me);
+    if (atomic_compare_exchange_weak_explicit(&mutex->_word, &word, lock,
+                                              memory_order_acquire,
+                                              memory_order_relaxed)) {
+      mutex->_pid = __pid;
+      return 0;
+    }
+    return EBUSY;
+  }
+}
+
+static errno_t pthread_mutex_trylock_recursive_nsync(pthread_mutex_t *mutex,
+                                                     uint64_t word) {
+  int me = gettid();
+  for (;;) {
+    if (MUTEX_OWNER(word) == me) {
+      if (MUTEX_TYPE(word) != PTHREAD_MUTEX_ERRORCHECK) {
+        if (MUTEX_DEPTH(word) < MUTEX_DEPTH_MAX) {
+          if (atomic_compare_exchange_weak_explicit(
+                  &mutex->_word, &word, MUTEX_INC_DEPTH(word),
+                  memory_order_relaxed, memory_order_relaxed))
+            return 0;
+          continue;
+        } else {
+          return EAGAIN;
+        }
+      } else {
+        return EDEADLK;
+      }
+    }
+    if (_weaken(nsync_mu_trylock)((nsync_mu *)mutex->_nsyncx)) {
+      word = MUTEX_UNLOCK(word);
+      word = MUTEX_LOCK(word);
+      word = MUTEX_SET_OWNER(word, me);
+      mutex->_word = word;
+      mutex->_pid = __pid;
+      return 0;
+    } else {
+      return EBUSY;
+    }
+  }
+}
 
 /**
  * Attempts acquiring lock.
@@ -38,50 +120,45 @@
  *     current thread already holds this mutex
  */
 errno_t pthread_mutex_trylock(pthread_mutex_t *mutex) {
-  int t;
 
-  // delegate to *NSYNC if possible
-  if (mutex->_type == PTHREAD_MUTEX_NORMAL &&
-      mutex->_pshared == PTHREAD_PROCESS_PRIVATE &&  //
+  // get current state of lock
+  uint64_t word = atomic_load_explicit(&mutex->_word, memory_order_relaxed);
+
+#if PTHREAD_USE_NSYNC
+  // use superior mutexes if possible
+  if (MUTEX_TYPE(word) == PTHREAD_MUTEX_NORMAL &&
+      MUTEX_PSHARED(word) == PTHREAD_PROCESS_PRIVATE &&  //
       _weaken(nsync_mu_trylock)) {
-    if (_weaken(nsync_mu_trylock)((nsync_mu *)mutex)) {
-      return 0;
-    } else {
-      return EBUSY;
-    }
-  }
-
-  // handle normal mutexes
-  if (mutex->_type == PTHREAD_MUTEX_NORMAL) {
-    if (!atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
-      return 0;
-    } else {
-      return EBUSY;
-    }
-  }
-
-  // handle recursive and error check mutexes
-  t = gettid();
-  if (mutex->_owner == t) {
-    if (mutex->_type != PTHREAD_MUTEX_ERRORCHECK) {
-      if (mutex->_depth < 63) {
-        ++mutex->_depth;
+    // on apple silicon we should just put our faith in ulock
+    // otherwise *nsync gets struck down by the eye of sauron
+    if (!IsXnuSilicon()) {
+      if (_weaken(nsync_mu_trylock)((nsync_mu *)mutex)) {
         return 0;
       } else {
-        return EAGAIN;
+        return EBUSY;
       }
+    }
+  }
+#endif
+
+  // handle normal mutexes
+  if (MUTEX_TYPE(word) == PTHREAD_MUTEX_NORMAL) {
+    if (_weaken(nsync_futex_wait_)) {
+      return pthread_mutex_trylock_drepper(&mutex->_futex);
     } else {
-      return EDEADLK;
+      return pthread_mutex_trylock_spin(&mutex->_futex);
     }
   }
 
-  if (atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
-    return EBUSY;
+  // handle recursive and error checking mutexes
+#if PTHREAD_USE_NSYNC
+  if (_weaken(nsync_mu_trylock) &&
+      MUTEX_PSHARED(word) == PTHREAD_PROCESS_PRIVATE) {
+    return pthread_mutex_trylock_recursive_nsync(mutex, word);
+  } else {
+    return pthread_mutex_trylock_recursive(mutex, word);
   }
-
-  mutex->_depth = 0;
-  mutex->_owner = t;
-  mutex->_pid = __pid;
-
-  return 0;
+#else
+  return pthread_mutex_trylock_recursive(mutex, word);
+#endif
 }

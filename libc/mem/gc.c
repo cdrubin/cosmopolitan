@@ -33,28 +33,6 @@ forceinline bool PointerNotOwnedByParentStackFrame(struct StackFrame *frame,
            ((intptr_t)ptr < (intptr_t)parent));
 }
 
-static void TeardownGc(void) {
-  struct Garbages *g;
-  struct CosmoTib *t;
-  if (__tls_enabled) {
-    t = __get_tls();
-    if ((g = t->tib_garbages)) {
-      // exit() currently doesn't use gclongjmp() like pthread_exit()
-      // so we need to run the deferred functions manually.
-      while (g->i) {
-        --g->i;
-        ((void (*)(intptr_t))g->p[g->i].fn)(g->p[g->i].arg);
-      }
-      free(g->p);
-      free(g);
-    }
-  }
-}
-
-__attribute__((__constructor__)) static void InitializeGc(void) {
-  atexit(TeardownGc);
-}
-
 // add item to garbage shadow stack.
 // then rewrite caller's return address on stack.
 static void DeferFunction(struct StackFrame *frame, void *fn, void *arg) {
@@ -65,10 +43,12 @@ static void DeferFunction(struct StackFrame *frame, void *fn, void *arg) {
   t = __get_tls();
   g = t->tib_garbages;
   if (UNLIKELY(!g)) {
-    if (!(g = malloc(sizeof(struct Garbages)))) notpossible;
+    if (!(g = malloc(sizeof(struct Garbages))))
+      notpossible;
     g->i = 0;
     g->n = 4;
-    if (!(g->p = malloc(g->n * sizeof(struct Garbage)))) notpossible;
+    if (!(g->p = malloc(g->n * sizeof(struct Garbage))))
+      notpossible;
     t->tib_garbages = g;
   } else if (UNLIKELY(g->i == g->n)) {
     p2 = g->p;

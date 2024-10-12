@@ -24,7 +24,7 @@ extern bool Dflag, Hflag, inodeflag, devflag, Rflag, duflag, pruneflag, metafirs
 extern bool Jflag, hflag, siflag, noreport, noindent, force_color, xdev, nolinks;
 
 extern struct _info **(*getfulltree)(char *d, u_long lev, dev_t dev, off_t *size, char **err);
-extern int (*topsort)();
+extern int (*topsort)(const void *, const void *);
 extern FILE *outfile;
 extern int flimit, Level, *dirs, maxdirs, errors;
 extern int htmldirlen;
@@ -145,7 +145,7 @@ struct totals listdir(char *dirname, struct _info **dir, int lev, dev_t dev, boo
   int namemax = 257, namelen;
   int descend, htmldescend = 0, found, n, dirlen = strlen(dirname), pathlen = dirlen + 257;
   int needsclosed;
-  char *path, *newpath, *filename, *err = NULL;
+  char *path, *newpath = NULL, *filename, *err = NULL;
 
   int es = (dirname[strlen(dirname) - 1] == '/');
 

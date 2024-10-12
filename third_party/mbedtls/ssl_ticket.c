@@ -15,18 +15,13 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "third_party/mbedtls/common.h"
 #include "third_party/mbedtls/error.h"
 #include "third_party/mbedtls/platform.h"
 #include "third_party/mbedtls/ssl_internal.h"
 #include "third_party/mbedtls/ssl_ticket.h"
-
-asm(".ident\t\"\\n\\n\
-Mbed TLS (Apache 2.0)\\n\
-Copyright ARM Limited\\n\
-Copyright Mbed TLS Contributors\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("mbedtls_notice");
 
 /*
  *  TLS server tickets callbacks implementation

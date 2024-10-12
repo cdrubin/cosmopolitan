@@ -16,9 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/files.h"
+#include "libc/nt/runtime.h"
 #include "libc/nt/thunk/msabi.h"
 
 __msabi extern typeof(GetFileAttributes) *const __imp_GetFileAttributesW;
@@ -30,7 +31,7 @@ __msabi extern typeof(GetFileAttributes) *const __imp_GetFileAttributesW;
 textwindows uint32_t GetFileAttributes(const char16_t *lpPathName) {
   uint32_t flags;
   flags = __imp_GetFileAttributesW(lpPathName);
-  NTTRACE("GetFileAttributes(%#hs) → %s", lpPathName,
-          DescribeNtFileFlagAttr(flags));
+  NTTRACE("GetFileAttributes(%#hs) → {%s, %d}", lpPathName,
+          DescribeNtFileFlagAttr(flags), GetLastError());
   return flags;
 }

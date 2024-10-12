@@ -27,12 +27,7 @@
 #include "third_party/mbedtls/ssl.h"
 #include "third_party/mbedtls/ssl_internal.h"
 #include "third_party/mbedtls/ssl_invasive.h"
-
-asm(".ident\t\"\\n\\n\
-Mbed TLS (Apache 2.0)\\n\
-Copyright ARM Limited\\n\
-Copyright Mbed TLS Contributors\"");
-asm(".include \"libc/disclaimer.inc\"");
+__static_yoink("mbedtls_notice");
 
 /*
  *  Generic SSL/TLS messaging layer functions
@@ -1211,7 +1206,11 @@ static void mbedtls_ssl_cf_memcpy_if_eq( unsigned char *dst,
         __builtin_memcpy( &x, dst + i, 8 );
         __builtin_memcpy( &y, src + i, 8 );
         x = ( x & ~-equal ) | ( y & -equal );
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+        // TODO(jart): What is this mysterious confusing GCC warning?
         __builtin_memcpy( dst + i, &x, 8 );
+#pragma GCC diagnostic pop
     }
     for( ; i < len; i++ )
         dst[i] = ( src[i] & mask ) | ( dst[i] & ~mask );

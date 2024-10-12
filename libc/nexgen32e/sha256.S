@@ -47,12 +47,13 @@
 /////////////////////////////////////////////////////////////////////////
 // This code schedules 2 blocks at a time, with 4 lanes per block
 /////////////////////////////////////////////////////////////////////////
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
-.ident "\n\
+.section .notice,"aR",@progbits
+.asciz "\n\n\
 AVX2 SHA2 (BSD-2 License)\n\
-Copyright 2013 Intel Corporation\n"
-.include "libc/disclaimer.inc"
+Copyright 2013 Intel Corporation"
+.previous
 
 ## assume buffers not aligned
 #define	VMOVDQ vmovdqu

@@ -18,16 +18,18 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/kprintf.h"
 #include "ape/sections.internal.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/divmod10.internal.h"
 #include "libc/fmt/magnumstrs.internal.h"
 #include "libc/intrin/asmflag.h"
 #include "libc/intrin/atomic.h"
-#include "libc/serialize.h"
-#include "libc/intrin/getenv.internal.h"
+#include "libc/intrin/getenv.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/intrin/likely.h"
-#include "libc/intrin/nomultics.internal.h"
+#include "libc/intrin/maps.h"
+#include "libc/intrin/nomultics.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/internal.h"
 #include "libc/nexgen32e/rdtsc.h"
@@ -38,17 +40,22 @@
 #include "libc/nt/enum/fileflagandattributes.h"
 #include "libc/nt/enum/filesharemode.h"
 #include "libc/nt/errors.h"
+#include "libc/nt/events.h"
 #include "libc/nt/files.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
+#include "libc/nt/struct/overlapped.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
 #include "libc/runtime/symbols.internal.h"
+#include "libc/serialize.h"
 #include "libc/stdckdint.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/str/utf16.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/f.h"
@@ -60,6 +67,7 @@
 #include "libc/thread/tls.h"
 #include "libc/thread/tls2.internal.h"
 #include "libc/vga/vga.internal.h"
+#include "libc/wctype.h"
 
 #define STACK_ERROR "kprintf error: stack is about to overflow\n"
 
@@ -107,21 +115,25 @@
   }
 
 // clang-format off
+__msabi extern typeof(CloseHandle) *const __imp_CloseHandle;
+__msabi extern typeof(CreateEvent) *const __imp_CreateEventW;
 __msabi extern typeof(CreateFile) *const __imp_CreateFileW;
 __msabi extern typeof(DuplicateHandle) *const __imp_DuplicateHandle;
 __msabi extern typeof(GetEnvironmentVariable) *const __imp_GetEnvironmentVariableW;
 __msabi extern typeof(GetLastError) *const __imp_GetLastError;
+__msabi extern typeof(GetOverlappedResult) *const __imp_GetOverlappedResult;
 __msabi extern typeof(GetStdHandle) *const __imp_GetStdHandle;
 __msabi extern typeof(SetLastError) *const __imp_SetLastError;
 __msabi extern typeof(WriteFile) *const __imp_WriteFile;
 // clang-format on
 
-long __klog_handle;
+extern long __klog_handle;
 extern struct SymbolTable *__symtab;
 
 __funline char *kadvance(char *p, char *e, long n) {
   intptr_t t = (intptr_t)p;
-  if (ckd_add(&t, t, n)) t = (intptr_t)e;
+  if (ckd_add(&t, t, n))
+    t = (intptr_t)e;
   return (char *)t;
 }
 
@@ -139,68 +151,28 @@ __funline char *kemitquote(char *p, char *e, signed char t, unsigned c) {
   return p;
 }
 
-__funline bool kiskernelpointer(const void *p) {
-  return 0x7f0000000000 <= (intptr_t)p && (intptr_t)p < 0x800000000000;
-}
-
-__funline bool kistextpointer(const void *p) {
-  return __executable_start <= (const unsigned char *)p &&
-         (const unsigned char *)p < _etext;
-}
-
-__funline bool kisimagepointer(const void *p) {
-  return __executable_start <= (const unsigned char *)p &&
-         (const unsigned char *)p < _end;
-}
-
 __funline bool kischarmisaligned(const char *p, signed char t) {
-  if (t == -1) return (intptr_t)p & 1;
-  if (t >= 1) return !!((intptr_t)p & 3);
+  if (t == -1)
+    return (intptr_t)p & 1;
+  if (t >= 1)
+    return !!((intptr_t)p & 3);
   return false;
 }
 
-__funline bool kismemtrackhosed(void) {
-  return !((_weaken(_mmi)->i <= _weaken(_mmi)->n) &&
-           (_weaken(_mmi)->p == _weaken(_mmi)->s ||
-            _weaken(_mmi)->p == (struct MemoryInterval *)kMemtrackStart));
-}
-
-privileged static bool kismapped(int x) {
-  // xxx: we can't lock because no reentrant locks yet
-  size_t m, r, l = 0;
-  if (!_weaken(_mmi)) return true;
-  if (kismemtrackhosed()) return false;
-  r = _weaken(_mmi)->i;
-  while (l < r) {
-    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
-    if (_weaken(_mmi)->p[m].y < x) {
-      l = m + 1;
-    } else {
-      r = m;
-    }
-  }
-  if (l < _weaken(_mmi)->i && x >= _weaken(_mmi)->p[l].x) {
-    return !!(_weaken(_mmi)->p[l].prot & PROT_READ);
+privileged bool32 kisdangerous(const void *addr) {
+  bool32 res = true;
+  __maps_lock();
+  if (__maps.maps) {
+    struct Map *map;
+    if ((map = __maps_floor(addr)))
+      if ((const char *)addr >= map->addr &&
+          (const char *)addr < map->addr + map->size)
+        res = false;
   } else {
-    return false;
+    res = false;
   }
-}
-
-privileged bool32 kisdangerous(const void *p) {
-  int frame;
-  if (kisimagepointer(p)) return false;
-  if (kiskernelpointer(p)) return false;
-  if (IsOldStack(p)) return false;
-  if (IsLegalPointer(p)) {
-    frame = (uintptr_t)p >> 16;
-    if (IsStackFrame(frame)) return false;
-    if (kismapped(frame)) return false;
-  }
-  if (GetStackAddr() + GetGuardSize() <= (uintptr_t)p &&
-      (uintptr_t)p < GetStackAddr() + GetStackSize()) {
-    return false;
-  }
-  return true;
+  __maps_unlock();
+  return res;
 }
 
 privileged static void klogclose(long fd) {
@@ -228,7 +200,8 @@ privileged static long klogfcntl(long fd, long cmd, long arg) {
                : CFLAG_CONSTRAINT(cf), "+a"(ax), "+D"(fd), "+S"(cmd), "+d"(arg)
                : /* inputs already specified */
                : "rcx", "r8", "r9", "r10", "r11", "memory");
-  if (cf) ax = -ax;
+  if (cf)
+    ax = -ax;
   return ax;
 #elif defined(__aarch64__)
   register long x0 asm("x0") = fd;
@@ -264,7 +237,8 @@ privileged static long klogopen(const char *path) {
                  "+d"(flags), "+r"(r10)
                : /* inputs already specified */
                : "rcx", "r8", "r9", "r11", "memory");
-  if (cf) ax = -ax;
+  if (cf)
+    ax = -ax;
   return ax;
 #elif defined(__aarch64__)
   register long x0 asm("x0") = dirfd;
@@ -314,7 +288,7 @@ privileged long kloghandle(void) {
         hand = __imp_CreateFileW(
             path, kNtFileAppendData,
             kNtFileShareRead | kNtFileShareWrite | kNtFileShareDelete, 0,
-            kNtOpenAlways, kNtFileAttributeNormal, 0);
+            kNtOpenAlways, kNtFileAttributeNormal | kNtFileFlagOverlapped, 0);
       } else {
         hand = -1;  // KPRINTF_LOG was empty string or too long
       }
@@ -376,7 +350,8 @@ privileged void _klog_serial(const char *b, size_t n) {
     for (;;) {
       dx = 0x3F8 + UART_LSR;
       asm("inb\t%1,%0" : "=a"(al) : "dN"(dx));
-      if (al & UART_TTYTXR) break;
+      if (al & UART_TTYTXR)
+        break;
       asm("pause");
     }
     dx = 0x3F8;
@@ -389,7 +364,6 @@ privileged void _klog_serial(const char *b, size_t n) {
 
 privileged void klog(const char *b, size_t n) {
 #ifdef __x86_64__
-  int e;
   long h;
   uint32_t wrote;
   long rax, rdi, rsi, rdx;
@@ -397,11 +371,20 @@ privileged void klog(const char *b, size_t n) {
     return;
   }
   if (IsWindows()) {
-    e = __imp_GetLastError();
-    if (!__imp_WriteFile(h, b, n, &wrote, 0)) {
-      __imp_SetLastError(e);
-      __klog_handle = 0;
+    bool32 ok;
+    intptr_t ev;
+    int e = __imp_GetLastError();
+    if ((ev = __imp_CreateEventW(0, 0, 0, 0))) {
+      struct NtOverlapped overlap = {.hEvent = ev};
+      ok = !!__imp_WriteFile(h, b, n, 0, &overlap);
+      if (!ok && __imp_GetLastError() == kNtErrorIoPending)
+        ok = true;
+      ok &= !!__imp_GetOverlappedResult(h, &overlap, &wrote, true);
+      if (!ok)
+        __klog_handle = 0;
+      __imp_CloseHandle(ev);
     }
+    __imp_SetLastError(e);
   } else if (IsMetal()) {
     if (_weaken(_klog_vga)) {
       _weaken(_klog_vga)(b, n);
@@ -444,23 +427,25 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
   const char *abet;
   signed char type;
   const char *s, *f;
+  char cxxbuf[3000];
   struct CosmoTib *tib;
   unsigned long long x;
   unsigned i, j, m, rem, sign, hash, cols, prec;
   char c, *p, *e, pdot, zero, flip, dang, base, quot, uppr, ansi, z[128];
-  if (kistextpointer(b) || kisdangerous(b)) n = 0;
-  if (!kistextpointer(fmt)) fmt = "!!WONTFMT";
   p = b;
   f = fmt;
   e = p + n;  // assume if n was negative e < p will be the case
   for (;;) {
     for (;;) {
-      if (!(c = *f++) || c == '%') break;
+      if (!(c = *f++) || c == '%')
+        break;
     EmitFormatByte:
-      if (p < e) *p = c;
+      if (p < e)
+        *p = c;
       ++p;
     }
-    if (!c) break;
+    if (!c)
+      break;
     pdot = 0;
     flip = 0;
     dang = 0;
@@ -632,21 +617,26 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
             sign = '-';
           }
         FormatUnsigned:
-          if (x && hash) sign = hash;
+          if (x && hash)
+            sign = hash;
           for (i = j = 0;;) {
             x = __divmod10(x, &rem);
             z[i++ & 127] = '0' + rem;
-            if (pdot ? i >= prec : !x) break;
+            if (pdot ? i >= prec : !x)
+              break;
             if (quot && ++j == 3) {
               z[i++ & 127] = quot;
               j = 0;
             }
           }
         EmitNumber:
-          if (flip || pdot) zero = 0;
+          if (flip || pdot)
+            zero = 0;
           while (zero && sign) {
-            if (p < e) *p = sign;
-            if (cols) --cols;
+            if (p < e)
+              *p = sign;
+            if (cols)
+              --cols;
             sign >>= 8;
             ++p;
           }
@@ -662,7 +652,8 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
             }
           }
           while (sign) {
-            if (p < e) *p = sign;
+            if (p < e)
+              *p = sign;
             sign >>= 8;
             ++p;
           }
@@ -686,14 +677,17 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
 
         case 'b':
           base = 1;
-          if (hash) hash = '0' | 'b' << 8;
+          if (hash)
+            hash = '0' | 'b' << 8;
         BinaryNumber:
           KGETINT(x, va, type, false);
         FormatNumber:
           i = 0;
           m = (1 << base) - 1;
-          if (hash && x) sign = hash;
-          do z[i++ & 127] = abet[x & m];
+          if (hash && x)
+            sign = hash;
+          do
+            z[i++ & 127] = abet[x & m];
           while ((x >>= base) || (pdot && i < prec));
           goto EmitNumber;
 
@@ -702,7 +696,8 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           /* fallthrough */
         case 'x':
           base = 4;
-          if (hash) hash = '0' | 'x' << 8;
+          if (hash)
+            hash = '0' | 'x' << 8;
           goto BinaryNumber;
 
         case 'o':
@@ -711,7 +706,8 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
 
         case 'p':
           x = va_arg(va, intptr_t);
-          if (!x && pdot) pdot = 0;
+          if (!x && pdot)
+            pdot = 0;
           if ((long)x == -1) {
             pdot = 0;
             goto FormatDecimal;
@@ -730,14 +726,18 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           x = 0;
           s = (const char *)&x;
           t = va_arg(va, int);
-          if (!type) t &= 255;
+          if (!type)
+            t &= 255;
           if (hash) {
             quot = 1;
             hash = '\'';
             p = kemitquote(p, e, type, hash);
-            if (cols && type) --cols;  // u/L
-            if (cols) --cols;          // start quote
-            if (cols) --cols;          // end quote
+            if (cols && type)
+              --cols;  // u/L
+            if (cols)
+              --cols;  // start quote
+            if (cols)
+              --cols;  // end quote
           }
           goto EmitChar;
 
@@ -771,19 +771,24 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           x = va_arg(va, intptr_t);
           if (_weaken(__symtab) && *_weaken(__symtab) &&
               (idx = _weaken(__get_symbol)(0, x)) != -1) {
-            if (p + 1 <= e) *p++ = '&';
+            /* if (p + 1 <= e) */
+            /*   *p++ = '&'; */
             s = (*_weaken(__symtab))->name_base +
                 (*_weaken(__symtab))->names[idx];
+            if (_weaken(__is_mangled) && _weaken(__is_mangled)(s) &&
+                _weaken(__demangle)(cxxbuf, s, sizeof(cxxbuf)) != -1)
+              s = cxxbuf;
             goto FormatString;
           }
           base = 4;
-          hash = '&';
+          /* hash = '&'; */
           goto FormatNumber;
         }
 
         case 'n':
           // nonstandard %n specifier
-          if (p < e) *p = '\n';
+          if (p < e)
+            *p = '\n';
           ++p;
           break;
 
@@ -806,7 +811,8 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
             type = 0;
           } else if (!dang && (kisdangerous(s) || kischarmisaligned(s, type))) {
             if (sign == ' ') {
-              if (p < e) *p = ' ';
+              if (p < e)
+                *p = ' ';
               ++p;
             }
             x = (intptr_t)s;
@@ -816,22 +822,29 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
           } else if (hash) {
             quot = 1;
             hash = '"';
-            if (cols && type) --cols;  // u/L
-            if (cols) --cols;          // start quote
-            if (cols) --cols;          // end quote
+            if (cols && type)
+              --cols;  // u/L
+            if (cols)
+              --cols;  // start quote
+            if (cols)
+              --cols;  // end quote
             p = kemitquote(p, e, type, hash);
           }
           if (sign == ' ' && (!pdot || prec) && s && *s) {
-            if (p < e) *p = ' ';
+            if (p < e)
+              *p = ' ';
             ++p;
           }
           for (i = j = 0; !pdot || j < prec; ++j) {
             if (UNLIKELY(!((intptr_t)s & 4095))) {
-              if (!dang && kisdangerous(s)) break;
+              if (!dang && kisdangerous(s))
+                break;
             }
             if (!type) {
-              if (!(t = *s++ & 255)) break;
-              if ((t & 0300) == 0200) goto ActuallyEmitByte;
+              if (!(t = *s++ & 255))
+                break;
+              if ((t & 0300) == 0200)
+                goto ActuallyEmitByte;
               ++i;
             EmitByte:
               if (uppr && 'a' <= t && t <= 'z') {
@@ -851,7 +864,8 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
                   (t != 0x7F && (t >= 0x20 || (t == '\n' || t == '\t' ||
                                                t == '\r' || t == '\e')))) {
               ActuallyEmitByte:
-                if (p < e) *p = t;
+                if (p < e)
+                  *p = t;
                 p += 1;
                 continue;
               } else if (quot) {
@@ -889,7 +903,8 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
               if (IsHighSurrogate(t)) {
                 if (!pdot || j + 1 < prec) {
                   if (UNLIKELY(!((intptr_t)s & 4095))) {
-                    if (!dang && kisdangerous(s)) break;
+                    if (!dang && kisdangerous(s))
+                      break;
                   }
                   u = *(const char16_t *)s;
                   if (IsLowSurrogate(u)) {
@@ -907,10 +922,12 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
               t = *(const wchar_t *)s;
               s += sizeof(wchar_t);
             }
-            if (!t) break;
+            if (!t)
+              break;
             ++i;
           EmitChar:
-            if (t <= 0x7f) goto EmitByte;
+            if (t <= 0x7f)
+              goto EmitByte;
             if (uppr) {
               if (_weaken(towupper)) {
                 t = _weaken(towupper)(t);
@@ -948,7 +965,8 @@ privileged static size_t kformat(char *b, size_t n, const char *fmt,
             }
           }
           if (hash) {
-            if (p < e) *p = hash;
+            if (p < e)
+              *p = hash;
             ++p;
           }
           while (cols > i) {
@@ -1048,7 +1066,7 @@ privileged size_t kvsnprintf(char *b, size_t n, const char *fmt, va_list v) {
 privileged void kvprintf(const char *fmt, va_list v) {
 #pragma GCC push_options
 #pragma GCC diagnostic ignored "-Walloca-larger-than="
-  long size = __get_safe_size(8000, 3000);
+  long size = __get_safe_size(8000, 8000);
   if (size < 80) {
     klog(STACK_ERROR, sizeof(STACK_ERROR) - 1);
     return;
