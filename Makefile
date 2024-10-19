@@ -537,7 +537,7 @@ COSMOCC_PKGS =				\
 	THIRD_PARTY_INTEL
 
 o/$(MODE)/cosmopolitan.a:		\
-		$(call uniq,$(foreach x,$(COSMOPOLITAN),$($(x))))
+		$(call reverse,$(call uniq,$(foreach x,$(COSMOPOLITAN),$($(x)))))
 
 COSMOCC_HDRS =								\
 	$(wildcard libc/integral/*)					\
