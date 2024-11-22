@@ -40,7 +40,7 @@ typedef struct dir_data {
 #include "libc/calls/calls.h"
 #include "libc/calls/utime.c"
 #include "libc/sysv/errfuns.h"
-#include "libc/time/struct/utimbuf.h"
+//#include "libc/time/struct/utimbuf.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/calls/struct/stat.macros.h"
 
