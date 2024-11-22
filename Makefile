@@ -274,6 +274,10 @@ include libc/BUILD.mk				#─┘
 include libc/sock/BUILD.mk			#─┐
 include net/http/BUILD.mk			# ├──ONLINE RUNTIME
 include third_party/musl/BUILD.mk		# │  You can communicate with the network
+include third_party/regex/BUILD.mk		# │
+include third_party/tr/BUILD.mk			# │
+include third_party/sed/BUILD.mk		# │
+include libc/system/BUILD.mk			# │
 include libc/x/BUILD.mk				# │
 include dsp/scale/BUILD.mk			# │
 include dsp/mpeg/BUILD.mk			# │
@@ -293,8 +297,7 @@ include third_party/libcxx/BUILD.mk		# │
 include third_party/openmp/BUILD.mk		# │
 include third_party/pcre/BUILD.mk		# │
 include third_party/less/BUILD.mk		# │
-include net/https/BUILD.mk			# │
-include third_party/regex/BUILD.mk		#─┘
+include net/https/BUILD.mk			#─┘
 include third_party/tidy/BUILD.mk
 include third_party/BUILD.mk
 include third_party/nsync/testing/BUILD.mk
@@ -313,8 +316,6 @@ include third_party/double-conversion/test/BUILD.mk
 include third_party/lua/BUILD.mk
 include third_party/tree/BUILD.mk
 include third_party/zstd/BUILD.mk
-include third_party/tr/BUILD.mk
-include third_party/sed/BUILD.mk
 include third_party/awk/BUILD.mk
 include third_party/hiredis/BUILD.mk
 include third_party/make/BUILD.mk
@@ -324,6 +325,7 @@ include third_party/argon2/BUILD.mk
 include third_party/smallz4/BUILD.mk
 include third_party/sqlite3/BUILD.mk
 include third_party/mbedtls/test/BUILD.mk
+include third_party/quickjs/BUILD.mk
 include third_party/lz4cli/BUILD.mk
 include third_party/zip/BUILD.mk
 include third_party/xxhash/BUILD.mk
@@ -367,6 +369,7 @@ include test/libc/fmt/BUILD.mk
 include test/libc/time/BUILD.mk
 include test/libc/proc/BUILD.mk
 include test/libc/stdio/BUILD.mk
+include test/libc/system/BUILD.mk
 include test/libc/BUILD.mk
 include test/net/http/BUILD.mk
 include test/net/https/BUILD.mk
@@ -449,7 +452,6 @@ COSMOPOLITAN =				\
 	LIBC_NT_BCRYPTPRIMITIVES	\
 	LIBC_NT_COMDLG32		\
 	LIBC_NT_GDI32			\
-	LIBC_NT_SHELL32			\
 	LIBC_NT_IPHLPAPI		\
 	LIBC_NT_KERNEL32		\
 	LIBC_NT_NTDLL			\
@@ -457,6 +459,7 @@ COSMOPOLITAN =				\
 	LIBC_NT_POWRPROF		\
 	LIBC_NT_PSAPI			\
 	LIBC_NT_REALTIME		\
+	LIBC_NT_SHELL32			\
 	LIBC_NT_SYNCHRONIZATION		\
 	LIBC_NT_USER32			\
 	LIBC_NT_WS2_32			\
@@ -465,6 +468,7 @@ COSMOPOLITAN =				\
 	LIBC_SOCK			\
 	LIBC_STDIO			\
 	LIBC_STR			\
+	LIBC_SYSTEM			\
 	LIBC_SYSV			\
 	LIBC_SYSV_CALLS			\
 	LIBC_THREAD			\
