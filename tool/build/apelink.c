@@ -85,6 +85,13 @@
   "             executable will self-modify its header on\n"   \
   "             the first run, to use the platform format\n"   \
   "\n"                                                         \
+  "  -k KERNEL  test for maching kernel name [repeatable]\n"   \
+  "             when set, the shell script for subsequent\n"   \
+  "             loader executables will check if uname -s\n"   \
+  "             output matches the kernel string, only if\n"   \
+  "             the loader executable architecture is not\n"   \
+  "             an architecture in the input binary list\n"    \
+  "\n"                                                         \
   "  -M PATH    bundle ape loader source code file for m1\n"   \
   "             processors running the xnu kernel so that\n"   \
   "             it can be compiled on the fly by xcode\n"      \
@@ -213,6 +220,7 @@ struct Loader {
   char *ddarg_size1;
   char *ddarg_skip2;
   char *ddarg_size2;
+  const char *kernel;
 };
 
 struct Loaders {
@@ -244,6 +252,7 @@ static struct Inputs inputs;
 static char ape_heredoc[15];
 static enum Strategy strategy;
 static struct Loaders loaders;
+static const char *loader_kernel;
 static const char *custom_sh_code;
 static bool force_bypass_binfmt_misc;
 static bool generate_debuggable_binary;
@@ -979,13 +988,19 @@ static void AddLoader(const char *path) {
   if (loaders.n == ARRAYLEN(loaders.p)) {
     Die(prog, "too many loaders");
   }
-  loaders.p[loaders.n++].path = path;
+  struct Loader *loader = &loaders.p[loaders.n++];
+  loader->path = path;
+  loader->kernel = loader_kernel;
+}
+
+static void SetLoaderKernel(const char *kernel) {
+  loader_kernel = kernel;
 }
 
 static void GetOpts(int argc, char *argv[]) {
   int opt, bits;
   bool got_support_vector = false;
-  while ((opt = getopt(argc, argv, "hvgsGBo:l:S:M:V:")) != -1) {
+  while ((opt = getopt(argc, argv, "hvgsGBo:l:k:S:M:V:")) != -1) {
     switch (opt) {
       case 'o':
         outpath = optarg;
@@ -1008,6 +1023,10 @@ static void GetOpts(int argc, char *argv[]) {
       case 'l':
         HashInputString("-l");
         AddLoader(optarg);
+        break;
+      case 'k':
+        HashInputString("-k");
+        SetLoaderKernel(optarg);
         break;
       case 'S':
         HashInputString("-S");
@@ -1630,6 +1649,28 @@ static char *GenerateScriptIfMachine(char *p, struct Input *in) {
   }
 }
 
+static char *GenerateScriptIfLoaderMachine(char *p, struct Loader *loader) {
+  if (loader->machine == EM_NEXGEN32E) {
+    p = stpcpy(p, "if [ \"$m\" = x86_64 ] || [ \"$m\" = amd64 ]");
+  } else if (loader->machine == EM_AARCH64) {
+    p = stpcpy(p, "if [ \"$m\" = aarch64 ] || [ \"$m\" = arm64 ] || [ \"$m\" = evbarm ]");
+  } else if (loader->machine == EM_PPC64) {
+    p = stpcpy(p, "if [ \"$m\" = ppc64le ]");
+  } else if (loader->machine == EM_MIPS) {
+    p = stpcpy(p, "if [ \"$m\" = mips64 ]");
+  } else {
+    Die(loader->path, "unsupported cpu architecture");
+  }
+
+  if (loader->kernel) {
+    p = stpcpy(p, " && [ \"$k\" = ");
+    p = stpcpy(p, loader->kernel);
+    p = stpcpy(p, " ]");
+  }
+
+  return stpcpy(p, "; then\n");
+}
+
 static char *FinishGeneratingDosHeader(char *p) {
   p = WRITE16LE(p, 0x1000);  // 10: MZ: lowers upper bound load / 16
   p = WRITE16LE(p, 0xf800);  // 12: MZ: roll greed on bss
@@ -1879,7 +1920,15 @@ int main(int argc, char *argv[]) {
     for (j = i + 1; j < loaders.n; ++j) {
       if (loaders.p[i].os == loaders.p[j].os &&
           loaders.p[i].machine == loaders.p[j].machine) {
-        Die(prog, "multiple ape loaders specified for the same platform");
+        if (!loaders.p[i].kernel && !loaders.p[j].kernel) {
+          Die(prog, "multiple ape loaders specified for the same platform");
+        }
+        if (loaders.p[i].kernel != NULL &&
+            loaders.p[j].kernel != NULL &&
+            strcmp(loaders.p[i].kernel, loaders.p[j].kernel) == 0) {
+          Die(prog, "multiple ape loaders specified for the same platform "
+                    "with matching kernels");
+        }
       }
     }
   }
@@ -2190,6 +2239,36 @@ int main(int argc, char *argv[]) {
         gotsome = true;
       }
     }
+
+    // extract the ape loader for non-input architectures
+    // if the user requested a host kernel check, get the host kernel
+    if (loader_kernel) {
+      p = stpcpy(p, "k=$(uname -s 2>/dev/null) || k=unknown\n");
+    }
+    for (i = 0; i < loaders.n; ++i) {
+      struct Loader *loader = loaders.p + i;
+      if (loader->used) {
+        continue;
+      }
+      loader->used = true;
+      p = GenerateScriptIfLoaderMachine(p, loader);
+      p = stpcpy(p, "mkdir -p \"${t%/*}\" ||exit\n"
+                    "dd if=\"$o\"");
+      p = stpcpy(p, " skip=");
+      loader->ddarg_skip2 = p;
+      p = GenerateDecimalOffsetRelocation(p);
+      p = stpcpy(p, " count=");
+      loader->ddarg_size2 = p;
+      p = GenerateDecimalOffsetRelocation(p);
+      p = stpcpy(p, " bs=1 2>/dev/null | gzip -dc >\"$t.$$\" ||exit\n"
+                    "chmod 755 \"$t.$$\" ||exit\n"
+                    "mv -f \"$t.$$\" \"$t\" ||exit\n");
+      p = stpcpy(p, "exec \"$t\" \"$o\" \"$@\"\n"
+                    "fi\n");
+      gotsome = true;
+    }
+
+    // close if-statements
     if (inputs.n && (support_vector & _HOSTXNU)) {
       if (!gotsome) {
         p = stpcpy(p, "true\n");

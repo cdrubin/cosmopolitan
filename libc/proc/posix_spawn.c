@@ -51,6 +51,7 @@
 #include "libc/nt/enum/processcreationflags.h"
 #include "libc/nt/enum/startf.h"
 #include "libc/nt/files.h"
+#include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/processinformation.h"
 #include "libc/nt/struct/startupinfo.h"
@@ -58,7 +59,8 @@
 #include "libc/proc/ntspawn.h"
 #include "libc/proc/posix_spawn.h"
 #include "libc/proc/posix_spawn.internal.h"
-#include "libc/proc/proc.internal.h"
+#include "libc/proc/proc.h"
+#include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/stdio/stdio.h"
@@ -396,6 +398,14 @@ static textwindows errno_t posix_spawn_nt_impl(
   }
   FormatUint64(stpcpy(maskvar, "_MASK="), childmask);
 
+  // inherit parent process id
+  char ppidvar[12 + 21 + 1 + 21 + 1], *p = ppidvar;
+  p = stpcpy(p, "_COSMO_PPID=");
+  p = FormatUint64(p, GetCurrentProcessId());
+  *p++ = ':';
+  p = FormatUint64(p, __pid);
+  setenv("_COSMO_PPID", ppidvar, true);
+
   // launch process
   int rc = -1;
   struct NtProcessInformation procinfo;
@@ -612,7 +622,7 @@ errno_t posix_spawn(int *pid, const char *path,
     struct sigaction dfl = {0};
     if (use_pipe)
       close(pfds[0]);
-    for (int sig = 1; sig < _NSIG; sig++)
+    for (int sig = 1; sig <= NSIG; sig++)
       if (__sighandrvas[sig] != (long)SIG_DFL &&
           (__sighandrvas[sig] != (long)SIG_IGN ||
            ((flags & POSIX_SPAWN_SETSIGDEF) &&

@@ -24,7 +24,6 @@
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/dll.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.h"
 #include "libc/nt/console.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -34,7 +33,7 @@
 #include "libc/nt/memory.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
-#include "libc/proc/proc.internal.h"
+#include "libc/proc/proc.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 #ifdef __x86_64__
@@ -84,20 +83,6 @@ textwindows int sys_kill_nt(int pid, int sig) {
     }
   }
 
-  // find existing handle we own for process
-  //
-  // this step should come first to verify process existence. this is
-  // because there's no guarantee that just because the shared memory
-  // file exists, the process actually exists.
-  int64_t handle, closeme = 0;
-  if (!(handle = __proc_handle(pid))) {
-    if ((handle = OpenProcess(kNtProcessTerminate, false, pid))) {
-      closeme = handle;
-    } else {
-      goto OnError;
-    }
-  }
-
   // attempt to signal via shared memory file
   //
   // now that we know the process exists, if it has a shared memory file
@@ -110,29 +95,33 @@ textwindows int sys_kill_nt(int pid, int sig) {
         atomic_fetch_or_explicit(sigproc, 1ull << (sig - 1),
                                  memory_order_release);
       UnmapViewOfFile(sigproc);
-      if (closeme)
-        CloseHandle(closeme);
-      return 0;
+      if (sig != 9)
+        return 0;
     }
+  }
+
+  // find existing handle we own for process
+  //
+  // this step should come first to verify process existence. this is
+  // because there's no guarantee that just because the shared memory
+  // file exists, the process actually exists.
+  int64_t handle, closeme = 0;
+  if (!(handle = __proc_handle(pid))) {
+    if (!(handle = OpenProcess(kNtProcessTerminate, false, pid)))
+      return eperm();
+    closeme = handle;
   }
 
   // perform actual kill
   // process will report WIFSIGNALED with WTERMSIG(sig)
+  if (sig != 9)
+    STRACE("warning: kill() sending %G via terminate", sig);
   bool32 ok = TerminateProcess(handle, sig);
   if (closeme)
     CloseHandle(closeme);
   if (ok)
     return 0;
-
-  // handle error
-OnError:
-  switch (GetLastError()) {
-    case kNtErrorInvalidHandle:
-    case kNtErrorInvalidParameter:
-      return esrch();
-    default:
-      return eperm();
-  }
+  return esrch();
 }
 
 #endif /* __x86_64__ */

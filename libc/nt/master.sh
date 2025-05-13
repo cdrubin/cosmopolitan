@@ -40,9 +40,12 @@ imp	''							SetCurrentDirectoryW					kernel32	1
 imp	''							TerminateProcess					kernel32	2
 imp	''							UnlockFileEx						kernel32	5
 imp	''							UnmapViewOfFile						kernel32	1
+imp	''							VirtualAllocEx						kernel32	5
 imp	''							VirtualProtect						kernel32	4
+imp	''							VirtualProtectEx					kernel32	5
 imp	''							WaitForMultipleObjects					kernel32	4
 imp	''							WaitForSingleObject					kernel32	2
+imp	''							WriteProcessMemory					kernel32	5
 imp	'AcquireSRWLockExclusive'				AcquireSRWLockExclusive					kernel32	1
 imp	'AcquireSRWLockShared'					AcquireSRWLockShared					kernel32	1
 imp	'AddDllDirectory'					AddDllDirectory						kernel32	1
@@ -126,10 +129,12 @@ imp	'GetFileTime'						GetFileTime						kernel32	4
 imp	'GetFileType'						GetFileType						kernel32	1
 imp	'GetFinalPathNameByHandle'				GetFinalPathNameByHandleW				kernel32	4
 imp	'GetFullPathName'					GetFullPathNameW					kernel32	4
+imp	'GetShortPathName'					GetShortPathNameW					kernel32	3
 imp	'GetHandleInformation'					GetHandleInformation					kernel32	2
 imp	'GetLargestConsoleWindowSize'				GetLargestConsoleWindowSize				kernel32	1
 imp	'GetLastError'						GetLastError						kernel32	0
 imp	'GetLogicalDrives'					GetLogicalDrives					kernel32	0
+imp	'GetLogicalDriveStringsA'				GetLogicalDriveStringsA					kernel32	2
 imp	'GetMaximumProcessorCount'				GetMaximumProcessorCount				kernel32	1	# Windows 7+
 imp	'GetModuleFileName'					GetModuleFileNameW					kernel32	3
 imp	'GetModuleHandle'					GetModuleHandleA					kernel32	1
@@ -183,10 +188,13 @@ imp	'GetVolumeInformationByHandle'				GetVolumeInformationByHandleW				kernel32	
 imp	'GetVolumePathName'					GetVolumePathNameW					kernel32	3
 imp	'GetWindowsDirectory'					GetWindowsDirectoryW					kernel32	2
 imp	'GetWindowsDirectoryA'					GetWindowsDirectoryA					kernel32	2
+imp	'GetOEMCP'						GetOEMCP						kernel32	0
+imp	'GetACP'						GetACP							kernel32	0
+imp	'GetCPInfoEx'						GetCPInfoExW						kernel32	3
 imp	'GlobalAlloc'						GlobalAlloc						kernel32	2
 imp	'GlobalFree'						GlobalFree						kernel32	1
-imp	'GlobalMemoryStatusEx'					GlobalMemoryStatusEx					kernel32	1
 imp	'GlobalLock'						GlobalLock						kernel32	1
+imp	'GlobalMemoryStatusEx'					GlobalMemoryStatusEx					kernel32	1
 imp	'GlobalUnlock'						GlobalUnlock						kernel32	1
 imp	'HeapAlloc'						HeapAlloc						kernel32	3
 imp	'HeapCompact'						HeapCompact						kernel32	2
@@ -299,11 +307,10 @@ imp	'UnlockFile'						UnlockFile						kernel32	5
 imp	'UnmapViewOfFile2'					UnmapViewOfFile2					kernel32	2
 imp	'UnmapViewOfFileEx'					UnmapViewOfFileEx					kernel32	3
 imp	'UpdateProcThreadAttribute'				UpdateProcThreadAttribute				kernel32	7
-imp	'VirtualAlloc'						VirtualAlloc						kernel32	4
-imp	'VirtualAllocEx'					VirtualAllocEx						kernel32	5
 imp	'VirtualFree'						VirtualFree						kernel32	3
 imp	'VirtualLock'						VirtualLock						kernel32	2
 imp	'VirtualQuery'						VirtualQuery						kernel32	3
+imp	'VirtualQueryEx'					VirtualQueryEx						kernel32	4
 imp	'VirtualUnlock'						VirtualUnlock						kernel32	2
 imp	'WaitForMultipleObjectsEx'				WaitForMultipleObjectsEx				kernel32	5
 imp	'WaitForSingleObjectEx'					WaitForSingleObjectEx					kernel32	3
@@ -354,6 +361,7 @@ imp	'RegLoadKey'						RegLoadKeyW						advapi32	3
 imp	'RegNotifyChangeKeyValue'				RegNotifyChangeKeyValue					advapi32	5
 imp	'RegOpenCurrentUser'					RegOpenCurrentUser					advapi32	2
 imp	'RegOpenKeyEx'						RegOpenKeyExW						advapi32	5
+imp	'RegOpenKeyExA'						RegOpenKeyExA						advapi32	5
 imp	'RegOpenUserClassesRoot'				RegOpenUserClassesRoot					advapi32	4
 imp	'RegOverridePredefKey'					RegOverridePredefKey					advapi32	2
 imp	'RegQueryInfoKey'					RegQueryInfoKeyW					advapi32	12
@@ -751,6 +759,7 @@ imp	'NtQuerySecurityObject'					NtQuerySecurityObject					ntdll		5
 imp	'NtQuerySymbolicLinkObject'				NtQuerySymbolicLinkObject				ntdll		3
 imp	'NtQuerySystemInformation'				NtQuerySystemInformation				ntdll		4
 imp	'NtQuerySystemTime'					NtQuerySystemTime					ntdll		1
+imp	'NtQueryTimerResolution'				NtQueryTimerResolution					ntdll		3
 imp	'NtQueryValueKey'					NtQueryValueKey						ntdll		6
 imp	'NtQueryVirtualMemory'					NtQueryVirtualMemory					ntdll		6
 imp	'NtQueryVolumeInformationFile'				NtQueryVolumeInformationFile				ntdll		5
@@ -767,6 +776,7 @@ imp	'NtSetInformationFile'					NtSetInformationFile					ntdll		5
 imp	'NtSetInformationThread'				NtSetInformationThread					ntdll		4
 imp	'NtSetIntervalProfile'					NtSetIntervalProfile					ntdll		2
 imp	'NtSetTimer'						NtSetTimer						ntdll		7
+imp	'NtSetTimerResolution'					NtSetTimerResolution					ntdll		3
 imp	'NtSetValueKey'						NtSetValueKey						ntdll		6
 imp	'NtSignalAndWaitForSingleObject'			NtSignalAndWaitForSingleObject				ntdll		4
 imp	'NtStartProfile'					NtStartProfile						ntdll		1
